@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DJANGO_ENV: test
+  DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production-use
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+  POSTGRES_DB: infosecurs_test
+  POSTGRES_USER: infosecurs
+  POSTGRES_PASSWORD: ci-only-password-not-for-production
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
+
+jobs:
+  unit:
+    name: ci/unit
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: infosecurs_test
+          POSTGRES_USER: infosecurs
+          POSTGRES_PASSWORD: ci-only-password-not-for-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U infosecurs -d infosecurs_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: Domain / model tests
+        run: >
+          pytest -v
+          organisations/tests/test_models.py
+          organisations/tests/test_persistence.py
+          organisations/tests/test_bootstrap.py
+
+  integration:
+    name: ci/integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: infosecurs_test
+          POSTGRES_USER: infosecurs
+          POSTGRES_PASSWORD: ci-only-password-not-for-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U infosecurs -d infosecurs_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: Bootstrap - clean database migrates successfully
+        run: python manage.py migrate --noinput
+
+      - name: HTTP / auth / tenant-isolation tests
+        run: >
+          pytest -v
+          organisations/tests/test_auth.py
+          organisations/tests/test_tenant_isolation.py
+          organisations/tests/test_http_ui.py
+          core/tests/

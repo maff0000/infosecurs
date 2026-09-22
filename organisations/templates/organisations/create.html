@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Create organisation — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="form-card">
+    <h1>Create an organisation</h1>
+    <p class="form-card__intro">Give the organisation a name you'll recognise. You can add its full security profile next.</p>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="field {% if form.name.errors %}field--error{% endif %}">
+            <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+            {% if form.name.help_text %}<p class="field__help">{{ form.name.help_text }}</p>{% endif %}
+            {{ form.name }}
+            {% for error in form.name.errors %}
+                <p class="field__error" role="alert">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'organisations:list' %}">Cancel</a>
+            <button type="submit" class="button button--primary">Create organisation</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
