@@ -36,3 +36,13 @@ platform.
 
 Revisit only when an observed limitation makes this stack materially
 obstructive.
+
+## Addendum — 2026-09-22, Central Architecture governance closure amendment
+
+M001 implemented against Django 6.1.1 (current latest stable point release
+at build time), not the 5.2 LTS track. Central Architecture reviewed this
+choice post-M001 and confirmed it: **keep Django 6.1.1, do not repin to
+5.2.** Intended direction: remain patch-current on the 6.1 line; reassess
+and migrate to Django 6.2 LTS when it is appropriate to do so (no forcing
+function identified at this time — this is a direction, not a scheduled
+migration).
