@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Profile — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Organisation profile</h1>
+    <p class="page-header__subtitle">{{ organisation.name }}</p>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Identity</legend>
+        <p class="form-section__help">The basics that identify this organisation.</p>
+
+        <div class="field {% if form.legal_trading_name.errors %}field--error{% endif %}">
+            <label for="{{ form.legal_trading_name.id_for_label }}">Legal / trading name <span class="required-marker" aria-hidden="true">*</span></label>
+            <p class="field__help">Required. This cannot be saved empty.</p>
+            {{ form.legal_trading_name }}
+            {% for error in form.legal_trading_name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.description.errors %}field--error{% endif %}">
+            <label for="{{ form.description.id_for_label }}">Short description</label>
+            <p class="field__help">What the organisation does, in a sentence or two. Optional.</p>
+            {{ form.description }}
+            {% for error in form.description.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.staff_count.errors %}field--error{% endif %}">
+            <label for="{{ form.staff_count.id_for_label }}">Approximate staff count</label>
+            <p class="field__help">Leave blank if not yet confirmed.</p>
+            {{ form.staff_count }}
+            {% for error in form.staff_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>Working model</legend>
+        <p class="form-section__help">How the organisation's people and devices operate.</p>
+
+        <div class="field">
+            <label for="{{ form.working_model.id_for_label }}">Working model</label>
+            <p class="field__help">How staff mainly work.</p>
+            {{ form.working_model }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.endpoint_management.id_for_label }}">Endpoint management</label>
+            <p class="field__help">How staff devices are managed.</p>
+            {{ form.endpoint_management }}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>Technology</legend>
+        <p class="form-section__help">The platforms the organisation relies on.</p>
+
+        <div class="field">
+            <label for="{{ form.productivity_platform.id_for_label }}">Productivity platform</label>
+            <p class="field__help">Microsoft 365, Google Workspace, or other.</p>
+            {{ form.productivity_platform }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.primary_cloud_provider.id_for_label }}">Primary cloud provider</label>
+            <p class="field__help">If the organisation uses one.</p>
+            {{ form.primary_cloud_provider }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.develops_hosts_own_software.id_for_label }}">Develops or hosts its own software/service</label>
+            {{ form.develops_hosts_own_software }}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>Data</legend>
+        <p class="form-section__help">The kinds of data the organisation handles.</p>
+
+        <div class="field">
+            <label for="{{ form.handles_personal_data.id_for_label }}">Handles personal data</label>
+            {{ form.handles_personal_data }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.handles_confidential_business_data.id_for_label }}">Handles customer confidential/sensitive business data</label>
+            {{ form.handles_confidential_business_data }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.handles_payment_card_data.id_for_label }}">Handles payment-card data directly</label>
+            {{ form.handles_payment_card_data }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.handles_special_category_data.id_for_label }}">Handles special-category/highly sensitive personal data</label>
+            {{ form.handles_special_category_data }}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>Assurance context</legend>
+        <p class="form-section__help">What's driving the organisation's need for security assurance.</p>
+
+        <div class="field">
+            <label for="{{ form.receives_security_questionnaires.id_for_label }}">Customers send security questionnaires</label>
+            {{ form.receives_security_questionnaires }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.cyber_essentials_status.id_for_label }}">Cyber Essentials status</label>
+            {{ form.cyber_essentials_status }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.iso27001_status.id_for_label }}">ISO 27001 status</label>
+            {{ form.iso27001_status }}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.commercial_security_driver.id_for_label }}">Immediate commercial/security driver</label>
+            <p class="field__help">Free text. Optional.</p>
+            {{ form.commercial_security_driver }}
+        </div>
+    </fieldset>
+
+    <div class="form-actions form-actions--sticky">
+        <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Save profile</button>
+    </div>
+</form>
+{% endblock %}

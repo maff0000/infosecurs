@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ organisation.name }}</h1>
+</div>
+
+<div class="summary-card">
+    <h2>Organisation profile</h2>
+    {% if profile_exists %}
+        <p>The security-relevant profile for this organisation has been started.</p>
+        <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">View / edit profile</a>
+    {% else %}
+        <p>No profile has been completed yet. Start it to establish this organisation's security baseline.</p>
+        <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">Start profile</a>
+    {% endif %}
+</div>
+{% endblock %}

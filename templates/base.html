@@ -1,0 +1,49 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ product_name }}{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'organisations/css/app.css' %}">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <header class="app-header">
+        <div class="app-header__bar">
+            <a class="app-header__brand" href="{% url 'home' %}">{{ product_name }}</a>
+            {% if organisation %}
+                <span class="app-header__context" aria-label="Current organisation">
+                    <span class="app-header__context-label">Organisation</span>
+                    <span class="app-header__context-name">{{ organisation.name }}</span>
+                </span>
+            {% endif %}
+            <nav class="app-header__nav" aria-label="Primary">
+                {% if user.is_authenticated %}
+                    <a href="{% url 'organisations:list' %}">Organisations</a>
+                    {% if organisation %}
+                        <a href="{% url 'organisations:profile' organisation.id %}">Profile</a>
+                    {% endif %}
+                    <form method="post" action="{% url 'logout' %}" class="app-header__logout">
+                        {% csrf_token %}
+                        <span class="app-header__user">{{ user.username }}</span>
+                        <button type="submit" class="link-button">Log out</button>
+                    </form>
+                {% else %}
+                    <a href="{% url 'login' %}">Log in</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content" class="app-main">
+        {% if messages %}
+            <ul class="messages" role="status">
+                {% for message in messages %}
+                    <li class="message message--{{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

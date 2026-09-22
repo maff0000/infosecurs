@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Organisations — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Your organisations</h1>
+    <a class="button button--primary" href="{% url 'organisations:create' %}">Create organisation</a>
+</div>
+
+{% if organisations %}
+    <ul class="card-list">
+        {% for organisation in organisations %}
+            <li class="card-list__item">
+                <a class="card-list__link" href="{% url 'organisations:detail' organisation.id %}">
+                    <span class="card-list__title">{{ organisation.name }}</span>
+                    <span class="card-list__meta">Opened {{ organisation.created_at|date:"j M Y" }}</span>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <div class="empty-state">
+        <p>You don't belong to any organisations yet.</p>
+        <a class="button button--primary" href="{% url 'organisations:create' %}">Create your first organisation</a>
+    </div>
+{% endif %}
+{% endblock %}
