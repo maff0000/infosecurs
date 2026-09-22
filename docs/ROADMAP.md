@@ -1,0 +1,12 @@
+# Infosecurs Beta 0.1 — Delivery Roadmap
+
+| Module | Purpose | Detailed PID |
+|---|---|---|
+| M001 | Foundation & Organisation Profile | AUTHORISED |
+| M002 | Security Baseline & Initial Risk | Write after M001 |
+| M003 | Evidence & Security State | Write after M002 |
+| M004 | Policy Foundation | Write when profile+risk facts are stable |
+| M005 | Questionnaire Assurance | Write after evidence/state contracts |
+| M006 | Customer-Zero Beta Hardening | Write once vertical slice exists |
+
+Do not pre-build later modules merely because they are listed here.
