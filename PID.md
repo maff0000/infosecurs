@@ -191,20 +191,27 @@ M004 Policy  M005 Questionnaire Assurance
 
 Application code must not hard-code vendor model names.
 
-Initial logical aliases:
+Infosecurs does not maintain project-specific aliases. It consumes the
+existing generic Trinity-governed LiteLLM aliases (Central Architecture
+correction, 2026-09-22 — withdraws the earlier `infosecurs-*` alias
+convention below M002's authorisation).
+
+Governed aliases in use:
 
 ```text
-infosecurs-fast
-infosecurs-core
-infosecurs-deep
+trinity-fast
+trinity-core
+trinity-deep
 ```
 
-Potential later aliases:
+Where later required:
 
 ```text
-infosecurs-embed
-infosecurs-vision
+trinity-embed
 ```
+
+Provider/model identity behind each alias remains an external gateway
+concern; no new LiteLLM deployment or project-specific alias is required.
 
 M001 does not require live AI inference.
 

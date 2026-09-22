@@ -44,12 +44,15 @@ Do not introduce Redis, Celery, Kafka or a separate worker until a real
 workflow requires it.
 
 ### AI
-Application-owned AI boundary -> LiteLLM-compatible gateway.
+Application-owned AI boundary -> the existing Trinity-governed
+LiteLLM-compatible gateway. No project-specific alias or second gateway
+deployment (Central Architecture correction, 2026-09-22).
 
-Logical aliases:
-- `infosecurs-fast`
-- `infosecurs-core`
-- `infosecurs-deep`
+Governed aliases:
+- `trinity-fast`
+- `trinity-core`
+- `trinity-deep`
+- `trinity-embed` (where later required)
 
 Provider endpoints/keys/config are external.
 

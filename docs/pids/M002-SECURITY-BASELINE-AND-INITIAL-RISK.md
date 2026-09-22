@@ -316,15 +316,21 @@ Infosecurs talks to the existing LiteLLM-compatible gateway through an applicati
 
 Application/domain code must not contain provider-specific model names or provider credentials.
 
-Logical model alias for M002:
+Logical model alias for M002 (Central Architecture correction, 2026-09-22 —
+Infosecurs does not maintain a project-specific alias; it consumes the
+existing generic, Trinity-governed alias):
 
 ```text
-infosecurs-core
+trinity-core
 ```
 
 The actual model/provider is an external gateway concern.
 
-If the alias/gateway is not available, GUNNAR must route the prerequisite to HELM. The Engineer must not bypass the gateway by wiring a vendor SDK directly into the domain.
+If the existing Trinity gateway itself is unavailable, or Infosecurs has not
+been issued a working credential for it, GUNNAR must route that to HELM. No
+HELM work is required merely to reference `trinity-core` — it is already a
+governed, existing alias. The Engineer must not bypass the gateway by wiring
+a vendor SDK directly into the domain.
 
 ### 9.2 External configuration
 
@@ -333,7 +339,7 @@ At minimum externalise:
 ```text
 AI_GATEWAY_BASE_URL
 AI_GATEWAY_API_KEY_FILE   (or equivalent mounted-secret mechanism)
-AI_RISK_MODEL_ALIAS       (expected value: infosecurs-core)
+AI_RISK_MODEL_ALIAS       (expected value: trinity-core)
 ```
 
 No gateway credentials in Git.
@@ -548,7 +554,7 @@ It must not become a second production AI implementation.
 
 ## 18. Live AI evaluation
 
-Before M002 may close, run the implemented flow against the configured real `infosecurs-core` gateway alias.
+Before M002 may close, run the implemented flow against the configured real `trinity-core` gateway alias.
 
 Create a small synthetic golden corpus in the repository.
 
@@ -759,29 +765,38 @@ If a new native GitHub AI-eval check is added, it must be governed and reproduci
 
 ## 24. AI gateway preflight
 
-Before the Engineer implements a direct live call path, GUNNAR must establish that an approved external LiteLLM-compatible gateway path exists for Infosecurs.
+Central Architecture correction, 2026-09-22: Infosecurs does not require a
+project-specific alias. It consumes the existing, already-governed
+`trinity-core` alias on the existing Trinity LiteLLM gateway. No HELM work
+is required merely to reference it.
 
-Required capability:
+Before the Engineer implements a direct live call path, GUNNAR must
+establish, from a Docker container on `dell-debian` (matching Infosecurs's
+actual runtime), that:
 
 ```text
-model alias: infosecurs-core
-OpenAI-compatible request/response boundary
-credential supplied externally
-reachable from dell-debian / Infosecurs Docker runtime
+Trinity gateway is reachable
+external authentication against it succeeds
+a real inference request using trinity-core succeeds
+unauthenticated access is rejected
+no credential is written to Git/evidence
 ```
 
-If missing:
+If the gateway itself is unreachable, or Infosecurs has not been issued a
+working external credential for it:
 
 ```text
 GUNNAR -> HELM
 ```
 
-HELM may configure the existing AI platform.
+HELM may configure the existing AI platform (e.g. issue a credential). HELM
+work is not required to add or reference `trinity-core` itself — it already
+exists and is already governed.
 
 Do **not** solve a missing platform prerequisite by:
 - hard-coding a provider;
 - adding provider API keys to Infosecurs;
-- creating a new LiteLLM deployment without architecture authority.
+- creating a new LiteLLM deployment or a project-specific alias without architecture authority.
 
 ---
 
@@ -829,7 +844,7 @@ M002 is PRODUCT_GREEN only when all are true:
 1. security baseline is usable and persists explicit answer states;
 2. key-asset baseline is usable;
 3. deterministic asset suggestions never silently become confirmed;
-4. real `infosecurs-core` AI generation works through the provider-neutral gateway;
+4. real `trinity-core` AI generation works through the provider-neutral gateway;
 5. AI generation produces only validated draft suggestions;
 6. every AI risk exposes valid tenant-local grounding references;
 7. unknowns/assumptions are preserved and visible;
