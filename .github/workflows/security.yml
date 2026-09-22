@@ -11,67 +11,77 @@ permissions:
 jobs:
   secrets:
     name: security/secrets
-    runs-on: ubuntu-latest
+    # Explicit runner generation, not the floating `ubuntu-latest` alias -
+    # see docs/delivery/BUILD-REPRODUCIBILITY.md.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
+      # Gitleaks binary version travels with this pinned action release
+      # (gitleaks-action bundles it, not a separate "latest gitleaks" fetch).
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   dependencies:
     name: security/dependencies
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: "3.12"
+          python-version: "3.12.14"
 
-      - run: pip install pip-audit
+      # Pinned tool version, not "whatever pip-audit ships today".
+      - run: pip install --no-cache-dir pip-audit==2.10.1
 
       - name: pip-audit (application dependencies)
         run: pip-audit -r requirements.txt
 
   sast:
     name: security/sast
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: github/codeql-action/init@v3
+      # CodeQL CLI bundle version travels with this pinned action release
+      # unless `tools:` is overridden, which we deliberately don't do here.
+      - uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
         with:
           languages: python
 
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
         with:
           category: "/language:python"
 
   container:
     name: security/container
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Build image
         run: docker build -t infosecurs:ci .
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          # Explicit trivy CLI version, not this action's own default -
+          # governed independently of the action's release cadence.
+          version: v0.70.0
           image-ref: infosecurs:ci
           format: table
           exit-code: "1"

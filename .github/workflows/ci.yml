@@ -21,10 +21,14 @@ env:
 jobs:
   unit:
     name: ci/unit
-    runs-on: ubuntu-latest
+    # Explicit runner generation, not the floating `ubuntu-latest` alias -
+    # see docs/delivery/BUILD-REPRODUCIBILITY.md.
+    runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:16.6-alpine
+        # Pinned by explicit version + immutable digest, kept identical to
+        # docker-compose.yml.
+        image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
         env:
           POSTGRES_DB: infosecurs_test
           POSTGRES_USER: infosecurs
@@ -37,14 +41,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: "3.12"
-          cache: "pip"
+          python-version: "3.12.14"
 
-      - run: pip install -r requirements-dev.txt
+      # Locked graph only - no floating "latest of whatever's on PyPI today".
+      - run: pip install --no-cache-dir --require-hashes -r requirements-dev.txt
 
       - name: Domain / model tests
         run: >
@@ -55,10 +59,10 @@ jobs:
 
   integration:
     name: ci/integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:16.6-alpine
+        image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
         env:
           POSTGRES_DB: infosecurs_test
           POSTGRES_USER: infosecurs
@@ -71,14 +75,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: "3.12"
-          cache: "pip"
+          python-version: "3.12.14"
 
-      - run: pip install -r requirements-dev.txt
+      - run: pip install --no-cache-dir --require-hashes -r requirements-dev.txt
 
       - name: Bootstrap - clean database migrates successfully
         run: python manage.py migrate --noinput
