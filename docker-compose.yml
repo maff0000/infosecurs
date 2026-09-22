@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:16.6-alpine
+    # Pinned by explicit version + immutable digest, kept identical to CI
+    # (see .github/workflows/ci.yml and docs/delivery/BUILD-REPRODUCIBILITY.md).
+    image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

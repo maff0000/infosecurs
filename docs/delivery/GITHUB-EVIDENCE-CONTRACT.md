@@ -89,6 +89,11 @@ Prefer established tools:
 
 Do not build custom scanners.
 
+Accepted base-image digests, the dependency lock mechanism, pinned Actions
+commit SHAs and the runner generation are recorded durably in
+`docs/delivery/BUILD-REPRODUCIBILITY.md` — that file, not this one, is where
+"what exactly does the accepted build depend on" is answered.
+
 ## Branch/merge control
 
 After bootstrap, `main` should normally receive product changes through PRs
