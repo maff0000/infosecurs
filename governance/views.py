@@ -1,11 +1,11 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from organisations.views import get_member_organisation_or_404
 
 from governance import services
-from governance.forms import RoleAssignmentForm
+from governance.forms import MyDetailsForm, RoleAssignmentForm
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
 
 
@@ -29,14 +29,37 @@ def role_assignments(request, organisation_id):
     role has no assignment yet (a defensive/edge case, e.g. a synthetic
     test organisation created without going through that flow), showing
     "Not yet assigned" rather than erroring.
+
+    Each row's `RoleAssignmentForm` is constructed with `prefix=role_key`
+    (M004 post-audit repair, Finding 2 - accessibility): the view
+    instantiates the same form three times, once per row, and with no
+    prefix every row rendered identical field ids (`id="id_person"` etc)
+    three times over, so a `<label for="...">` on rows 2/3 resolved to row
+    1's field instead of its own. `role_key` is already unique and stable
+    per row, so it doubles as the prefix.
+
+    That prefix means the submitted POST data now arrives as
+    `f"{role_key}-role"`/`f"{role_key}-person"`/etc, not the bare
+    `"role"`/`"person"` this view used to read directly - so which row was
+    submitted is now determined by checking which of the three known role
+    keys' prefixed data is actually present in `request.POST` (only one
+    row's `<form>` is ever the one actually submitted, since each row
+    renders as its own independent `<form>` tag).
     """
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
 
     if request.method == "POST":
-        role = request.POST.get("role")
-        form = RoleAssignmentForm(request.POST, organisation=organisation)
-        if form.is_valid():
+        submitted_role_key = None
+        for candidate_key, _candidate_label in GovernanceRoleAssignment.ROLE_CHOICES:
+            if f"{candidate_key}-role" in request.POST:
+                submitted_role_key = candidate_key
+                break
+
+        form = RoleAssignmentForm(
+            request.POST, organisation=organisation, prefix=submitted_role_key
+        )
+        if submitted_role_key is not None and form.is_valid():
             person = form.cleaned_data["person"]
             new_full_name = form.cleaned_data["new_person_full_name"]
             if person is None:
@@ -59,7 +82,7 @@ def role_assignments(request, organisation_id):
         )
     else:
         form = None
-        role = None
+        submitted_role_key = None
 
     assignments_by_role = {
         assignment.role: assignment
@@ -75,10 +98,14 @@ def role_assignments(request, organisation_id):
                 "role": role_key,
                 "label": role_label,
                 "assignment": assignments_by_role.get(role_key),
-                # Re-render the submitted form against the row that failed
-                # validation; every other row gets a fresh, blank form.
-                "form": form if (form is not None and role == role_key) else RoleAssignmentForm(
-                    initial={"role": role_key}, organisation=organisation
+                # Re-render the submitted form (still correctly prefixed)
+                # against the row that failed validation; every other row
+                # gets its own fresh, blank form - same prefix scheme as
+                # the GET-time default below, so ids never collide.
+                "form": form
+                if (form is not None and role_key == submitted_role_key)
+                else RoleAssignmentForm(
+                    initial={"role": role_key}, organisation=organisation, prefix=role_key
                 ),
             }
         )
@@ -87,4 +114,49 @@ def role_assignments(request, organisation_id):
         request,
         "governance/role_assignments.html",
         {"organisation": organisation, "rows": rows},
+    )
+
+
+@login_required
+def edit_my_details(request, organisation_id):
+    """
+    PID §3 user outcome #4 ("confirm/edit their name and job title") -
+    M004 post-audit repair, Finding 3. Deliberately scoped to exactly one
+    row: the requesting user's own linked `OrganisationPerson` in this
+    organisation. There is no person id anywhere in this URL/view -
+    `person` is looked up by `(organisation, user=request.user)`, so there
+    is no way to reach or edit anyone else's record through this endpoint
+    (PID §8.1 "not a separate person-management CRUD subsystem" -
+    `role_assignments` already covers reassigning roles to *other* named
+    people; this stays narrowly "edit my own details").
+
+    `governance.services.ensure_account_holder_person` guarantees this row
+    exists by the time an Account Holder can reach this page in the
+    ordinary product flow (wired into
+    `organisations.views.organisation_create`); this view still 404s
+    defensively rather than 500ing if it is somehow missing (e.g. a
+    synthetic test organisation created without going through that flow) -
+    same defensive posture `role_assignments`'s own docstring documents
+    for missing role assignments.
+    """
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+
+    person = get_object_or_404(
+        OrganisationPerson, organisation=organisation, user=request.user
+    )
+
+    if request.method == "POST":
+        form = MyDetailsForm(request.POST, instance=person)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your details have been updated.")
+            return redirect("governance:roles", organisation_id=organisation.id)
+    else:
+        form = MyDetailsForm(instance=person)
+
+    return render(
+        request,
+        "governance/edit_my_details.html",
+        {"organisation": organisation, "form": form},
     )

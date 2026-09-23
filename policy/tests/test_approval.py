@@ -6,6 +6,7 @@ m004-2b-policy-lifecycle dispatch). Covers both `policy.services`
 `create_new_draft_from_approved`) and the HTTP views that front them.
 """
 import datetime
+import re
 
 import pytest
 from django.urls import reverse
@@ -287,6 +288,13 @@ class TestApprovalViews:
             reverse("policy:version_approve_direct", args=[org_a.id, version.id])
         )
         assert get_response.status_code == 200
+        # M004 post-audit repair, Finding 1: the pre-filled next_review_date
+        # confirmation input must render ISO yyyy-MM-dd, never en-gb
+        # locale-formatted DD/MM/YYYY (which a real HTML5 date input
+        # silently refuses, rendering blank to the user).
+        get_content = get_response.content.decode()
+        assert 'name="next_review_date"' in get_content
+        assert re.search(r'name="next_review_date"[^>]*value="\d{4}-\d{2}-\d{2}"', get_content)
 
         post_response = client_a.post(
             reverse("policy:version_approve_direct", args=[org_a.id, version.id]),

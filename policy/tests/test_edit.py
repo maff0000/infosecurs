@@ -3,6 +3,8 @@ HTTP-level tests for the section-based draft editor
 (`policy.views.policy_edit`, PID §16, §26 "Policy lifecycle: edit" -
 m004-2b-policy-lifecycle dispatch).
 """
+import datetime
+
 import pytest
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +21,23 @@ class TestPolicyEditView:
         assert response.status_code == 200
         assert b"Purpose text." in response.content
         assert b"Access text." in response.content
+
+    def test_get_renders_next_review_date_input_in_iso_format(
+        self, client_a, org_a, make_draft_version
+    ):
+        # M004 post-audit repair, Finding 1 (PRODUCT RED): LANGUAGE_CODE
+        # "en-gb" must never leak DD/MM/YYYY into the rendered <input
+        # type="date"> value attribute - an HTML5 date input only accepts
+        # ISO yyyy-MM-dd, or the picker renders blank in a real browser.
+        version = make_draft_version(
+            org_a, next_review_date=datetime.date(2027, 9, 23)
+        )
+        response = client_a.get(reverse("policy:version_edit", args=[org_a.id, version.id]))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert 'name="next_review_date"' in content
+        assert 'value="2027-09-23"' in content
+        assert "23/09/2027" not in content
 
     def test_edit_persists_and_emits_exactly_one_event_with_correct_delta(
         self, client_a, org_a, user_a, make_draft_version

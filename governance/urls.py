@@ -11,4 +11,5 @@ app_name = "governance"
 # "organisations/<uuid:organisation_id>/governance/" -> governance.urls.
 urlpatterns = [
     path("roles/", views.role_assignments, name="roles"),
+    path("my-details/", views.edit_my_details, name="edit_my_details"),
 ]

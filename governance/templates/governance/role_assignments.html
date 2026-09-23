@@ -15,6 +15,8 @@
     representative. If that is not correct for any role, reassign it to another named person below.
 </p>
 
+<p><a href="{% url 'governance:edit_my_details' organisation.id %}">Edit your details</a></p>
+
 {% for row in rows %}
 <fieldset class="form-section">
     <legend>{{ row.label }}</legend>
