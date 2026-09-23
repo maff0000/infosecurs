@@ -25,10 +25,12 @@ from ai_platform.gateway import (
     GatewayRateLimitError,
     GatewayTimeoutError,
     InvalidResponseError,
+    PolicyGenerationGateway,
     RiskGenerationGateway,
     RiskInterpretationGateway,
 )
 from ai_platform.interpretation_contracts import InterpretationOutcome, InterpretationResponse
+from ai_platform.policy_contracts import PolicyGenerationResult, PolicyReviewWarning, PolicySection
 
 
 def default_valid_result(prompt_version: str = "risk_generation_v1") -> GenerationResult:
@@ -243,3 +245,88 @@ class FakeInterpretationGateway(RiskInterpretationGateway):
             raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
 
         raise ValueError(f"FakeInterpretationGateway: unknown mode {self.mode!r}")
+
+
+def default_valid_policy_result(
+    prompt_version: str = "policy_generation_v1",
+) -> PolicyGenerationResult:
+    """A minimal, valid `PolicyGenerationResult` - the default "happy path"
+    fixture used by `FakePolicyGateway(mode="valid")` when no explicit
+    `result` is supplied (M004 PID §17 test seam, m004-2a-policy-foundation
+    dispatch). Deliberately obeys the same truth-model discipline the real
+    prompt asks the model for - a normative requirement, not an
+    implemented-state claim - so a test exercising this fixture never
+    accidentally exercises a shape a strict human reviewer would reject."""
+    return PolicyGenerationResult(
+        policy_title="Fixture Ltd Information Security Policy",
+        sections=[
+            PolicySection(
+                section_key="purpose_and_scope",
+                content="This policy sets out how Fixture Ltd protects its information and systems.",
+            ),
+            PolicySection(
+                section_key="access_and_authentication",
+                content="Staff must use multi-factor authentication on privileged accounts.",
+            ),
+        ],
+        review_warnings=[
+            PolicyReviewWarning(
+                subject="Backups",
+                detail="Backup practice is not yet confirmed - review before approval.",
+            )
+        ],
+        resolved_model="fixture-model/fake-v1",
+        prompt_version=prompt_version,
+        prompt_tokens=234,
+        completion_tokens=98,
+    )
+
+
+class FakePolicyGateway(PolicyGenerationGateway):
+    """Deterministic `PolicyGenerationGateway` double (M004
+    m004-2a-policy-foundation dispatch), mirroring `FakeGateway`/
+    `FakeInterpretationGateway`'s mode-based pattern exactly - see either
+    class's own docstring for the shared rationale (PID §17: mechanical
+    tests must never require a live external LLM).
+
+    Modes: ``"valid"``, ``"invalid_schema"``, ``"timeout"``,
+    ``"auth_error"``, ``"rate_limit"``, ``"retryable"``,
+    ``"fail_then_succeed"``, ``"always_fail_retryable"`` - identical
+    meaning to `FakeGateway`'s own modes of the same name.
+
+    `calls` records every `(grounding, prompt_version)` pair passed to
+    `generate_policy`, in order, so a test can assert on exactly what was
+    sent - including proving that hostile/prompt-injection-shaped text in a
+    `PolicyGroundingPayload` field is passed through completely unchanged,
+    and that this fake's behaviour does not vary with the *content* of that
+    text (only with its own constructor-selected `mode`).
+    """
+
+    def __init__(self, mode: str = "valid", result: Optional[PolicyGenerationResult] = None):
+        self.mode = mode
+        self._result = result
+        self.calls: list = []
+
+    def generate_policy(self, grounding, prompt_version: str) -> PolicyGenerationResult:
+        self.calls.append((grounding, prompt_version))
+
+        if self.mode == "valid":
+            return self._result or default_valid_policy_result(prompt_version)
+        if self.mode == "invalid_schema":
+            raise InvalidResponseError("fixture: gateway returned an unparseable/invalid payload")
+        if self.mode == "timeout":
+            raise GatewayTimeoutError("fixture: gateway timed out")
+        if self.mode == "auth_error":
+            raise GatewayAuthError("fixture: gateway rejected credentials")
+        if self.mode == "rate_limit":
+            raise GatewayRateLimitError("fixture: gateway rate limit exceeded")
+        if self.mode == "retryable":
+            raise GatewayConnectionError("fixture: retryable gateway/network failure")
+        if self.mode == "fail_then_succeed":
+            if len(self.calls) == 1:
+                raise GatewayConnectionError("fixture: transient failure on first attempt")
+            return self._result or default_valid_policy_result(prompt_version)
+        if self.mode == "always_fail_retryable":
+            raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
+
+        raise ValueError(f"FakePolicyGateway: unknown mode {self.mode!r}")

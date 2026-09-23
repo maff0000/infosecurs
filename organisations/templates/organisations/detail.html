@@ -71,6 +71,16 @@
 </div>
 
 <div class="summary-card">
+    <h2>Information Security Policy</h2>
+    {% if profile_exists %}
+        <p>Generate a concise Information Security Policy grounded in your organisation's actual security state, then review and approve it.</p>
+        <a class="button button--primary" href="{% url 'policy:detail' organisation.id %}">Open policy</a>
+    {% else %}
+        <p>Complete the organisation profile first.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
     <h2>Evidence</h2>
     {% if profile_exists %}
         <p>Upload a file or add an external reference to support, contradict or contextualise a security-baseline answer.</p>

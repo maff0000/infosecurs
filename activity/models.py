@@ -102,6 +102,14 @@ class ActivityEvent(models.Model):
     EVENT_WORKPLACE_CREATED = "workplace_created"
     EVENT_WORKPLACE_UPDATED = "workplace_updated"
 
+    # Added by the m004-2a-policy-foundation dispatch, per
+    # docs/pids/M004-POLICY-FOUNDATION.md §22's expected M004 event list.
+    # As with the two additions above, PID §12/§22's lists are
+    # illustrative, not exhaustive - this is the fourth dispatch to extend
+    # `EVENT_TYPE_CHOICES` on that basis. Real emitter:
+    # `policy.services.generate_policy_draft`.
+    EVENT_POLICY_DRAFT_GENERATED = "policy_draft_generated"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -118,6 +126,7 @@ class ActivityEvent(models.Model):
         (EVENT_GOVERNANCE_ROLE_CHANGED, "Governance role changed"),
         (EVENT_WORKPLACE_CREATED, "Workplace created"),
         (EVENT_WORKPLACE_UPDATED, "Workplace updated"),
+        (EVENT_POLICY_DRAFT_GENERATED, "Policy draft generated"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -223,4 +232,7 @@ class ActivityEvent(models.Model):
         if self.event_type == self.EVENT_WORKPLACE_UPDATED:
             changed_fields = ", ".join(self.metadata.get("changed_fields", [])) or "details"
             return f"Workplace updated ({changed_fields} changed)"
+        if self.event_type == self.EVENT_POLICY_DRAFT_GENERATED:
+            version_number = self.metadata.get("version_number", "?")
+            return f"Policy draft generated (version {version_number})"
         return self.get_event_type_display()
