@@ -12,6 +12,185 @@
 
 ---
 
+## 0. AMENDMENT — Product model correction (Central Architecture, 2026-09-23)
+
+**Read this section before the rest of this document.** Sections 1–27 below
+are the original M002 authorisation, preserved as written. This amendment
+supersedes the specific parts identified below; it does not replace the
+whole document, and everything not named here still stands.
+
+### 0.1 Why
+
+Implementation reached a working AI-integrated slice — Security Baseline,
+Key Assets, an AI adapter (`ai_platform`), and a Risk domain
+(`risk_register`) that sent `profile + baseline + assets` facts to
+`trinity-core` and asked it to invent risk candidates directly, including
+their `grounding_refs` (fact/asset citations) and `asset_reference`
+(a specific `KeyAsset` UUID or empty).
+
+Two live evaluation rounds against the real gateway (golden corpus, PID
+§18) surfaced a structural problem, not a wording problem: the model was
+being asked to reproduce database identifiers (`asset:<uuid>`) and to
+invent risk framing (threat/vulnerability/consequence) from raw facts with
+no methodology in between. Round 1 fixed a grounding-ref format-adherence
+gap (7/8 → 2/8 failing). Round 2 fixed two more specific defects but
+surfaced that the model was dropping digit-groups when copying a
+repetitive synthetic UUID, and leaving `asset_reference` empty when no
+single fact was a clean fit — both symptoms of the same underlying design
+error: **an LLM should never be the system of record for identifiers, and
+should never be asked to invent an organisation's risk ontology from
+scratch.** No further prompt engineering closes that gap correctly; it
+requires a different division of labour between deterministic application
+code and the AI.
+
+### 0.2 Required derivation spine — supersedes §1, §3 (risk-generation part), §8, §9.1, §10
+
+M002 no longer treats `profile + baseline + assets -> LLM -> risks` as the
+primary risk-generation architecture. The required derivation spine is:
+
+```text
+Asset -> Exposure / Vulnerability / Control Gap -> Threat Event
+       -> Consequence -> Risk Scenario -> Likelihood x Impact -> Treatment
+```
+
+AI assists this process. AI does not invent the underlying organisational
+security ontology from scratch.
+
+**Terminology, precise and non-negotiable:** an inherent characteristic
+(e.g. a laptop being portable) is an **exposure**, not necessarily a
+**vulnerability**. A vulnerability/control gap is what turns an exposure
+into something exploitable (e.g. the *absence* of full-disk encryption on
+a portable laptop). Example, in full:
+
+```text
+Asset:                 employee laptop
+Exposure:               portable / leaves controlled premises
+Threat event:            loss or theft
+Control check:            full-disk encryption
+Control state:             no / unknown
+Vulnerability/control gap:  data on a lost device may be readable
+Consequence:                  confidential information disclosure
+Risk scenario:   loss/theft of an inadequately protected laptop may
+                  expose business/customer data
+Suggested treatment: enable BitLocker/FileVault + recovery-key management
+```
+
+### 0.3 Required user journey — supersedes §3, §20
+
+```text
+1. Organisation profile        - existing M001, unchanged
+2. Asset discovery              - existing key_assets deterministic suggestions, unchanged
+3. Asset-specific protection/exposure assessment
+4. Deterministic common threat-scenario derivation
+5. Risk candidate assembly
+6. AI practitioner interpretation/prioritisation
+7. Customer review/confirmation
+8. Risk register
+```
+
+### 0.4 New required artefact — a versioned common-security methodology catalogue
+
+Create a deliberately small, version-controlled catalogue (Git, methodology
+- same discipline as the existing `security_baseline` catalogue) linking:
+
+```text
+asset category -> exposures -> relevant control checks -> threat events
+               -> consequence types -> suggested treatments
+```
+
+Scope to common SME assets only, reusing the categories `key_assets`
+already defines: employee endpoints/laptops; identity/email/productivity
+platform; cloud environment; hosted business application/service;
+important business/customer information; people/users; network/location
+only where useful.
+
+**Keep the first catalogue small.** Target roughly 20–30 high-value threat
+scenarios, not hundreds of generic entries. Do not import a CVE/MITRE/GRC
+taxonomy into M002.
+
+### 0.5 Asset-specific protection checks — extends §6, does not replace it
+
+Reuse the existing `security_baseline` questions/answer-state model. Make
+the product *experience* asset-oriented wherever practical — e.g. an
+employee-laptop asset surfaces device encryption, endpoint protection,
+patching, backup, remote-working/access considerations; Microsoft 365/
+identity surfaces staff MFA, admin MFA, privileged-account separation,
+phishing protection, joiner/mover/leaver access removal.
+
+**Non-negotiable:** there must remain exactly one canonical answer for a
+given control fact even when it is surfaced from more than one journey
+(e.g. an asset-specific view and the general baseline view showing the
+same question). Do not create a second, potentially contradictory,
+storage location for the same fact.
+
+### 0.6 Critical AI boundary correction — supersedes §9.1, §9.3, §10 entirely; corrects §8's `asset_reference` field
+
+**Stop repairing UUID-copy fidelity through prompt engineering.** The LLM
+must not be responsible for reproducing database UUIDs or manufacturing
+foreign-key references. This is an architectural rule, not a tuning target:
+
+- Application code owns: organisation identity; asset UUIDs; scenario
+  identifiers; baseline/control identifiers; database relationships. The
+  server constructs and resolves all of these deterministically.
+- The model receives human-readable, versioned scenario context (from the
+  §0.4 catalogue, instantiated against the tenant's actual assets/control
+  states) and returns practitioner reasoning only — never an identifier it
+  must reproduce byte-for-byte.
+- The two round-2 failures (UUID copy-fidelity; empty `asset_reference`)
+  are therefore fixed architecturally by this section, not by further
+  prompt tuning. `Risk.asset_reference`/`key_asset` linkage is populated by
+  application code from the deterministic scenario instantiation, never
+  parsed out of free-form model output.
+
+### 0.7 AI role after the correction
+
+`trinity-core` may: explain candidate risks; identify material
+uncertainty; ask useful clarification questions; suggest likelihood and
+impact; propose proportionate treatment; prioritise candidates; help
+deduplicate closely related scenarios; explain why a scenario matters.
+
+It must not create organisational facts.
+
+**For M002 V1, prefer risk candidates originating from the deterministic
+methodology catalogue** (§0.4, instantiated per-tenant from actual asset/
+control-state data). If AI identifies a genuinely novel risk outside the
+catalogue, it is recorded separately as an explicitly unvalidated
+`AI novel suggestion` requiring customer/practitioner review — it must
+never silently create new catalogue truth. (This is additive to, not a
+replacement for, the existing `draft_ai_suggested` / `confirmed` /
+`dismissed` status model in §8 — a catalogue-originated candidate and an
+`AI novel suggestion` both still require explicit customer confirmation
+before becoming a confirmed risk; §2's core invariant — "AI may propose,
+AI may not silently establish organisational truth" — is unchanged and
+still governs both paths.)
+
+### 0.8 Vulnerability-scanning boundary — clarifies §1, §4 non-goals
+
+M002 "vulnerability checks" means guided exposure/control-gap checks
+answered by the customer (§0.5) — not active technical vulnerability
+scanning. Do not add Nessus/OpenVAS/CVE scanning, agents, network
+discovery, or any new scanning integration infrastructure as part of this
+correction. This was already implicit in §4's non-goals list and is
+restated here because the derivation-spine terminology (§0.2) uses the
+word "vulnerability" and must not be misread as inviting scanning
+infrastructure.
+
+### 0.9 What is unaffected by this amendment
+
+Everything else in this document, and in the already-built code, stands.
+See the KEEP/MODIFY/RETIRE mapping Central Architecture requested
+alongside this amendment (delivered separately, not part of authoritative
+PID text) for exactly how existing `security_baseline`, `key_assets`,
+`ai_platform`, and `risk_register` code maps onto this correction. In
+particular: PID §16 (tenant isolation, including the "critical" cross-
+tenant-AI-payload rule), §19 (AI approval wording), §21 (mechanical test
+discipline), §22 (browser acceptance requirement), §23–27 (evidence,
+closure, delta rules, definition of GREEN) are all unaffected in substance
+— they apply to the corrected architecture exactly as they applied to the
+original one.
+
+---
+
 ## 1. Purpose
 
 Turn the organisation profile created in M001 into the first useful security-practitioner workflow:
