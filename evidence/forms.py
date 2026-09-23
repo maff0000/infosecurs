@@ -1,5 +1,12 @@
 from django import forms
 
+from evidence.models import ControlEvidenceLink
+from security_baseline.catalogue import CATALOGUE
+
+CONTROL_KEY_CHOICES = [
+    (item["key"], f'{item["area"]} — {item["question"]}') for item in CATALOGUE
+]
+
 
 def _apply_field_css_classes(form):
     """
@@ -67,3 +74,32 @@ class EvidenceExternalReferenceForm(_EvidenceCommonFieldsMixin):
         label="Reference / URL",
         help_text="A link to where this evidence lives. Infosecurs does not fetch or crawl it.",
     )
+
+
+class ControlEvidenceLinkForm(forms.Form):
+    """
+    Link one evidence item to one catalogue control (PID §6.4, §18).
+
+    Deliberately a plain `forms.Form`, not a `ModelForm`: `organisation`,
+    `evidence` and `linked_by` are never user-submitted values - they come
+    from the tenant-scoped view (the evidence item and the authenticated
+    user), exactly like `evidence.link_services.link_evidence_to_control`'s
+    signature expects. Only the fields a Customer Zero user actually
+    chooses appear here.
+    """
+
+    control_key = forms.ChoiceField(choices=CONTROL_KEY_CHOICES, label="Control")
+    relationship = forms.ChoiceField(
+        choices=ControlEvidenceLink.RELATIONSHIP_CHOICES,
+        help_text="Does this evidence support, contradict, or just add context to the control's answer?",
+    )
+    rationale = forms.CharField(
+        max_length=500,
+        required=False,
+        label="Rationale (optional)",
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _apply_field_css_classes(self)

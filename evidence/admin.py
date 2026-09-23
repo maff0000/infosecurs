@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from evidence.models import EvidenceItem
+from evidence.models import ControlEvidenceLink, EvidenceItem
 
 # Registered for engineering/operational visibility only (superuser-gated).
 # This is not the product UI - see evidence/views.py. Read-only by
@@ -8,3 +8,4 @@ from evidence.models import EvidenceItem
 # layer (see EvidenceItem.save()), so no custom admin form is provided that
 # would invite editing them.
 admin.site.register(EvidenceItem)
+admin.site.register(ControlEvidenceLink)

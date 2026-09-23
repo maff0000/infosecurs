@@ -5,8 +5,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
 
-from evidence import services
-from evidence.models import EvidenceItem
+from evidence import link_services, services
+from evidence.models import ControlEvidenceLink, EvidenceItem
 
 MINIMAL_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
 
@@ -242,3 +242,118 @@ class TestEvidenceTenantIsolation:
         list_response = client_b.get(reverse("evidence:list", args=[org_b.id]))
         assert "Shared content, org A" not in list_response.content.decode()
         assert client_b.get(reverse("evidence:detail", args=[org_a.id, item_a.id])).status_code == 404
+
+
+@pytest.mark.django_db
+class TestControlEvidenceLinkTenantIsolation:
+    """
+    PID §16/§19: organisation A cannot link its evidence to organisation
+    B's control, or vice versa, and cannot inspect/mutate B's links via
+    A's own URL prefix.
+    """
+
+    def test_member_cannot_link_own_evidence_via_a_foreign_organisation_url(
+        self, client_b, org_a, org_b, user_a, user_b
+    ):
+        """
+        user_b is a member of org_b only. Posting to org_a's link-control
+        URL must 404 before any link is even considered - user_b is not a
+        member of org_a at all.
+        """
+        item_a = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Org A evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        response = client_b.post(
+            reverse("evidence:link_control", args=[org_a.id, item_a.id]),
+            {"control_key": "mfa_user_accounts", "relationship": "supports", "rationale": ""},
+        )
+        assert response.status_code == 404
+        assert not ControlEvidenceLink.objects.filter(evidence=item_a).exists()
+
+    def test_member_cannot_link_a_foreign_organisations_evidence_id_via_their_own_org_url(
+        self, client_a, org_a, org_b, user_a, user_b
+    ):
+        """
+        user_a IS a member of org_a (the URL organisation is legitimate),
+        but the evidence id in the URL belongs to org_b. The tenant-scoped
+        evidence lookup itself must 404.
+        """
+        item_b = services.create_external_reference_evidence(
+            organisation=org_b, actor=user_b, title="Org B evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/b",
+        )
+        response = client_a.post(
+            reverse("evidence:link_control", args=[org_a.id, item_b.id]),
+            {"control_key": "mfa_user_accounts", "relationship": "supports", "rationale": ""},
+        )
+        assert response.status_code == 404
+        assert not ControlEvidenceLink.objects.filter(evidence=item_b).exists()
+
+    def test_service_layer_refuses_a_cross_tenant_link_even_with_matching_membership(
+        self, org_a, org_b, user_a, user_b
+    ):
+        """
+        Direct proof against the service function itself (defence in
+        depth, PID §6.4 'must verify all referenced objects belong to the
+        same organisation') - org_a's evidence cannot be linked "under"
+        org_b, and vice versa, independent of any view/URL check.
+        """
+        item_a = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Org A evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        from evidence.exceptions import EvidenceValidationError
+
+        with pytest.raises(EvidenceValidationError):
+            link_services.link_evidence_to_control(
+                org_b, item_a, "mfa_user_accounts", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_b
+            )
+        assert not ControlEvidenceLink.objects.filter(evidence=item_a, organisation=org_b).exists()
+
+    def test_member_cannot_unlink_another_organisations_control_evidence_link(
+        self, client_b, org_a, user_a
+    ):
+        item_a = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Org A evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        link = link_services.link_evidence_to_control(
+            org_a, item_a, "backups", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_a
+        )
+        response = client_b.post(
+            reverse("evidence:unlink_control", args=[org_a.id, item_a.id, link.id])
+        )
+        assert response.status_code == 404
+        assert ControlEvidenceLink.objects.filter(pk=link.pk).exists()
+
+    def test_cross_tenant_link_id_via_own_org_evidence_url_is_404(
+        self, client_a, org_a, org_b, user_a, user_b
+    ):
+        """
+        user_a's own evidence item in org_a, but the link id in the URL
+        belongs to a link on org_b's evidence - must not be reachable
+        even though the evidence_id segment is legitimately user_a's own.
+        """
+        item_a = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Org A evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        item_b = services.create_external_reference_evidence(
+            organisation=org_b, actor=user_b, title="Org B evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/b",
+        )
+        link_b = link_services.link_evidence_to_control(
+            org_b, item_b, "backups", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_b
+        )
+        response = client_a.post(
+            reverse("evidence:unlink_control", args=[org_a.id, item_a.id, link_b.id])
+        )
+        assert response.status_code == 404
+        assert ControlEvidenceLink.objects.filter(pk=link_b.pk).exists()

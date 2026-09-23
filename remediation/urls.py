@@ -13,4 +13,5 @@ urlpatterns = [
     path("<uuid:action_id>/start/", views.action_start, name="start"),
     path("<uuid:action_id>/complete/", views.action_complete, name="complete"),
     path("<uuid:action_id>/accept/", views.action_accept, name="accept"),
+    path("<uuid:action_id>/attach-evidence/", views.action_attach_evidence, name="attach_evidence"),
 ]

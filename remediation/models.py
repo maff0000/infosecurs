@@ -1,12 +1,14 @@
 """
 Tenant-owned Remediation Action domain (docs/pids/M003-EVIDENCE-AND-SECURITY-STATE.md
-§6.5, §13).
+§6.5, §6.6, §13).
 
-This app builds ONLY `RemediationAction`. It deliberately does not build
-`EvidenceItem`, `ControlEvidenceLink`, `ActionEvidenceLink` (§6.6 - a later
-dispatch adds that once both this app's `RemediationAction` and the
-parallel m003-1a-evidence dispatch's `EvidenceItem` exist), the Current
-Security State projection (§7), or the Activity timeline (§12).
+This app builds `RemediationAction` and `ActionEvidenceLink` (§6.6 -
+deliberately minimal compared to evidence's `ControlEvidenceLink`: no
+relationship type, just "this evidence is associated with this action,
+especially completion evidence"). It still does not build `EvidenceItem`
+or `ControlEvidenceLink` themselves (owned by the `evidence` app), the
+Current Security State projection (§7), or the Activity timeline (§12,
+owned by the `activity` app).
 
 Core invariant this file exists to protect (§6.5, §13 - "non-negotiable"):
 completing a `RemediationAction` (status -> `done` or `accepted`) must
@@ -175,3 +177,61 @@ class RemediationAction(models.Model):
             return ""
         entry = CATALOGUE_BY_KEY.get(self.control_key)
         return entry["area"] if entry else self.control_key
+
+
+class ActionEvidenceLink(models.Model):
+    """
+    Associates an `evidence.EvidenceItem` with a `RemediationAction` (PID
+    §6.6), "especially completion evidence". Deliberately minimal compared
+    to evidence's own `ControlEvidenceLink`: no relationship type (support/
+    contradict/context) - just "this evidence is associated with this
+    action". Attach-only for M003 V1 (PID §19's Actions mechanical-test
+    list requires only "evidence can attach"; no unlink capability exists
+    here).
+
+    This association does not, by itself or via any code path in this app,
+    change `RemediationAction.status`, `risk_register.Risk.status`, or any
+    `security_baseline.BaselineAnswer` (PID §6.6, §13) - see this module's
+    docstring for how that invariant is protected app-wide.
+
+    Cross-app FK to `evidence.EvidenceItem` via the string form
+    ("evidence.EvidenceItem") rather than a direct import. Checked the
+    actual app-import graph before choosing this: `evidence` does not
+    import anything from `remediation` (no circular-import risk exists
+    either way), but this is the first link from `remediation` to
+    `evidence` at all, and the PID's own §6.6 minimum shape specifies the
+    string form. Direct imports (`risk_register.Risk`, `key_assets.
+    KeyAsset` above) remain the established in-file convention for
+    apps `remediation` already depended on before this dispatch; the
+    string form here keeps `remediation`'s import-time dependency on
+    `evidence` from being introduced as a hard requirement, so a future
+    app-ordering change on either side can't turn this into a real
+    circular import by surprise.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="action_evidence_links"
+    )
+    action = models.ForeignKey(
+        RemediationAction, on_delete=models.CASCADE, related_name="evidence_links"
+    )
+    evidence = models.ForeignKey(
+        "evidence.EvidenceItem", on_delete=models.CASCADE, related_name="action_links"
+    )
+    linked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="action_evidence_links",
+    )
+    linked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-linked_at"]
+        indexes = [
+            models.Index(fields=["organisation", "action"]),
+        ]
+
+    def __str__(self):
+        return f"{self.evidence_id} -> {self.action_id} ({self.organisation})"

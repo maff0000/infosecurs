@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Security state — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .state-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .state-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .state-card__body { flex: 1 1 320px; min-width: 0; }
+  .state-card__title { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .state-card__meta { color: var(--color-text-muted); font-size: 0.9rem; margin: 0 0 var(--space-1) 0; }
+  .state-card__stats { display: flex; gap: var(--space-4); font-size: 0.85rem; color: var(--color-text-muted); }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--not-confirmed { background: var(--color-border); color: var(--color-text); }
+  .badge--not-applicable { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .badge--customer-stated { background: #e6eefb; color: #185ea8; }
+  .badge--supporting-evidence-attached { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--evidence-conflict { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--evidence-stale { background: #fdf1d6; color: #8a5a00; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Security state</h1>
+        <p class="page-header__subtitle">
+            {{ organisation.name }} &middot;
+            <a href="{% url 'security_baseline:baseline' organisation.id %}">Edit the security baseline</a>
+        </p>
+    </div>
+</div>
+
+<p class="page-header__subtitle">
+    This is derived from the security baseline plus linked evidence. It is not an independent
+    verification — see each control for detail.
+</p>
+
+<div class="state-grid">
+    {% for row in rows %}
+        <div class="state-card">
+            <div class="state-card__body">
+                <p class="state-card__title">
+                    <a href="{% url 'security_state:detail' organisation.id row.control_key %}">{{ row.area }}</a>
+                </p>
+                <p class="state-card__meta">Current answer: {{ row.answer_label }}</p>
+            </div>
+            <div class="state-card__stats">
+                <span class="badge badge--{{ row.assurance_label|slugify }}">{{ row.assurance_label }}</span>
+                <span>Evidence: {{ row.evidence_counts.supports|add:row.evidence_counts.contradicts|add:row.evidence_counts.context }}</span>
+                <span>Open actions: {{ row.open_remediation_count }}</span>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

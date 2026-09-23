@@ -5,8 +5,8 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from evidence.models import EvidenceItem
-from evidence import services
+from evidence.models import ControlEvidenceLink, EvidenceItem
+from evidence import link_services, services
 
 MINIMAL_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
 GARBAGE = b"\x00\x01\x02\x03not a recognised evidence type"
@@ -293,4 +293,95 @@ class TestEvidenceWithdrawView:
             reference_url="https://example.test/x",
         )
         response = client_a.get(reverse("evidence:withdraw", args=[org_a.id, item.id]))
+        assert response.status_code == 405
+
+
+@pytest.mark.django_db
+class TestEvidenceLinkControlView:
+    def test_get_renders_form(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        response = client_a.get(reverse("evidence:link_control", args=[org_a.id, item.id]))
+        assert response.status_code == 200
+
+    def test_post_creates_link_and_redirects_to_detail(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        response = client_a.post(
+            reverse("evidence:link_control", args=[org_a.id, item.id]),
+            {"control_key": "mfa_user_accounts", "relationship": "supports", "rationale": "Screenshot"},
+        )
+        assert response.status_code == 302
+        assert response.url == reverse("evidence:detail", args=[org_a.id, item.id])
+        link = ControlEvidenceLink.objects.get(evidence=item)
+        assert link.control_key == "mfa_user_accounts"
+        assert link.relationship == "supports"
+        assert link.rationale == "Screenshot"
+        assert link.linked_by_id == user_a.id
+
+    def test_post_duplicate_link_shows_friendly_error(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        link_services.link_evidence_to_control(
+            org_a, item, "mfa_user_accounts", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_a
+        )
+        response = client_a.post(
+            reverse("evidence:link_control", args=[org_a.id, item.id]),
+            {"control_key": "mfa_user_accounts", "relationship": "supports", "rationale": ""},
+        )
+        assert response.status_code == 200
+        assert ControlEvidenceLink.objects.filter(evidence=item).count() == 1
+
+    def test_detail_page_shows_linked_controls(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        link_services.link_evidence_to_control(
+            org_a, item, "mfa_user_accounts", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "My rationale", user_a
+        )
+        response = client_a.get(reverse("evidence:detail", args=[org_a.id, item.id]))
+        content = response.content.decode()
+        assert "Multi-factor authentication (staff)" in content
+        assert "My rationale" in content
+        assert "Supports" in content
+
+
+@pytest.mark.django_db
+class TestEvidenceUnlinkControlView:
+    def test_post_deletes_the_link(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        link = link_services.link_evidence_to_control(
+            org_a, item, "mfa_user_accounts", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_a
+        )
+        response = client_a.post(reverse("evidence:unlink_control", args=[org_a.id, item.id, link.id]))
+        assert response.status_code == 302
+        assert not ControlEvidenceLink.objects.filter(pk=link.pk).exists()
+        # Unlink does not delete the underlying evidence item (PID §19).
+        assert EvidenceItem.objects.filter(pk=item.pk).exists()
+
+    def test_get_is_not_allowed(self, client_a, org_a, user_a):
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="Evidence", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/a",
+        )
+        link = link_services.link_evidence_to_control(
+            org_a, item, "mfa_user_accounts", ControlEvidenceLink.RELATIONSHIP_SUPPORTS, "", user_a
+        )
+        response = client_a.get(reverse("evidence:unlink_control", args=[org_a.id, item.id, link.id]))
         assert response.status_code == 405

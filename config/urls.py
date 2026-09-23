@@ -29,5 +29,9 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/actions/",
         include("remediation.urls"),
     ),
+    path(
+        "organisations/<uuid:organisation_id>/security-state/",
+        include("security_state.urls"),
+    ),
     path("organisations/", include("activity.urls")),
 ]

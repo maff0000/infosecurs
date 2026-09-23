@@ -1,6 +1,7 @@
 import pytest
+from django.db import IntegrityError, transaction
 
-from evidence.models import EvidenceImmutableFieldError, EvidenceItem
+from evidence.models import ControlEvidenceLink, EvidenceImmutableFieldError, EvidenceItem
 
 
 @pytest.mark.django_db
@@ -132,3 +133,60 @@ class TestEvidenceItemModel:
         item.status = EvidenceItem.STATUS_WITHDRAWN
         item.save()
         assert EvidenceItem.objects.filter(pk=item.pk).exists()
+
+
+@pytest.mark.django_db
+class TestControlEvidenceLinkModel:
+    def _evidence(self, org, actor):
+        return EvidenceItem.objects.create(
+            organisation=org,
+            kind=EvidenceItem.KIND_EXTERNAL_REFERENCE,
+            title="Evidence",
+            reference_url="https://example.test/evidence",
+            recorded_by=actor,
+        )
+
+    def test_control_key_label_uses_catalogue_area(self, org_a, user_a):
+        link = ControlEvidenceLink.objects.create(
+            organisation=org_a,
+            evidence=self._evidence(org_a, user_a),
+            control_key="mfa_user_accounts",
+            relationship=ControlEvidenceLink.RELATIONSHIP_SUPPORTS,
+            linked_by=user_a,
+        )
+        assert link.control_key_label() == "Multi-factor authentication (staff)"
+
+    def test_control_key_label_falls_back_to_raw_key_for_unknown_key(self, org_a, user_a):
+        link = ControlEvidenceLink.objects.create(
+            organisation=org_a,
+            evidence=self._evidence(org_a, user_a),
+            control_key="retired_control_key",
+            relationship=ControlEvidenceLink.RELATIONSHIP_SUPPORTS,
+            linked_by=user_a,
+        )
+        assert link.control_key_label() == "retired_control_key"
+
+    def test_database_level_unique_constraint_backstops_exact_duplicates(self, org_a, user_a):
+        """
+        Defence-in-depth backstop behind the service-layer check in
+        evidence.link_services.link_evidence_to_control (PID §19
+        'duplicate-link behaviour deterministic') - proves the guarantee
+        holds even for a caller that writes directly via the ORM.
+        """
+        evidence = self._evidence(org_a, user_a)
+        ControlEvidenceLink.objects.create(
+            organisation=org_a,
+            evidence=evidence,
+            control_key="patching",
+            relationship=ControlEvidenceLink.RELATIONSHIP_SUPPORTS,
+            linked_by=user_a,
+        )
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                ControlEvidenceLink.objects.create(
+                    organisation=org_a,
+                    evidence=evidence,
+                    control_key="patching",
+                    relationship=ControlEvidenceLink.RELATIONSHIP_SUPPORTS,
+                    linked_by=user_a,
+                )
