@@ -3,28 +3,21 @@ Small, additive trigger view for AI practitioner-interpretation (M002 PID
 §0.6/§0.7 - M002-3c dispatch's "wire it in" instruction).
 
 Deliberately a separate file/view, not a second step folded into
-`risk_register.views.risk_generate`, and deliberately NOT wired into
-`risk_register/templates/risk_register/list.html` or `detail.html` with a
-visible button in this dispatch: the parallel `m002-3d-asset-ux` dispatch
-is reworking `risk_register`/`key_assets` UI templates (including these
-exact two files) at the same time this dispatch runs, per this dispatch's
-own explicit instruction to "keep your view-layer footprint minimal and
-additive... to reduce integration collision risk." A new, small, additive
-view + one URL line is exactly that: this dispatch adds one new file here
-and exactly one new `path()` entry to `risk_register/urls.py` - nothing
-existing is restructured, and no template this dispatch does not own is
-touched.
+`risk_register.views.risk_generate`: the parallel `m002-3d-asset-ux`
+dispatch was reworking `risk_register`/`key_assets` UI templates (including
+`list.html`/`detail.html`) at the same time this view was built, so this
+dispatch kept its own footprint to one new file plus one new `path()` entry
+in `risk_register/urls.py`, deliberately not touching those templates
+itself, to avoid a concurrent-edit collision.
 
-This is a real functional gap this report flags explicitly for the PL:
-today there is no rendered link/button a browser user can click to reach
-`risk_register:interpret` - it is fully exercised by the mechanical test
-suite (Django test client POSTs directly to the URL) and by any later live
-browser audit that is told to POST to it directly, but a real Customer
-Zero user cannot discover it from the UI yet. Wiring an actual button into
-`list.html`/`detail.html` is left to whichever dispatch next owns those
-templates without a concurrent collision risk (3d's own integration, or a
-follow-up dispatch after 3d lands) - not solved here, to avoid touching
-files 3d is actively rewriting.
+The PL wired the actual "Ask AI to review drafts" button into
+`risk_register/templates/risk_register/list.html` during Phase 3c/3d
+integration, once both dispatches had landed and the collision risk no
+longer applied - confirmed working end-to-end by a fresh FORGE Auditor's
+real-browser pass (`docs/evidence/M002-AUDIT-0002.md`). This view's
+contract (POST-only, tenant-scoped, updates existing draft `Risk` rows via
+`risk_register.interpretation_service`, never creates one) is unchanged
+from how it was built.
 """
 from __future__ import annotations
 
