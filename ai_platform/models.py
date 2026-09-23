@@ -25,8 +25,19 @@ from organisations.models import Organisation
 
 class AIInvocationRecord(models.Model):
     TASK_INITIAL_RISK_GENERATION = "initial_risk_generation"
+    # M002-3c dispatch (PID §0.6/§0.7): AI practitioner-interpretation over
+    # already-existing, catalogue-instantiated draft Risk rows. Deliberately
+    # a distinct task_type from TASK_INITIAL_RISK_GENERATION - it is a
+    # different call shape (ai_platform.interpretation_contracts, not
+    # ai_platform.contracts) doing a materially different job (interpret/
+    # refine/prioritise candidates that already exist, never originate a
+    # new Risk row) - collapsing the two into one task_type would make a
+    # historical AIInvocationRecord's task_type stop reliably describing
+    # what call actually happened.
+    TASK_RISK_INTERPRETATION = "risk_interpretation"
     TASK_TYPE_CHOICES = [
         (TASK_INITIAL_RISK_GENERATION, "Initial risk generation"),
+        (TASK_RISK_INTERPRETATION, "Risk interpretation"),
     ]
 
     STATUS_PENDING = "pending"
@@ -96,6 +107,22 @@ class AIInvocationRecord(models.Model):
     error_category = models.CharField(
         max_length=32, choices=ERROR_CATEGORY_CHOICES, null=True, blank=True
     )
+    additional_observations = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "M002-3c dispatch (PID §0.7 third bullet): unvalidated, free-text AI "
+            "practitioner commentary from a risk_interpretation call - a possible "
+            "additional concern, or a methodology-coverage-gap note - that is NOT "
+            "attached to any specific candidate/index and must NEVER be persisted "
+            "as a Risk row or new catalogue truth. Stored here, on the invocation "
+            "record, rather than as a separate model: it is generation-run "
+            "metadata/commentary, exactly like prompt_version or candidate_count, "
+            "not tenant risk-register state - so it belongs with the record of "
+            "the call that produced it, clearly separate from risk_register.Risk. "
+            "Always [] for a TASK_INITIAL_RISK_GENERATION record."
+        ),
+    )
 
     class Meta:
         ordering = ["-started_at"]
@@ -118,6 +145,30 @@ class AIInvocationRecord(models.Model):
                 "baseline_facts": grounding.baseline_facts,
                 "asset_facts": grounding.asset_facts,
             },
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def hash_interpretation_request(request) -> str:
+        """Canonical SHA-256 hash of an
+        `ai_platform.interpretation_contracts.InterpretationRequest`'s wire
+        content (M002-3c dispatch). Mirrors `hash_grounding` exactly -
+        same rationale (PID §13: an immutable reference to what was sent,
+        without duplicating the raw payload in the database) - but over
+        the interpretation task's own payload shape, which is a list of
+        small-integer-indexed candidate summaries rather than a
+        `GroundingPayload`'s fact groups. Deliberately excludes
+        `organisation_id` from the hashed content itself for the same
+        reason it is excluded from the outbound wire payload (see
+        `InterpretationCandidate.to_wire_dict` / the risk_interpretation_v1
+        prompt module's docstring): this hash is over exactly what left the
+        tenant boundary towards the model, not over call metadata already
+        recorded elsewhere on this same record (`organisation`).
+        """
+        canonical = json.dumps(
+            {"candidates": [c.to_wire_dict() for c in request.candidates]},
             sort_keys=True,
             default=str,
         )

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}{{ asset.name }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--suggested { background: #fdf1d6; color: #8a5a00; }
+  .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--band-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--band-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--band-high { background: #fbe6d6; color: #a3521f; }
+  .badge--band-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+  .asset-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .asset-detail__meta { color: var(--color-text-muted); margin: 0 0 var(--space-3) 0; }
+  .risk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .risk-list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ asset.name }}</h1>
+        <p class="page-header__subtitle"><a href="{% url 'key_assets:list' organisation.id %}">&larr; Back to key assets</a> &middot; {{ organisation.name }}</p>
+    </div>
+    <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit asset details</a>
+</div>
+
+<div class="asset-detail__status-row">
+    {% if asset.status == "suggested" %}
+        <span class="badge badge--suggested">Suggested</span>
+    {% elif asset.status == "confirmed" %}
+        <span class="badge badge--confirmed">Confirmed</span>
+    {% else %}
+        <span class="badge badge--dismissed">Dismissed</span>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Asset details</h2>
+    <p class="asset-detail__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
+    {% if asset.description %}<p>{{ asset.description }}</p>{% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Protection checks for this asset</h2>
+    <p class="form-card__intro">
+        These are the security-baseline questions most relevant to a {{ asset.get_category_display|lower }} asset.
+        They are <strong>the same canonical answers</strong> as the general Security Baseline page - editing one
+        here updates that page too, and vice versa. These are customer-confirmed statements, not controls the
+        system has independently verified.
+    </p>
+
+    {% if questions %}
+        {% if form.non_field_errors %}
+            <ul class="messages" role="alert">
+                {% for error in form.non_field_errors %}
+                    <li class="message message--error">{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <form method="post" class="baseline-form" novalidate>
+            {% csrf_token %}
+            {% for question in questions %}
+                <fieldset class="form-section">
+                    <legend>{{ question.item.area }}</legend>
+
+                    <div class="field {% if question.answer_field.errors %}field--error{% endif %}">
+                        <label for="{{ question.answer_field.id_for_label }}">{{ question.item.question }}</label>
+                        {% if question.item.help_text %}
+                            <p class="field__help">{{ question.item.help_text }}</p>
+                        {% endif %}
+                        {{ question.answer_field }}
+                        {% for error in question.answer_field.errors %}
+                            <p class="field__error" role="alert">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="field {% if question.note_field.errors %}field--error{% endif %}">
+                        <label for="{{ question.note_field.id_for_label }}">Note (optional)</label>
+                        <p class="field__help">Anything that explains the answer. This is your note, not an instruction to any automated system.</p>
+                        {{ question.note_field }}
+                        {% for error in question.note_field.errors %}
+                            <p class="field__error" role="alert">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+            {% endfor %}
+
+            <p class="page-header__subtitle">Catalogue version: {{ catalogue_version }}</p>
+
+            <div class="form-actions form-actions--sticky">
+                <a class="button button--secondary" href="{% url 'security_baseline:baseline' organisation.id %}">Open full security baseline</a>
+                <button type="submit" class="button button--primary">Save protection checks</button>
+            </div>
+        </form>
+    {% else %}
+        <div class="empty-state">
+            <p>There are no asset-specific protection checks for this asset category yet.</p>
+            <a class="button button--secondary" href="{% url 'security_baseline:baseline' organisation.id %}">Open full security baseline</a>
+        </div>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Risks for this asset</h2>
+    {% if risks %}
+        <ul class="risk-list">
+            {% for risk in risks %}
+                <li>
+                    <a href="{% url 'risk_register:detail' organisation.id risk.id %}">{{ risk.title }}</a>
+                    {% if risk.status == "draft_ai_suggested" %}
+                        <span class="badge badge--suggested">AI suggested</span>
+                    {% elif risk.status == "confirmed" %}
+                        <span class="badge badge--confirmed">Confirmed</span>
+                    {% else %}
+                        <span class="badge badge--dismissed">Dismissed</span>
+                    {% endif %}
+                    <span class="badge badge--band-{{ risk.risk_band }}">{{ risk.risk_band_label }} ({{ risk.score }})</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="empty-state">
+            <p>No risks recorded against this asset yet. Answer the protection checks above, then generate initial risks from the risk register.</p>
+        </div>
+    {% endif %}
+    <p style="margin-top: var(--space-3);">
+        <a class="button button--secondary" href="{% url 'risk_register:list' organisation.id %}">Open risk register</a>
+    </p>
+</div>
+{% endblock %}

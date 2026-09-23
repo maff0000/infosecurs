@@ -1,6 +1,6 @@
 from django import forms
 
-from security_baseline.catalogue import CATALOGUE
+from security_baseline.catalogue import CATALOGUE, CATALOGUE_BY_KEY
 from security_baseline.models import ANSWER_CHOICES, ANSWER_UNKNOWN
 
 
@@ -26,11 +26,24 @@ class BaselineAssessmentForm(forms.Form):
     ANSWER_UNKNOWN - matching organisations/forms.py's tri-state discipline:
     a <select> always submits a value, so "not answered" is impossible to
     represent; "unknown" is the deliberate, visible default instead.
+
+    `question_keys`: optional iterable of catalogue `key` values to build
+    fields for, instead of the full catalogue. Added for the asset-specific
+    protection-checks page (PID §0.5), which surfaces only the control
+    questions relevant to one KeyAsset's category - it reuses this exact
+    form class (same field names, choices, tri-state discipline) rather
+    than a second, asset-local question model. Defaults to the full
+    catalogue, so the general Security Baseline page's behaviour is
+    unchanged.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, question_keys=None, **kwargs):
         super().__init__(*args, **kwargs)
-        for item in CATALOGUE:
+        self.items = (
+            CATALOGUE if question_keys is None
+            else [CATALOGUE_BY_KEY[key] for key in question_keys]
+        )
+        for item in self.items:
             key = item["key"]
             self.fields[answer_field_name(key)] = forms.ChoiceField(
                 choices=ANSWER_CHOICES,
@@ -46,7 +59,7 @@ class BaselineAssessmentForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        for item in CATALOGUE:
+        for item in self.items:
             key = item["key"]
             note_field = note_field_name(key)
             if note_field in cleaned_data:

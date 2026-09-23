@@ -93,14 +93,10 @@
     <p>{{ risk.threat }}</p>
     <p class="risk-detail__label">Vulnerability / exposure</p>
     <p>{{ risk.vulnerability }}</p>
-    {% if risk.asset_reference %}
+    {% if risk.key_asset %}
         <p class="risk-detail__label">Asset / context reference</p>
         <p>
-            {% if risk.key_asset %}
-                <a href="{% url 'key_assets:edit' organisation.id risk.key_asset.id %}">{{ risk.key_asset.name }}</a>
-            {% else %}
-                {{ risk.asset_reference }}
-            {% endif %}
+            <a href="{% url 'key_assets:detail' organisation.id risk.key_asset.id %}">{{ risk.key_asset.name }}</a>
         </p>
     {% endif %}
 </div>

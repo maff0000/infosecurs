@@ -84,6 +84,7 @@
                             {% csrf_token %}
                             <button type="submit" class="button button--primary">Confirm</button>
                         </form>
+                        <a class="button button--secondary" href="{% url 'key_assets:detail' organisation.id asset.id %}">View</a>
                         <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
                         <form method="post" action="{% url 'key_assets:dismiss' organisation.id asset.id %}">
                             {% csrf_token %}
@@ -113,6 +114,7 @@
                         {% if asset.description %}<p class="asset-card__description">{{ asset.description }}</p>{% endif %}
                     </div>
                     <div class="asset-card__actions">
+                        <a class="button button--secondary" href="{% url 'key_assets:detail' organisation.id asset.id %}">View</a>
                         <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
                     </div>
                 </div>
@@ -138,6 +140,7 @@
                         <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
                     </div>
                     <div class="asset-card__actions">
+                        <a class="button button--secondary" href="{% url 'key_assets:detail' organisation.id asset.id %}">View</a>
                         <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
                     </div>
                 </div>

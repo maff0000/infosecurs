@@ -25,6 +25,7 @@ import urllib.request
 from typing import Optional
 
 from ai_platform.contracts import ContractValidationError, GenerationResult, GroundingPayload
+from ai_platform.interpretation_contracts import InterpretationRequest, InterpretationResponse
 
 # Governed, generic Trinity alias (Central Architecture correction,
 # 2026-09-22). Not Infosecurs-specific - see PID §9.1, ARCHITECTURE.md "AI".
@@ -85,7 +86,44 @@ class RiskGenerationGateway(abc.ABC):
         raise NotImplementedError
 
 
-class LiteLLMGateway(RiskGenerationGateway):
+class RiskInterpretationGateway(abc.ABC):
+    """Provider-neutral risk-INTERPRETATION boundary (M002-3c dispatch,
+    PID §0.6/§0.7/§9.1).
+
+    Deliberately a separate ABC from `RiskGenerationGateway`, not a second
+    abstract method bolted onto it: the retired generation task and this
+    task have different request/response contracts
+    (`GroundingPayload`/`GenerationResult` vs
+    `InterpretationRequest`/`InterpretationResponse`), and every existing
+    `RiskGenerationGateway` implementation/test-double (`LiteLLMGateway`,
+    `ai_platform.testing.FakeGateway`) only ever needed to satisfy
+    `generate()`. Adding `interpret()` as a second abstractmethod on the
+    same ABC would have forced every existing `FakeGateway` construction
+    site across the test suite to grow a meaningless `interpret()`
+    implementation just to remain instantiable, for a method those tests
+    have no reason to exercise. `LiteLLMGateway` below implements BOTH
+    ABCs on the one concrete class - reusing its HTTP/retry/credential
+    mechanics for both tasks - which is what PID's "don't duplicate the
+    retry/timeout/credential mechanics" instruction actually requires;
+    `ai_platform.testing.FakeInterpretationGateway` is this ABC's own,
+    separate test double, mirroring `FakeGateway`'s mode-based pattern.
+    """
+
+    @abc.abstractmethod
+    def interpret(
+        self, request: InterpretationRequest, prompt_version: str
+    ) -> InterpretationResponse:
+        """Run one interpretation call over already-existing candidate
+        summaries and return a validated `InterpretationResponse`.
+
+        Raises a `GatewayError` subclass on any failure - never returns a
+        partially-valid result, and never partially matches the request's
+        indices (see `InterpretationResponse.from_response_dict`).
+        """
+        raise NotImplementedError
+
+
+class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway):
     """Real implementation - the existing Trinity LiteLLM-compatible
     gateway (PID §9.1, §9.2, §24).
 
@@ -148,6 +186,70 @@ class LiteLLMGateway(RiskGenerationGateway):
 
         return self._parse_openai_response(payload, prompt_version)
 
+    def interpret(
+        self, request: InterpretationRequest, prompt_version: str
+    ) -> InterpretationResponse:
+        """`RiskInterpretationGateway.interpret` (M002-3c dispatch). Reuses
+        this class's own `_send`/`_read_credential`/`_raise_for_status`/
+        `_extract_structured_content` exactly as `generate()` does above -
+        same HTTP client, same lazy config loading, same error taxonomy,
+        same credential handling - only the built request messages and the
+        response contract parser differ.
+        """
+        # Local imports: keep config/prompt loading lazy, and keep this
+        # module importable without Django settings configured - same
+        # reasoning as generate() above.
+        from config.env import optional_env, require_env
+
+        from ai_platform.prompts import (
+            KNOWN_INTERPRETATION_PROMPT_VERSIONS,
+            build_interpretation_messages_for_version,
+        )
+
+        build_messages = build_interpretation_messages_for_version(prompt_version)
+        if build_messages is None:
+            raise InvalidResponseError(
+                f"requested prompt_version {prompt_version!r} is not one of the "
+                f"interpretation prompt versions this gateway build knows how to "
+                f"render {KNOWN_INTERPRETATION_PROMPT_VERSIONS!r}"
+            )
+
+        base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
+        key_file = require_env("AI_GATEWAY_API_KEY_FILE")
+        model_alias = optional_env("AI_RISK_MODEL_ALIAS", DEFAULT_MODEL_ALIAS)
+
+        api_key = self._read_credential(key_file)
+
+        request_body = json.dumps(
+            {
+                "model": model_alias,
+                "messages": build_messages(request),
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            url=f"{base_url}/v1/chat/completions",
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+
+        status, raw_body = self._send(http_request)
+        self._raise_for_status(status, raw_body)
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidResponseError("AI gateway response was not valid JSON") from exc
+
+        return self._parse_openai_interpretation_response(
+            payload, prompt_version, request.expected_indices
+        )
+
     def _send(self, request: urllib.request.Request):
         """Perform the HTTP call, translating transport failures into typed
         gateway exceptions. Never logs/echoes the Authorization header."""
@@ -195,9 +297,25 @@ class LiteLLMGateway(RiskGenerationGateway):
         raise InvalidResponseError(f"AI gateway returned unexpected HTTP {status}")
 
     @staticmethod
-    def _parse_openai_response(payload: dict, prompt_version: str) -> GenerationResult:
-        """Unwrap the OpenAI-compatible envelope, then hand the model's own
-        JSON content to the strict contract parser."""
+    def _extract_structured_content(payload: dict):
+        """Unwrap the OpenAI-compatible envelope shared by BOTH the
+        generation and interpretation tasks - `choices[0].message.content`
+        is the model's own JSON, `model`/`usage` are the same envelope
+        metadata either way. Shared by `_parse_openai_response` and
+        `_parse_openai_interpretation_response` below so this unwrap step
+        exists exactly once; only each task's OWN response-contract parser
+        (`GenerationResult.from_response_dict` /
+        `InterpretationResponse.from_response_dict`) differs after this
+        point. Extracted as part of the M002-3c dispatch reusing
+        `LiteLLMGateway`'s mechanics for the new task without duplicating
+        them - behaviour of the pre-existing `_parse_openai_response` is
+        unchanged by this extraction (see `ai_platform/tests/test_gateway.py`,
+        which exercises it directly and is unmodified by this dispatch).
+
+        Returns `(structured, resolved_model, prompt_tokens,
+        completion_tokens)`. Raises `InvalidResponseError` if the envelope
+        itself is missing or its content is not valid JSON.
+        """
         try:
             choice = payload["choices"][0]
             content = choice["message"]["content"]
@@ -215,10 +333,45 @@ class LiteLLMGateway(RiskGenerationGateway):
         usage = payload.get("usage") or {}
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
+        return structured, resolved_model, prompt_tokens, completion_tokens
+
+    @staticmethod
+    def _parse_openai_response(payload: dict, prompt_version: str) -> GenerationResult:
+        """Unwrap the OpenAI-compatible envelope, then hand the model's own
+        JSON content to the strict contract parser."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
 
         try:
             return GenerationResult.from_response_dict(
                 structured,
+                resolved_model=resolved_model,
+                prompt_version=prompt_version,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except ContractValidationError as exc:
+            raise InvalidResponseError(str(exc)) from exc
+
+    @staticmethod
+    def _parse_openai_interpretation_response(
+        payload: dict, prompt_version: str, expected_indices
+    ) -> InterpretationResponse:
+        """Interpretation-task counterpart to `_parse_openai_response` -
+        same envelope unwrap (`_extract_structured_content`), different
+        response-contract parser. `expected_indices` is threaded through to
+        `InterpretationResponse.from_response_dict`, which is where the
+        index-matching validation the M002-3c dispatch requires actually
+        happens (see that method's own docstring)."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
+
+        try:
+            return InterpretationResponse.from_response_dict(
+                structured,
+                expected_indices=expected_indices,
                 resolved_model=resolved_model,
                 prompt_version=prompt_version,
                 prompt_tokens=prompt_tokens,

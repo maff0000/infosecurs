@@ -1,12 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
 from django.shortcuts import redirect, render
 
 from organisations.views import get_member_organisation_or_404
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_VERSION
 from security_baseline.forms import BaselineAssessmentForm, answer_field_name, note_field_name
-from security_baseline.models import ANSWER_UNKNOWN, BaselineAnswer, BaselineAssessment
+from security_baseline.models import ANSWER_UNKNOWN, BaselineAssessment
+from security_baseline.services import save_baseline_answers
 
 
 @login_required
@@ -29,25 +29,10 @@ def baseline_view(request, organisation_id):
     if request.method == "POST":
         form = BaselineAssessmentForm(request.POST)
         if form.is_valid():
-            with transaction.atomic():
-                if assessment is None:
-                    assessment = BaselineAssessment.objects.create(
-                        organisation=organisation, catalogue_version=CATALOGUE_VERSION
-                    )
-                else:
-                    assessment.catalogue_version = CATALOGUE_VERSION
-                    assessment.save(update_fields=["catalogue_version", "updated_at"])
-
-                for item in CATALOGUE:
-                    key = item["key"]
-                    BaselineAnswer.objects.update_or_create(
-                        assessment=assessment,
-                        question_key=key,
-                        defaults={
-                            "answer": form.cleaned_data[answer_field_name(key)],
-                            "note": form.cleaned_data[note_field_name(key)],
-                        },
-                    )
+            # The single code path that writes a BaselineAnswer row (PID
+            # §0.5) - shared with key_assets.views.key_asset_detail's
+            # filtered protection-checks page.
+            assessment = save_baseline_answers(organisation, form.cleaned_data)
             messages.success(request, "Security baseline saved.")
             return redirect("security_baseline:baseline", organisation_id=organisation.id)
         messages.error(

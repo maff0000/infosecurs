@@ -19,7 +19,12 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from ai_platform.prompts import risk_generation_v1, risk_generation_v2, risk_generation_v3
+from ai_platform.prompts import (
+    risk_generation_v1,
+    risk_generation_v2,
+    risk_generation_v3,
+    risk_interpretation_v1,
+)
 
 _PROMPT_MODULES_BY_VERSION = {
     risk_generation_v1.PROMPT_VERSION: risk_generation_v1,
@@ -34,6 +39,30 @@ KNOWN_PROMPT_VERSIONS = tuple(_PROMPT_MODULES_BY_VERSION)
 def build_messages_for_version(prompt_version: str) -> Optional[Callable]:
     """Return the `build_messages(grounding)` callable that renders
     `prompt_version`, or `None` if `prompt_version` is not one this build
-    knows how to render."""
+    knows how to render. Generation task only - see
+    `build_interpretation_messages_for_version` for the interpretation
+    task's own registry. Kept as two separate dicts/functions rather than
+    one merged registry: the two tasks' `build_messages` callables take
+    different argument types (`GroundingPayload` vs `InterpretationRequest`)
+    and a single shared registry would erase that distinction at the type
+    level, inviting a version string from one task to be resolved against
+    the other task's renderer by mistake."""
     module = _PROMPT_MODULES_BY_VERSION.get(prompt_version)
+    return module.build_messages if module is not None else None
+
+
+# --- Interpretation task (M002-3c dispatch) - separate registry, see the
+# docstring above for why this is not merged into the generation dict. ----
+_INTERPRETATION_PROMPT_MODULES_BY_VERSION = {
+    risk_interpretation_v1.PROMPT_VERSION: risk_interpretation_v1,
+}
+
+KNOWN_INTERPRETATION_PROMPT_VERSIONS = tuple(_INTERPRETATION_PROMPT_MODULES_BY_VERSION)
+
+
+def build_interpretation_messages_for_version(prompt_version: str) -> Optional[Callable]:
+    """Return the `build_messages(request)` callable that renders
+    `prompt_version` for the interpretation task, or `None` if
+    `prompt_version` is not one this build knows how to render."""
+    module = _INTERPRETATION_PROMPT_MODULES_BY_VERSION.get(prompt_version)
     return module.build_messages if module is not None else None

@@ -54,17 +54,26 @@
         <h1>Risk register</h1>
         <p class="page-header__subtitle">{{ organisation.name }}</p>
     </div>
-    <form method="post" action="{% url 'risk_register:generate' organisation.id %}">
-        {% csrf_token %}
-        <button type="submit" class="button button--primary">Generate initial risks</button>
-    </form>
+    <div class="page-header__actions" style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+        <form method="post" action="{% url 'risk_register:generate' organisation.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--primary">Find candidate risks</button>
+        </form>
+        <form method="post" action="{% url 'risk_register:interpret' organisation.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--secondary">Ask AI to review drafts</button>
+        </form>
+    </div>
 </div>
 
 <div class="empty-state" style="text-align: left;">
     <p>
-        Generation asks the governed AI adapter to propose draft risks grounded in your organisation
-        profile, security baseline and confirmed key assets. Suggestions are always <strong>AI suggested</strong>
-        until you review and explicitly confirm them - nothing here becomes part of your confirmed risk
+        "Find candidate risks" deterministically matches your confirmed key assets against their
+        relevant protection/exposure answers and our security methodology catalogue - no AI call is
+        made for this step. "Ask AI to review drafts" then asks the governed AI adapter to refine the
+        suggested likelihood/impact, explain its reasoning and propose a treatment for each draft -
+        it never invents a risk of its own. Every risk here stays <strong>AI suggested</strong> until
+        you review and explicitly confirm it - nothing here becomes part of your confirmed risk
         register on its own.
     </p>
 </div>
