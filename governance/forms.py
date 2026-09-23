@@ -87,3 +87,26 @@ class RoleAssignmentForm(forms.Form):
 
         cleaned_data["new_person_full_name"] = new_full_name
         return cleaned_data
+
+
+class MyDetailsForm(forms.ModelForm):
+    """
+    PID §3 user outcome #4: "confirm/edit their name and job title" - the
+    Account Holder editing their own linked `OrganisationPerson` row
+    (M004 post-audit repair, Finding 3). Deliberately a small `ModelForm`,
+    unlike `RoleAssignmentForm` above: there is no organisation-scoping
+    decision or existing/new-person choice for this form to make - its
+    whole job is "edit these two fields on this exact instance", and the
+    tenant/identity scoping (which row this is) happens entirely in
+    `governance.views.edit_my_details` before this form is ever
+    constructed (looked up by `(organisation, user=request.user)`, never
+    by a submittable id), not inside the form itself.
+    """
+
+    class Meta:
+        model = OrganisationPerson
+        fields = ["full_name", "job_title"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _apply_field_css_classes(self)

@@ -76,6 +76,7 @@ jobs:
           policy/tests/test_grounding.py
           policy/tests/test_services.py
           policy/tests/test_pdf_rendering.py
+          policy/tests/test_forms.py
 
   integration:
     name: ci/integration

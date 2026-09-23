@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Edit your details — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Edit your details</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Your details</legend>
+
+        <div class="field {% if form.full_name.errors %}field--error{% endif %}">
+            <label for="{{ form.full_name.id_for_label }}">Full name</label>
+            {{ form.full_name }}
+            {% for error in form.full_name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.job_title.errors %}field--error{% endif %}">
+            <label for="{{ form.job_title.id_for_label }}">Job title</label>
+            {{ form.job_title }}
+            {% for error in form.job_title.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'governance:roles' organisation.id %}">Cancel</a>
+        <button type="submit" class="button button--primary">Save changes</button>
+    </div>
+</form>
+{% endblock %}

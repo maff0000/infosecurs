@@ -59,8 +59,17 @@ class PolicyVersionEditForm(forms.Form):
         # always submits regardless of browser/OS locale, independent of
         # this project's own LANGUAGE_CODE ("en-gb")/localized
         # DATE_INPUT_FORMATS, which would otherwise expect DD/MM/YYYY.
+        # `input_formats` controls parsing on submit; the widget's own
+        # `format=` kwarg controls rendering - without it, DateInput falls
+        # back to the locale-aware DATE_INPUT_FORMATS[0] ("en-gb" ->
+        # DD/MM/YYYY) for the rendered `value` attribute, which an HTML5
+        # `<input type="date">` silently refuses to parse: the raw HTML
+        # `value` attribute is present but the DOM `.value` property
+        # renders as an empty date picker in a real browser. Both must
+        # agree on ISO format for the field to round-trip correctly
+        # regardless of LANGUAGE_CODE.
         input_formats=["%Y-%m-%d"],
-        widget=forms.DateInput(attrs={"type": "date", "class": "input"}),
+        widget=forms.DateInput(attrs={"type": "date", "class": "input"}, format="%Y-%m-%d"),
         help_text="When this policy should next be reviewed.",
     )
 
@@ -93,7 +102,7 @@ class PolicyApprovalConfirmForm(forms.Form):
     next_review_date = forms.DateField(
         required=True,
         input_formats=["%Y-%m-%d"],  # see PolicyVersionEditForm.next_review_date's comment
-        widget=forms.DateInput(attrs={"type": "date", "class": "input"}),
+        widget=forms.DateInput(attrs={"type": "date", "class": "input"}, format="%Y-%m-%d"),
         help_text="You can adjust this before confirming approval.",
     )
 
