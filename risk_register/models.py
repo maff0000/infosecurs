@@ -1,5 +1,5 @@
 """
-Tenant-owned risk domain (M002 PID §8).
+Tenant-owned risk domain (M002 PID §8, amended by PID §0).
 
 `Risk` is the confirmed/draft product output of M002. Every AI-generated
 row starts life as `STATUS_DRAFT_AI_SUGGESTED` / `SOURCE_AI`, FK'd to the
@@ -13,6 +13,34 @@ The numeric score and its qualitative band (PID §8.2) are deliberately
 from `impact`/`likelihood` alone, so there is no code path - AI response,
 form submission, or otherwise - that can desynchronise a stored score from
 the two ratings that are supposed to define it.
+
+Schema consequences of PID §0's derivation-spine correction (Asset ->
+Exposure/Vulnerability/Control Gap -> Threat Event -> Consequence -> Risk
+Scenario -> Likelihood x Impact -> Treatment), added by the M002-3a-schema
+dispatch:
+
+- `exposure`, `threat_event`, `consequence` are new fields naming the
+  spine's distinct steps (PID §0.2's worked example). `vulnerability`
+  already existed pre-amendment; it is reused/repurposed in place (its
+  `help_text` is corrected below to the precise §0.2 sense - "what turns
+  an exposure into something exploitable" - rather than being treated as
+  a near-synonym of `exposure`, which is what its original help_text said).
+- **Note for whoever builds the deterministic scenario-instantiation
+  engine (a separate, later dispatch):** the pre-existing `threat` field
+  (TextField, no help_text, part of the original pre-amendment shape) and
+  the new `threat_event` field below look like they may end up meaning the
+  same thing once that engine exists. This dispatch's scope is additive/
+  corrective only, and its instructions named `threat_event` as a new
+  field without saying to touch `threat` - so both exist here, side by
+  side, deliberately unresolved. Flagged in this dispatch's report rather
+  than guessed at.
+- `scenario_id` is a new, plain (non-FK) `CharField` tracing a persisted
+  risk back to the methodology-catalogue scenario that produced it - see
+  the field's own `help_text` for why it is not a `ForeignKey`.
+- `asset_reference` (the free-text field an AI response used to populate
+  directly) is retired per PID §0.6/§0.7: application code owns asset
+  identity going forward, and `key_asset` (the FK) is the only asset link.
+  `key_asset` itself is unchanged.
 """
 from __future__ import annotations
 
@@ -102,12 +130,13 @@ class Risk(models.Model):
     )
 
     # --- Asset / context reference -----------------------------------------
-    # `key_asset` is the resolved link when the AI (or a customer) referenced
-    # a real, tenant-owned KeyAsset. `asset_reference` is always kept as the
-    # raw string the candidate/response carried (e.g. "asset:<uuid>" or a
-    # profile-fact path such as "profile.endpoint_management") - a generated
-    # risk need not resolve to a real asset row to be a valid, groundable
-    # suggestion (see risk_register/services.py resolution rules).
+    # `key_asset` is the only asset link (PID §0.6/§0.7): application code
+    # populates it deterministically. The previous `asset_reference`
+    # free-text field - which used to carry whatever raw string an AI
+    # response supplied (e.g. "asset:<uuid>" or a profile-fact path such as
+    # "profile.endpoint_management") - is retired: AI never originates an
+    # identifier that becomes application state, so there is no longer a
+    # raw/unresolved string for this field to preserve alongside the FK.
     key_asset = models.ForeignKey(
         KeyAsset,
         on_delete=models.SET_NULL,
@@ -115,17 +144,64 @@ class Risk(models.Model):
         blank=True,
         related_name="risks",
     )
-    asset_reference = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Raw asset/context reference this risk was generated or recorded against.",
-    )
 
     # --- Risk content --------------------------------------------------------
     title = models.CharField(max_length=255)
+
+    exposure = models.TextField(
+        default="",
+        help_text=(
+            "The inherent characteristic of the asset/context that creates "
+            "the opportunity for a threat event (PID §0.2 derivation "
+            "spine) - e.g. 'portable / leaves controlled premises' for a "
+            "laptop. Distinct from `vulnerability`: an exposure alone is "
+            "not yet exploitable."
+        ),
+    )
     threat = models.TextField()
+    threat_event = models.TextField(
+        default="",
+        help_text=(
+            "The specific event that could act on the exposure (PID §0.2 "
+            "derivation spine) - e.g. 'loss or theft'. See this file's "
+            "module docstring for a note on its relationship to the "
+            "pre-existing `threat` field."
+        ),
+    )
     vulnerability = models.TextField(
-        help_text="The vulnerability/exposure this risk is about."
+        help_text=(
+            "The vulnerability/control gap that turns `exposure` into "
+            "something exploitable (PID §0.2 derivation spine) - e.g. the "
+            "*absence* of full-disk encryption on a portable laptop. Not a "
+            "synonym for `exposure`: an inherent characteristic (portable) "
+            "is not itself a vulnerability - the missing/failed control is."
+        )
+    )
+    consequence = models.TextField(
+        default="",
+        help_text=(
+            "The consequence type if the risk scenario materialises (PID "
+            "§0.2 derivation spine) - e.g. 'confidential information "
+            "disclosure'."
+        ),
+    )
+    scenario_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "Stable reference to the methodology-catalogue scenario (PID "
+            "§0.4) that produced this risk. A plain CharField, not a "
+            "ForeignKey: the catalogue is a Python data module, not a "
+            "database table (intentional - the catalogue itself is built "
+            "by a separate, parallel dispatch this schema does not depend "
+            "on). Blank/nullable for a risk that doesn't (yet) trace to a "
+            "specific catalogue scenario - but per PID §0.7, in M002 V1 "
+            "every *persisted* Risk row should in practice always have "
+            "one. This field is only where that trace lives; it is not "
+            "itself the enforcement mechanism - that is a later "
+            "dispatch's service-layer concern."
+        ),
     )
 
     impact = models.IntegerField(

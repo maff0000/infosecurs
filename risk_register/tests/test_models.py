@@ -8,8 +8,12 @@ def _make_risk(organisation, **overrides):
     defaults = dict(
         organisation=organisation,
         title="Weak MFA on staff accounts",
+        exposure="Ordinary user accounts are internet-facing (webmail/SSO).",
         threat="Account takeover",
+        threat_event="Credential phishing / password guessing",
         vulnerability="No MFA on ordinary user accounts",
+        consequence="Unauthorised access to business email/data",
+        scenario_id="mfa-user-accounts-v1",
         impact=4,
         likelihood=3,
         rationale="Baseline indicates a gap.",
@@ -99,7 +103,8 @@ class TestRiskLifecycle:
         # an out-of-choices value for a CharField only fails at the Django
         # validation layer (full_clean), not necessarily at the DB layer.
         risk = Risk(
-            organisation=org_a, title="t", threat="t", vulnerability="v",
+            organisation=org_a, title="t", exposure="e", threat="t",
+            threat_event="te", vulnerability="v", consequence="c",
             impact=3, likelihood=3, rationale="r", proposed_treatment="p",
             status="half_confirmed",
         )
@@ -108,7 +113,8 @@ class TestRiskLifecycle:
 
     def test_source_enum_rejects_unsupported_value(self, org_a):
         risk = Risk(
-            organisation=org_a, title="t", threat="t", vulnerability="v",
+            organisation=org_a, title="t", exposure="e", threat="t",
+            threat_event="te", vulnerability="v", consequence="c",
             impact=3, likelihood=3, rationale="r", proposed_treatment="p",
             source="other",
         )
@@ -129,7 +135,9 @@ class TestRiskLifecycle:
         asset.delete()
         risk.refresh_from_db()
         assert risk.key_asset_id is None
-        # The raw string reference survives even if the resolved FK doesn't.
+        # The Risk row survives even though the asset it pointed at is gone
+        # (PID §0.6: `key_asset` is the only asset link now - there is no
+        # raw `asset_reference` string left to fall back on, by design).
         assert Risk.objects.filter(pk=risk.pk).exists()
 
     def test_grounding_refs_and_assumptions_round_trip_as_json_lists(self, org_a):
@@ -148,3 +156,72 @@ class TestRiskLifecycle:
         assert "Weak MFA on staff accounts" in text
         assert org_a.name in text
         assert Risk.STATUS_DRAFT_AI_SUGGESTED in text
+
+
+@pytest.mark.django_db
+class TestRiskDerivationSpineFields:
+    """
+    M002-3a-schema dispatch: PID §0.2 derivation-spine fields
+    (`exposure`/`threat_event`/`vulnerability`/`consequence`) and §0.4's
+    `scenario_id` trace. §0.6/§0.7 retirement of `asset_reference`.
+    """
+
+    def test_create_and_read_round_trip_all_new_fields(self, org_a):
+        risk = _make_risk(
+            org_a,
+            exposure="portable / leaves controlled premises",
+            threat_event="loss or theft",
+            vulnerability="data on a lost device may be readable",
+            consequence="confidential information disclosure",
+            scenario_id="employee-laptop-loss-theft-v1",
+        )
+        reloaded = Risk.objects.get(pk=risk.pk)
+        assert reloaded.exposure == "portable / leaves controlled premises"
+        assert reloaded.threat_event == "loss or theft"
+        assert reloaded.vulnerability == "data on a lost device may be readable"
+        assert reloaded.consequence == "confidential information disclosure"
+        assert reloaded.scenario_id == "employee-laptop-loss-theft-v1"
+
+    def test_scenario_id_field_is_declared_blank_and_not_a_foreign_key(self):
+        """
+        PID §0.4/§0.7: `scenario_id` is nullable/blank - this field is only
+        where the catalogue trace lives, not the enforcement mechanism
+        (that is later, service-layer work), so the schema itself must not
+        force every row to carry one. It is also a plain CharField, not a
+        ForeignKey: the methodology catalogue is a Python data module, not
+        a DB table, so there must be no referential-integrity requirement
+        against any other table.
+
+        Checked directly against field metadata rather than via
+        `full_clean()`, which would also exercise the pre-existing
+        `assumptions`/`grounding_refs` JSONField blank-validation behaviour
+        - unrelated to `scenario_id` and out of this dispatch's scope
+        (those two fields are unchanged, per PID's "keep exactly as-is"
+        instruction).
+        """
+        field = Risk._meta.get_field("scenario_id")
+        assert field.blank is True
+        assert not field.is_relation
+
+    def test_scenario_id_persists_blank_and_persists_an_arbitrary_string(self, org_a):
+        blank_risk = _make_risk(org_a, scenario_id="")
+        assert Risk.objects.get(pk=blank_risk.pk).scenario_id == ""
+
+        traced_risk = _make_risk(org_a, scenario_id="a-scenario-id-with-no-matching-db-row")
+        assert (
+            Risk.objects.get(pk=traced_risk.pk).scenario_id
+            == "a-scenario-id-with-no-matching-db-row"
+        )
+
+    def test_asset_reference_field_no_longer_exists_on_risk(self, org_a):
+        """
+        PID §0.6/§0.7: the free-text `asset_reference` field is retired -
+        `key_asset` (the FK) is the only asset link going forward, and it
+        is populated by application code, never parsed from AI output.
+        Regression guard: proves the retirement actually happened, not
+        just that nothing currently sets the field.
+        """
+        risk = _make_risk(org_a)
+        assert not hasattr(risk, "asset_reference")
+        field_names = {f.name for f in Risk._meta.get_fields()}
+        assert "asset_reference" not in field_names
