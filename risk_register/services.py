@@ -28,7 +28,7 @@ import uuid
 
 from ai_platform.gateway import DEFAULT_MODEL_ALIAS, LiteLLMGateway, RiskGenerationGateway
 from ai_platform.orchestration import GenerationFailed, generate_risks
-from ai_platform.prompts.risk_generation_v1 import PROMPT_VERSION
+from ai_platform.prompts.risk_generation_v2 import PROMPT_VERSION
 
 from key_assets.models import KeyAsset
 from risk_register.grounding import build_grounding_payload

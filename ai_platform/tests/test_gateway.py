@@ -60,6 +60,50 @@ def test_generate_rejects_unknown_prompt_version(grounding, tmp_path, monkeypatc
         gateway.generate(grounding, "some_other_prompt_version")
 
 
+# --- Multi-version prompt resolution (M002 repair, 2026-09-23) --------------
+#
+# ai_platform.gateway used to hardcode the only prompt_version it could
+# render to risk_generation_v1. That broke once risk_register/eval/harness.py
+# and risk_register/services.py started requesting risk_generation_v2 (the
+# repair for the PID §18 live-eval RED finding) - generate() would have
+# rejected every v2 call as an "unknown prompt_version", even though v2 is
+# a real, current version. These tests prove the fix: generate() now
+# resolves *any* known version, not just v1, and still rejects a version
+# that truly is not registered.
+
+def test_generate_raises_loudly_when_base_url_missing_for_v2(grounding):
+    # Mirrors test_generate_raises_loudly_when_base_url_missing above, but
+    # for risk_generation_v2: proves the version check passes (we reach the
+    # config lookup and get ImproperlyConfigured, not InvalidResponseError)
+    # for v2 exactly as it already did for v1.
+    os.environ.pop("AI_GATEWAY_BASE_URL", None)
+    os.environ.pop("AI_GATEWAY_API_KEY_FILE", None)
+    gateway = LiteLLMGateway()
+    with pytest.raises(ImproperlyConfigured):
+        gateway.generate(grounding, "risk_generation_v2")
+
+
+def test_generate_still_rejects_a_version_that_is_not_registered_at_all(grounding, tmp_path, monkeypatch):
+    key_file = tmp_path / "key"
+    key_file.write_text("dummy-not-a-real-credential")
+    monkeypatch.setenv("AI_GATEWAY_BASE_URL", "http://example.invalid")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY_FILE", str(key_file))
+    gateway = LiteLLMGateway()
+    with pytest.raises(InvalidResponseError):
+        gateway.generate(grounding, "risk_generation_v999_does_not_exist")
+
+
+def test_build_messages_for_version_resolves_v1_and_v2_and_rejects_unknown():
+    from ai_platform.prompts import KNOWN_PROMPT_VERSIONS, build_messages_for_version
+    from ai_platform.prompts.risk_generation_v1 import build_messages as v1_build_messages
+    from ai_platform.prompts.risk_generation_v2 import build_messages as v2_build_messages
+
+    assert build_messages_for_version("risk_generation_v1") is v1_build_messages
+    assert build_messages_for_version("risk_generation_v2") is v2_build_messages
+    assert build_messages_for_version("not_a_real_version") is None
+    assert set(KNOWN_PROMPT_VERSIONS) == {"risk_generation_v1", "risk_generation_v2"}
+
+
 # --- Credential handling (PID §9.2, never log the credential) ---------------
 
 def test_read_credential_from_file(tmp_path):

@@ -135,5 +135,8 @@ class TestRunEvalMechanics:
         gw = FakeGateway(mode="valid")
         report = run_eval(gw)
         assert report["corpus_version"] == "m002-golden-corpus-v1"
-        assert report["prompt_version"] == "risk_generation_v1"
+        # M002 repair (2026-09-23): harness wiring moved to
+        # risk_generation_v2 alongside risk_register.services - see
+        # ai_platform/prompts/risk_generation_v2.py's docstring.
+        assert report["prompt_version"] == "risk_generation_v2"
         assert "generated_at" in report

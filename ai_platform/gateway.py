@@ -105,12 +105,13 @@ class LiteLLMGateway(RiskGenerationGateway):
         # a plain script or a non-Django test).
         from config.env import optional_env, require_env
 
-        from ai_platform.prompts.risk_generation_v1 import PROMPT_VERSION, build_messages
+        from ai_platform.prompts import KNOWN_PROMPT_VERSIONS, build_messages_for_version
 
-        if prompt_version != PROMPT_VERSION:
+        build_messages = build_messages_for_version(prompt_version)
+        if build_messages is None:
             raise InvalidResponseError(
-                f"requested prompt_version {prompt_version!r} does not match the only "
-                f"prompt this gateway build knows how to render ({PROMPT_VERSION!r})"
+                f"requested prompt_version {prompt_version!r} is not one of the prompt "
+                f"versions this gateway build knows how to render {KNOWN_PROMPT_VERSIONS!r}"
             )
 
         base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
