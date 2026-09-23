@@ -129,6 +129,12 @@
     {% endif %}
 </div>
 
+<div class="summary-card risk-detail__section">
+    <h2>Remediation</h2>
+    <p>Turn this risk's proposed treatment into a remediation action you can track through to done.</p>
+    <a class="button button--secondary" href="{% url 'remediation:create_from_risk' organisation.id risk.id %}">Create remediation action</a>
+</div>
+
 <div class="form-actions">
     {% if risk.status == "draft_ai_suggested" %}
         <a class="button button--secondary" href="{% url 'risk_register:edit' organisation.id risk.id %}">Edit</a>

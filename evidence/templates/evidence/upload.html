@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{% if supersedes %}Replace evidence{% else %}Upload evidence{% endif %} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{% if supersedes %}Replace evidence with a new file{% else %}Upload file evidence{% endif %}</h1>
+    <p class="page-header__subtitle">{{ organisation.name }}</p>
+</div>
+
+{% if supersedes %}
+    <div class="empty-state" style="text-align: left; margin-bottom: var(--space-4);">
+        <p style="margin: 0;">
+            This will replace <strong>{{ supersedes.title }}</strong>. The existing item is kept as a
+            historical record and marked superseded - it is not deleted or edited in place.
+        </p>
+    </div>
+{% endif %}
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% if supersedes %}<input type="hidden" name="supersedes" value="{{ supersedes.id }}">{% endif %}
+
+    <fieldset class="form-section">
+        <legend>Evidence file</legend>
+        <p class="form-section__help">
+            PDF, PNG, JPEG or plain text only, up to 10 MiB. The file's actual content is checked,
+            not its filename or browser-reported type.
+        </p>
+
+        <div class="field {% if form.file.errors %}field--error{% endif %}">
+            <label for="{{ form.file.id_for_label }}">File <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.file }}
+            {% for error in form.file.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>About this evidence</legend>
+
+        <div class="field {% if form.title.errors %}field--error{% endif %}">
+            <label for="{{ form.title.id_for_label }}">Title <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.title }}
+            {% for error in form.title.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.description.errors %}field--error{% endif %}">
+            <label for="{{ form.description.id_for_label }}">Short description</label>
+            {{ form.description }}
+            {% for error in form.description.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.source_label.errors %}field--error{% endif %}">
+            <label for="{{ form.source_label.id_for_label }}">{{ form.source_label.label }}</label>
+            <p class="field__help">{{ form.source_label.help_text }}</p>
+            {{ form.source_label }}
+            {% for error in form.source_label.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.observed_at.errors %}field--error{% endif %}">
+            <label for="{{ form.observed_at.id_for_label }}">{{ form.observed_at.label }}</label>
+            <p class="field__help">{{ form.observed_at.help_text }}</p>
+            {{ form.observed_at }}
+            {% for error in form.observed_at.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.valid_until.errors %}field--error{% endif %}">
+            <label for="{{ form.valid_until.id_for_label }}">{{ form.valid_until.label }}</label>
+            <p class="field__help">{{ form.valid_until.help_text }}</p>
+            {{ form.valid_until }}
+            {% for error in form.valid_until.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions form-actions--sticky">
+        <a class="button button--secondary" href="{% url 'evidence:list' organisation.id %}">Cancel</a>
+        <button type="submit" class="button button--primary">{% if supersedes %}Upload replacement{% else %}Upload evidence{% endif %}</button>
+    </div>
+</form>
+{% endblock %}

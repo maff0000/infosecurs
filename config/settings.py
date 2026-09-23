@@ -54,6 +54,9 @@ INSTALLED_APPS = [
     "key_assets",
     "ai_platform",
     "risk_register",
+    "evidence",
+    "remediation",
+    "activity",
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action.title }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .action-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--open { background: var(--color-border); color: var(--color-text); }
+  .badge--in_progress { background: #fdf1d6; color: #8a5a00; }
+  .badge--done { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--accepted { background: #e6eefb; color: #185ea8; }
+  .badge--priority-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--priority-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--priority-high { background: #fbe6d6; color: #a3521f; }
+  .badge--priority-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+  .action-detail__section { margin-bottom: var(--space-4); }
+  .action-detail__label { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .action-detail__grid { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+  .action-detail__field { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); min-width: 180px; }
+  .accepted-note {
+    background: #e6eefb;
+    border: 1px dashed #185ea8;
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    color: var(--color-text);
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ action.title }}</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'remediation:list' organisation.id %}">&larr; Back to remediation actions</a> &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<div class="action-detail__status-row">
+    <span class="badge badge--{{ action.status }}">{{ action.get_status_display }}</span>
+    <span class="badge badge--priority-{{ action.priority }}">{{ action.get_priority_display }} priority</span>
+</div>
+
+{% if action.status == "accepted" %}
+    <div class="accepted-note action-detail__section">
+        <strong>Accepted, not resolved.</strong> The organisation has consciously accepted this issue for now.
+        This does not mean the underlying control requirement is met — the related control's answer and any
+        linked risk are unchanged.
+    </div>
+{% endif %}
+
+<div class="action-detail__grid action-detail__section">
+    <div class="action-detail__field">
+        <p class="action-detail__label">Created by</p>
+        <p>{{ action.created_by|default:"—" }} on {{ action.created_at }} (UTC)</p>
+    </div>
+    <div class="action-detail__field">
+        <p class="action-detail__label">Assigned to</p>
+        <p>{{ action.assigned_to|default:"Unassigned" }}</p>
+    </div>
+    <div class="action-detail__field">
+        <p class="action-detail__label">Target date</p>
+        <p>{{ action.target_date|default:"Not set" }}</p>
+    </div>
+    {% if action.is_closed %}
+        <div class="action-detail__field">
+            <p class="action-detail__label">{{ action.get_status_display }} by</p>
+            <p>{{ action.completed_by|default:"—" }} on {{ action.completed_at }} (UTC)</p>
+        </div>
+    {% endif %}
+</div>
+
+<div class="summary-card action-detail__section">
+    <h2>Description</h2>
+    {% if action.description %}
+        <p>{{ action.description|linebreaksbr }}</p>
+    {% else %}
+        <p>No description recorded.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card action-detail__section">
+    <h2>Related context</h2>
+    <p class="action-detail__label">Risk</p>
+    {% if action.risk %}
+        <p><a href="{% url 'risk_register:detail' organisation.id action.risk.id %}">{{ action.risk.title }}</a></p>
+    {% else %}
+        <p>Not linked to a risk.</p>
+    {% endif %}
+    <p class="action-detail__label" style="margin-top: var(--space-3);">Control</p>
+    {% if action.control_key %}
+        <p>
+            {{ action.control_key_label }}
+            &middot;
+            <a href="{% url 'security_baseline:baseline' organisation.id %}">View / edit this control's canonical answer</a>
+        </p>
+    {% else %}
+        <p>Not linked to a specific control.</p>
+    {% endif %}
+    <p class="action-detail__label" style="margin-top: var(--space-3);">Asset</p>
+    {% if action.key_asset %}
+        <p><a href="{% url 'key_assets:detail' organisation.id action.key_asset.id %}">{{ action.key_asset.name }}</a></p>
+    {% else %}
+        <p>Not linked to a specific asset.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card action-detail__section">
+    <h2>Evidence</h2>
+    <p>No evidence attached yet. Evidence attachment for actions is a later, separate piece of work.</p>
+</div>
+
+<div class="form-actions">
+    <a class="button button--secondary" href="{% url 'remediation:edit' organisation.id action.id %}">Edit</a>
+    {% if action.status == "open" %}
+        <form method="post" action="{% url 'remediation:start' organisation.id action.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--secondary">Start (move to in progress)</button>
+        </form>
+    {% endif %}
+    {% if action.status == "open" or action.status == "in_progress" %}
+        <form method="post" action="{% url 'remediation:accept' organisation.id action.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--secondary">Accept (not the same as done)</button>
+        </form>
+        <form method="post" action="{% url 'remediation:complete' organisation.id action.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--primary">Mark done</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

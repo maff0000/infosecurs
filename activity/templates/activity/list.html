@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Activity — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .activity-item {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    align-items: baseline;
+  }
+  .activity-item__time { color: var(--color-text-muted); font-size: 0.85rem; white-space: nowrap; }
+  .activity-item__summary { flex: 1 1 320px; }
+  .activity-item__actor { color: var(--color-text-muted); font-size: 0.85rem; }
+  .activity-pagination { margin-top: var(--space-4); display: flex; gap: var(--space-3); align-items: center; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Activity</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p>
+    A read-only history of security-state changes for this organisation - control answer
+    changes, evidence and remediation-action events. Events cannot be edited or deleted
+    from here.
+</p>
+
+{% if page_obj.object_list %}
+    <ul class="activity-list">
+        {% for event in page_obj.object_list %}
+            <li class="activity-item">
+                <span class="activity-item__time">{{ event.occurred_at|date:"Y-m-d H:i" }} UTC</span>
+                <span class="activity-item__summary">{{ event.human_summary }}</span>
+                <span class="activity-item__actor">
+                    {% if event.actor %}by {{ event.actor.username }}{% else %}system{% endif %}
+                </span>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+        <nav class="activity-pagination" aria-label="Activity pagination">
+            {% if page_obj.has_previous %}
+                <a class="button button--secondary" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+            {% endif %}
+            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+                <a class="button button--secondary" href="?page={{ page_obj.next_page_number }}">Next</a>
+            {% endif %}
+        </nav>
+    {% endif %}
+{% else %}
+    <div class="empty-state"><p>No activity recorded yet.</p></div>
+{% endif %}
+{% endblock %}

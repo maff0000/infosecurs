@@ -47,4 +47,34 @@
         <p>Complete the organisation profile, security baseline and key assets first to generate an initial risk register.</p>
     {% endif %}
 </div>
+
+<div class="summary-card">
+    <h2>Evidence</h2>
+    {% if profile_exists %}
+        <p>Upload a file or add an external reference to support, contradict or contextualise a security-baseline answer.</p>
+        <a class="button button--primary" href="{% url 'evidence:list' organisation.id %}">Open evidence</a>
+    {% else %}
+        <p>Complete the organisation profile first.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Remediation actions</h2>
+    {% if profile_exists %}
+        <p>Turn a risk's proposed treatment into a real, tracked action - open, in progress, done or accepted.</p>
+        <a class="button button--primary" href="{% url 'remediation:list' organisation.id %}">Open actions</a>
+    {% else %}
+        <p>Complete the organisation profile first.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Activity</h2>
+    {% if profile_exists %}
+        <p>A readable timeline of meaningful security-state changes: who changed what, and when.</p>
+        <a class="button button--primary" href="{% url 'activity:list' organisation.id %}">Open activity</a>
+    {% else %}
+        <p>Complete the organisation profile first.</p>
+    {% endif %}
+</div>
 {% endblock %}

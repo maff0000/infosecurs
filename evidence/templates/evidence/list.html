@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Evidence — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .evidence-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .evidence-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .evidence-card--inactive { opacity: 0.7; }
+  .evidence-card__body { flex: 1 1 320px; min-width: 0; }
+  .evidence-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .evidence-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
+  .evidence-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--active { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--superseded { background: #fdf1d6; color: #8a5a00; }
+  .badge--withdrawn { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--kind { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .evidence-section { margin-bottom: var(--space-5); }
+  .evidence-section__intro { color: var(--color-text-muted); margin: -8px 0 var(--space-3) 0; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Evidence</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <div class="evidence-card__actions">
+        <a class="button button--secondary" href="{% url 'evidence:add_reference' organisation.id %}">Add external reference</a>
+        <a class="button button--primary" href="{% url 'evidence:upload' organisation.id %}">Upload file evidence</a>
+    </div>
+</div>
+
+<section class="evidence-section">
+    <h2>Active</h2>
+    {% if active_items %}
+        <div class="evidence-grid">
+            {% for item in active_items %}
+                <div class="evidence-card">
+                    <div class="evidence-card__body">
+                        <p class="evidence-card__title">
+                            <a href="{% url 'evidence:detail' organisation.id item.id %}">{{ item.title }}</a>
+                            <span class="badge badge--active">Active</span>
+                            <span class="badge badge--kind">{{ item.get_kind_display }}</span>
+                        </p>
+                        <p class="evidence-card__meta">
+                            {% if item.source_label %}{{ item.source_label }} &middot; {% endif %}
+                            Recorded {{ item.created_at|date:"Y-m-d" }} by {{ item.recorded_by|default:"unknown" }}
+                        </p>
+                    </div>
+                    <div class="evidence-card__actions">
+                        <a class="button button--secondary" href="{% url 'evidence:detail' organisation.id item.id %}">View</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p>No evidence recorded yet. Upload a file or add an external reference above.</p>
+        </div>
+    {% endif %}
+</section>
+
+{% if superseded_items %}
+    <section class="evidence-section">
+        <h2>Superseded</h2>
+        <p class="evidence-section__intro">Kept here as historical record. Not counted as active supporting evidence.</p>
+        <div class="evidence-grid">
+            {% for item in superseded_items %}
+                <div class="evidence-card evidence-card--inactive">
+                    <div class="evidence-card__body">
+                        <p class="evidence-card__title">
+                            <a href="{% url 'evidence:detail' organisation.id item.id %}">{{ item.title }}</a>
+                            <span class="badge badge--superseded">Superseded</span>
+                            <span class="badge badge--kind">{{ item.get_kind_display }}</span>
+                        </p>
+                        <p class="evidence-card__meta">Recorded {{ item.created_at|date:"Y-m-d" }}</p>
+                    </div>
+                    <div class="evidence-card__actions">
+                        <a class="button button--secondary" href="{% url 'evidence:detail' organisation.id item.id %}">View</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+
+{% if withdrawn_items %}
+    <section class="evidence-section">
+        <h2>Withdrawn</h2>
+        <p class="evidence-section__intro">Kept here as historical record. Not counted as active evidence.</p>
+        <div class="evidence-grid">
+            {% for item in withdrawn_items %}
+                <div class="evidence-card evidence-card--inactive">
+                    <div class="evidence-card__body">
+                        <p class="evidence-card__title">
+                            <a href="{% url 'evidence:detail' organisation.id item.id %}">{{ item.title }}</a>
+                            <span class="badge badge--withdrawn">Withdrawn</span>
+                            <span class="badge badge--kind">{{ item.get_kind_display }}</span>
+                        </p>
+                        <p class="evidence-card__meta">Recorded {{ item.created_at|date:"Y-m-d" }}</p>
+                    </div>
+                    <div class="evidence-card__actions">
+                        <a class="button button--secondary" href="{% url 'evidence:detail' organisation.id item.id %}">View</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+{% endblock %}

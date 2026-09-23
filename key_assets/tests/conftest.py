@@ -7,6 +7,7 @@ dispatch).
 """
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import Client
 
 from organisations.models import Organisation, OrganisationMembership
 
@@ -57,12 +58,18 @@ def member_b(db, org_b, user_b):
 
 
 @pytest.fixture
-def client_a(client, user_a, member_a):
-    client.force_login(user_a)
-    return client
+def client_a(user_a, member_a):
+    """Independent django.test.Client() - see organisations/tests/conftest.py's
+    client_a docstring for why (a shared-Client bug found by the M003-1a
+    Evidence dispatch, fixed identically here)."""
+    c = Client()
+    c.force_login(user_a)
+    return c
 
 
 @pytest.fixture
-def client_b(client, user_b, member_b):
-    client.force_login(user_b)
-    return client
+def client_b(user_b, member_b):
+    """See client_a's docstring."""
+    c = Client()
+    c.force_login(user_b)
+    return c

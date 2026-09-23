@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.title }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--active { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--superseded { background: #fdf1d6; color: #8a5a00; }
+  .badge--withdrawn { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--kind { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .evidence-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .provenance-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .provenance-list dt { font-weight: 600; }
+  .provenance-list dd { margin: 0 0 var(--space-2) 0; color: var(--color-text); }
+  .provenance-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-2) var(--space-4); margin: 0; }
+  @media (min-width: 560px) { .provenance-grid { grid-template-columns: 1fr 1fr; } }
+  .hash-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; word-break: break-all; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ item.title }}</h1>
+        <p class="page-header__subtitle"><a href="{% url 'evidence:list' organisation.id %}">&larr; Back to evidence</a> &middot; {{ organisation.name }}</p>
+    </div>
+</div>
+
+<div class="evidence-detail__status-row">
+    {% if item.status == "active" %}
+        <span class="badge badge--active">Active</span>
+    {% elif item.status == "superseded" %}
+        <span class="badge badge--superseded">Superseded</span>
+    {% else %}
+        <span class="badge badge--withdrawn">Withdrawn</span>
+    {% endif %}
+    <span class="badge badge--kind">{{ item.get_kind_display }}</span>
+</div>
+
+{% if item.status == "superseded" and item.superseded_by %}
+    <div class="empty-state" style="text-align: left;">
+        <p style="margin: 0;">Superseded by <a href="{% url 'evidence:detail' organisation.id item.superseded_by.id %}">{{ item.superseded_by.title }}</a>.</p>
+    </div>
+{% endif %}
+
+{% if item.superseded_items.all %}
+    <div class="empty-state" style="text-align: left;">
+        <p style="margin: 0;">
+            Replaces:
+            {% for old in item.superseded_items.all %}
+                <a href="{% url 'evidence:detail' organisation.id old.id %}">{{ old.title }}</a>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+    </div>
+{% endif %}
+
+<div class="summary-card">
+    <h2>Details</h2>
+    {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+
+    <dl class="provenance-grid">
+        <div>
+            <dt>Recorded by</dt>
+            <dd>{{ item.recorded_by|default:"Unknown" }}</dd>
+        </div>
+        <div>
+            <dt>Recorded (received) at</dt>
+            <dd>{{ item.created_at|date:"Y-m-d H:i" }} UTC</dd>
+        </div>
+        <div>
+            <dt>Source / origin</dt>
+            <dd>{{ item.source_label|default:"Not given" }}</dd>
+        </div>
+        <div>
+            <dt>Observed / captured date</dt>
+            <dd>{{ item.observed_at|default:"Not known" }}</dd>
+        </div>
+        <div>
+            <dt>Valid until</dt>
+            <dd>{{ item.valid_until|default:"No known expiry" }}</dd>
+        </div>
+        <div>
+            <dt>Last updated</dt>
+            <dd>{{ item.updated_at|date:"Y-m-d H:i" }} UTC</dd>
+        </div>
+    </dl>
+</div>
+
+{% if item.kind == "file" %}
+    <div class="summary-card">
+        <h2>File</h2>
+        <dl class="provenance-grid">
+            <div>
+                <dt>Original filename</dt>
+                <dd>{{ item.original_filename }}</dd>
+            </div>
+            <div>
+                <dt>Detected type</dt>
+                <dd>{{ item.get_file_type_display }}</dd>
+            </div>
+            <div>
+                <dt>Size</dt>
+                <dd>{{ item.byte_size|filesizeformat }}</dd>
+            </div>
+            <div>
+                <dt>SHA-256</dt>
+                <dd class="hash-value">{{ item.sha256 }}</dd>
+            </div>
+        </dl>
+        <p style="margin-top: var(--space-3);">
+            <a class="button button--secondary" href="{% url 'evidence:download' organisation.id item.id %}">Download file</a>
+        </p>
+    </div>
+{% else %}
+    <div class="summary-card">
+        <h2>External reference</h2>
+        <p>
+            <a href="{{ item.reference_url }}" target="_blank" rel="noopener noreferrer">{{ item.reference_url }}</a>
+        </p>
+        <p class="page-header__subtitle" style="margin: 0;">Infosecurs does not fetch or crawl this link.</p>
+    </div>
+{% endif %}
+
+<div class="summary-card">
+    <h2>Controls</h2>
+    <p>Not yet linked to any control. Control linking is delivered in a separate module.</p>
+</div>
+
+{% if item.status == "active" %}
+    <div class="summary-card">
+        <h2>Lifecycle</h2>
+        <p class="form-card__intro">
+            Evidence content is never edited in place. Replacing it creates a new item and marks this
+            one superseded; this item is always retained as a historical record.
+        </p>
+        <div class="form-actions" style="justify-content: flex-start;">
+            <a class="button button--secondary" href="{% url 'evidence:upload' organisation.id %}?supersedes={{ item.id }}">Replace with new file</a>
+            <a class="button button--secondary" href="{% url 'evidence:add_reference' organisation.id %}?supersedes={{ item.id }}">Replace with new reference</a>
+            <form method="post" action="{% url 'evidence:withdraw' organisation.id item.id %}">
+                {% csrf_token %}
+                <button type="submit" class="link-button">Withdraw</button>
+            </form>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
