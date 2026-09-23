@@ -5,7 +5,7 @@
 | M001 | Foundation & Organisation Profile | AUTHORISED |
 | M002 | Security Baseline & Initial Risk | Write after M001 |
 | M003 | Evidence & Security State | Write after M002 |
-| M004 | Policy Foundation | Write when profile+risk facts are stable |
+| M004 | Policy Foundation | AUTHORISED |
 | M005 | Questionnaire Assurance | Write after evidence/state contracts |
 | M006 | Customer-Zero Beta Hardening | Write once vertical slice exists |
 
