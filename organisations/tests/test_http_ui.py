@@ -117,3 +117,45 @@ class TestOrganisationCreateHttpUi:
         # itself; clean_name()'s explicit message covers a value that is
         # non-empty-but-blank in a way strip() wouldn't already catch.
         assert "field is required" in response.content.decode().lower()
+
+    def test_create_organisation_atomically_creates_account_holder_person_and_role_events(
+        self, client_a, user_a
+    ):
+        """
+        PID §6-7 (M004-1d-closeout): organisation_create must atomically
+        create the Account Holder's governance person + default role
+        assignments alongside the Organisation/OrganisationMembership rows
+        - proven here end-to-end through the real view, plus PID §22's
+        activity events those governance.services calls emit.
+        """
+        from activity.models import ActivityEvent
+
+        from governance.models import GovernanceRoleAssignment, OrganisationPerson
+
+        from organisations.models import Organisation
+
+        response = client_a.post(reverse("organisations:create"), {"name": "New Synthetic Co"})
+        assert response.status_code == 302
+
+        organisation = Organisation.objects.get(name="New Synthetic Co")
+
+        person = OrganisationPerson.objects.get(organisation=organisation, user=user_a)
+        assert (
+            GovernanceRoleAssignment.objects.filter(organisation=organisation, person=person).count()
+            == 3
+        )
+
+        assert (
+            ActivityEvent.objects.filter(
+                organisation=organisation,
+                event_type=ActivityEvent.EVENT_ORGANISATION_PERSON_CREATED,
+            ).count()
+            == 1
+        )
+        role_events = ActivityEvent.objects.filter(
+            organisation=organisation, event_type=ActivityEvent.EVENT_GOVERNANCE_ROLE_CHANGED
+        )
+        assert role_events.count() == 3
+        for event in role_events:
+            assert event.metadata["previous_person_id"] is None
+            assert event.metadata["new_person_id"] == str(person.id)

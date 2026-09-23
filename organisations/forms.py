@@ -36,6 +36,29 @@ class OrganisationCreateForm(forms.ModelForm):
 
 
 class OrganisationProfileForm(forms.ModelForm):
+    """
+    `working_model` (docs/adr/ADR-0002-IDENTITY-GOVERNANCE-WORKPLACE-AND-
+    DISTRIBUTION-BOUNDARIES.md §5.2, docs/pids/M004-POLICY-FOUNDATION.md
+    §9.2): once the `workplace` app exists, `OrganisationProfile.
+    working_model` is a derived summary computed from the organisation's
+    active `workplace.Workplace` rows (see `workplace.services.
+    sync_working_model`) - it is no longer an independently
+    product-editable fact, so this form must not let a submission change
+    it.
+
+    `working_model` deliberately stays in `Meta.fields` below rather than
+    being removed outright: removing it would also silently drop this
+    codebase's ordinary per-field validation (an out-of-choices value
+    would no longer be rejected at all, it would just be ignored) and
+    would stop the field rendering on the profile page, which still wants
+    to *show* the organisation's current working model. What actually
+    enforces "no longer editable" is `save()` below: whatever value is
+    submitted is discarded and the value present before this submission
+    is restored immediately before the row is written, so the only way to
+    change `working_model` is through `workplace.services.
+    sync_working_model`.
+    """
+
     class Meta:
         model = OrganisationProfile
         fields = [
@@ -64,6 +87,21 @@ class OrganisationProfileForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _apply_field_css_classes(self)
+        # Captured now, before any submitted POST data can reach
+        # self.instance (that only happens later, inside
+        # full_clean()/is_valid() -> _post_clean() -> construct_instance()).
+        # For a brand-new (unbound-to-DB) instance this is the model
+        # field's own default ("unknown"); for an existing profile it is
+        # the value currently stored in the database.
+        self._working_model_before_submission = self.instance.working_model
+        self.fields["working_model"].help_text = (
+            "Derived automatically from your workplaces - it can no "
+            "longer be set directly here."
+        )
+
+    def save(self, commit=True):
+        self.instance.working_model = self._working_model_before_submission
+        return super().save(commit=commit)
 
     def clean_legal_trading_name(self):
         name = self.cleaned_data["legal_trading_name"].strip()

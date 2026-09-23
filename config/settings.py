@@ -48,6 +48,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.microsoft",
     "core",
     "organisations",
     "security_baseline",
@@ -58,6 +64,9 @@ INSTALLED_APPS = [
     "remediation",
     "activity",
     "security_state",
+    "governance",
+    "workplace",
+    "identity",
 ]
 
 MIDDLEWARE = [
@@ -68,6 +77,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 TEMPLATES = [
@@ -116,6 +126,53 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "organisations:list"
 LOGOUT_REDIRECT_URL = "login"
+
+# ---------------------------------------------------------------------------
+# Federated sign-in (M004 - ADR-0002 "Authentication", identity app)
+# ---------------------------------------------------------------------------
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+SITE_ID = 1
+
+SOCIALACCOUNT_ADAPTER = "identity.adapters.CustomSocialAccountAdapter"
+
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_PREVENT_ENUMERATION = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+# Google's scope deliberately excludes "openid" - with it, Google returns a
+# signed id_token that allauth JWT-decodes expecting a non-blank `aud`
+# (=client_id) claim, which can never pass with a blank client_id (the
+# normal CI/dev state per PID §28). Dropping "openid" makes Google use the
+# same plain REST userinfo-fetch shape Microsoft's Graph-based provider
+# already uses - see identity/testing.py's module docstring for the full
+# reasoning and how the fake-provider test seam mirrors this exact shape.
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+        "APPS": [
+            {
+                "client_id": optional_env("GOOGLE_OAUTH_CLIENT_ID", ""),
+                "secret": optional_env("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+            }
+        ],
+    },
+    "microsoft": {
+        "SCOPE": ["User.Read"],
+        "APPS": [
+            {
+                "client_id": optional_env("MICROSOFT_OAUTH_CLIENT_ID", ""),
+                "secret": optional_env("MICROSOFT_OAUTH_CLIENT_SECRET", ""),
+            }
+        ],
+    },
+}
 
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False  # Django's own forms need the CSRF cookie readable for the token

@@ -88,6 +88,20 @@ class ActivityEvent(models.Model):
     EVENT_RISK_SUGGESTION_EDITED = "risk_suggestion_edited"
     EVENT_RISK_SUGGESTION_DISMISSED = "risk_suggestion_dismissed"
 
+    # Added by the m004-1d-closeout dispatch, per
+    # docs/pids/M004-POLICY-FOUNDATION.md §22's expected M004 event list.
+    # As with the m003-2a addition above, PID §12/§22's lists are
+    # illustrative, not exhaustive - this is the third dispatch to extend
+    # `EVENT_TYPE_CHOICES` on that basis. Real emitters:
+    # `governance.services.ensure_account_holder_person` (person created),
+    # `governance.services.assign_role` (role assignee actually changes),
+    # `workplace.services.create_workplace`/`update_workplace` (the latter
+    # also backs `deactivate_workplace`/`activate_workplace`).
+    EVENT_ORGANISATION_PERSON_CREATED = "organisation_person_created"
+    EVENT_GOVERNANCE_ROLE_CHANGED = "governance_role_changed"
+    EVENT_WORKPLACE_CREATED = "workplace_created"
+    EVENT_WORKPLACE_UPDATED = "workplace_updated"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -100,6 +114,10 @@ class ActivityEvent(models.Model):
         (EVENT_ACTION_EVIDENCE_LINKED, "Action evidence linked"),
         (EVENT_RISK_SUGGESTION_EDITED, "Risk suggestion edited"),
         (EVENT_RISK_SUGGESTION_DISMISSED, "Risk suggestion dismissed"),
+        (EVENT_ORGANISATION_PERSON_CREATED, "Organisation person created"),
+        (EVENT_GOVERNANCE_ROLE_CHANGED, "Governance role changed"),
+        (EVENT_WORKPLACE_CREATED, "Workplace created"),
+        (EVENT_WORKPLACE_UPDATED, "Workplace updated"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -189,4 +207,20 @@ class ActivityEvent(models.Model):
         if self.event_type == self.EVENT_RISK_SUGGESTION_DISMISSED:
             title = self.metadata.get("title", "a suggested risk")
             return f"AI-suggested risk '{title}' dismissed"
+        if self.event_type == self.EVENT_ORGANISATION_PERSON_CREATED:
+            full_name = self.metadata.get("full_name", "A new person")
+            return f"'{full_name}' added as a named organisation person"
+        if self.event_type == self.EVENT_GOVERNANCE_ROLE_CHANGED:
+            role = self.metadata.get("role", "a governance role")
+            previous_name = self.metadata.get("previous_person_name")
+            new_name = self.metadata.get("new_person_name", "?")
+            if previous_name:
+                return f"'{role}' role reassigned from {previous_name} to {new_name}"
+            return f"'{role}' role assigned to {new_name}"
+        if self.event_type == self.EVENT_WORKPLACE_CREATED:
+            name = self.metadata.get("name", "a workplace")
+            return f"Workplace '{name}' created"
+        if self.event_type == self.EVENT_WORKPLACE_UPDATED:
+            changed_fields = ", ".join(self.metadata.get("changed_fields", [])) or "details"
+            return f"Workplace updated ({changed_fields} changed)"
         return self.get_event_type_display()

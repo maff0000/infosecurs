@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == "edit" %}Edit workplace{% else %}Add workplace{% endif %} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{% if mode == "edit" %}Edit workplace{% else %}Add workplace{% endif %}</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Workplace details</legend>
+
+        <div class="field {% if form.name.errors %}field--error{% endif %}">
+            <label for="{{ form.name.id_for_label }}">Name <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.name }}
+            {% for error in form.name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.type.errors %}field--error{% endif %}">
+            <label for="{{ form.type.id_for_label }}">Type <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.type }}
+            {% for error in form.type.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.location_label.errors %}field--error{% endif %}">
+            <label for="{{ form.location_label.id_for_label }}">Location</label>
+            <p class="field__help">{{ form.location_label.help_text }}</p>
+            {{ form.location_label }}
+            {% for error in form.location_label.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.approx_people_count.errors %}field--error{% endif %}">
+            <label for="{{ form.approx_people_count.id_for_label }}">Approximate headcount</label>
+            <p class="field__help">{{ form.approx_people_count.help_text }}</p>
+            {{ form.approx_people_count }}
+            {% for error in form.approx_people_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field">
+            <label for="{{ form.is_primary.id_for_label }}">{{ form.is_primary }} {{ form.is_primary.label }}</label>
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'workplace:list' organisation.id %}">Cancel</a>
+        <button type="submit" class="button button--primary">
+            {% if mode == "edit" %}Save changes{% else %}Add workplace{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}

@@ -1,6 +1,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+
+import governance.services
 
 from organisations.forms import OrganisationCreateForm, OrganisationProfileForm
 from organisations.models import AuditEvent, Organisation, OrganisationMembership, OrganisationProfile
@@ -38,12 +41,17 @@ def organisation_create(request):
     if request.method == "POST":
         form = OrganisationCreateForm(request.POST)
         if form.is_valid():
-            organisation = form.save()
-            OrganisationMembership.objects.create(
-                organisation=organisation,
-                user=request.user,
-                role=OrganisationMembership.ROLE_OWNER,
-            )
+            # Atomic (PID §6-7): an organisation must never be left without
+            # its Account Holder's governance person/role rows - this is
+            # one transaction, not a best-effort follow-up call.
+            with transaction.atomic():
+                organisation = form.save()
+                OrganisationMembership.objects.create(
+                    organisation=organisation,
+                    user=request.user,
+                    role=OrganisationMembership.ROLE_OWNER,
+                )
+                governance.services.ensure_account_holder_person(organisation, request.user)
             messages.success(request, f'Organisation "{organisation.name}" created.')
             return redirect("organisations:detail", organisation_id=organisation.id)
     else:

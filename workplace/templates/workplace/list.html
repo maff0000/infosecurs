@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Workplace</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <div class="page-header__actions">
+        <a class="button button--secondary" href="{% url 'workplace:onboarding_start' organisation.id %}">Guided setup</a>
+        <a class="button button--primary" href="{% url 'workplace:create' organisation.id %}">Add workplace</a>
+    </div>
+</div>
+
+{% if not active_workplaces and not inactive_workplaces %}
+    <div class="empty-state">
+        <p>No workplaces recorded yet.</p>
+        <a class="button button--primary" href="{% url 'workplace:onboarding_start' organisation.id %}">Start guided setup</a>
+    </div>
+{% endif %}
+
+{% if active_workplaces %}
+<section class="asset-section">
+    <h2>Active workplaces</h2>
+    <div class="asset-grid">
+        {% for workplace in active_workplaces %}
+            <div class="asset-card">
+                <div class="asset-card__body">
+                    <p class="asset-card__title">
+                        {{ workplace.name }}
+                        {% if workplace.is_primary %}<span class="badge badge--confirmed">Primary</span>{% endif %}
+                    </p>
+                    <p class="asset-card__meta">
+                        {{ workplace.get_type_display }}
+                        {% if workplace.location_label %}&middot; {{ workplace.location_label }}{% endif %}
+                        {% if workplace.approx_people_count is not None %}&middot; approx {{ workplace.approx_people_count }} people{% endif %}
+                    </p>
+                </div>
+                <div class="asset-card__actions">
+                    <a class="button button--secondary" href="{% url 'workplace:edit' organisation.id workplace.id %}">Edit</a>
+                    <form method="post" action="{% url 'workplace:deactivate' organisation.id workplace.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="link-button">Deactivate</button>
+                    </form>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if inactive_workplaces %}
+<section class="asset-section">
+    <h2>Inactive workplaces</h2>
+    <p class="asset-section__intro">Kept here for reference. They are not counted towards your working model.</p>
+    <div class="asset-grid">
+        {% for workplace in inactive_workplaces %}
+            <div class="asset-card asset-card--dismissed">
+                <div class="asset-card__body">
+                    <p class="asset-card__title">{{ workplace.name }}</p>
+                    <p class="asset-card__meta">{{ workplace.get_type_display }}</p>
+                </div>
+                <div class="asset-card__actions">
+                    <a class="button button--secondary" href="{% url 'workplace:edit' organisation.id workplace.id %}">Edit</a>
+                    <form method="post" action="{% url 'workplace:activate' organisation.id workplace.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="button button--secondary">Reactivate</button>
+                    </form>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% endblock %}

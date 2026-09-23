@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Sign-in not completed — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <h1>We could not sign you in that way</h1>
+    <p>
+        The {{ provider|default:"identity provider" }} account you used
+        shares an email address with an existing {{ product_name }}
+        account, but this is the first time we have seen this particular
+        sign-in method for that person.
+    </p>
+    <p>
+        To keep the account secure, a new sign-in method is never
+        automatically connected just because its email address matches.
+        Please log in using the method you used originally. If you believe
+        this is wrong, contact your administrator.
+    </p>
+    <p><a href="{% url 'login' %}">Back to log in</a></p>
+</div>
+{% endblock %}

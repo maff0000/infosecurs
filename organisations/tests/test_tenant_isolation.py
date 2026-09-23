@@ -31,6 +31,12 @@ class TestTenantIsolation:
                 "legal_trading_name": "Org A Synthetic Ltd",
                 "description": "",
                 "staff_count": "",
+                # M004 (ADR-0002 §5.2, PID §9.2): working_model is a derived
+                # summary once the `workplace` app exists - submitting a
+                # value here must be accepted by the form (it still
+                # validates as a real field) but must never persist, so
+                # this is deliberately still posted, not dropped, to prove
+                # exactly that discard behaviour below.
                 "working_model": "hybrid",
                 "endpoint_management": "unknown",
                 "productivity_platform": "unknown",
@@ -48,7 +54,10 @@ class TestTenantIsolation:
         )
         assert response.status_code == 302
         profile = OrganisationProfile.objects.get(organisation=org_a)
-        assert profile.working_model == "hybrid"
+        # Not "hybrid" - working_model is derived from Workplace (M004), and
+        # org_a has no Workplace rows in this test, so it stays at the
+        # model's own "unknown" default regardless of what was submitted.
+        assert profile.working_model == "unknown"
         assert profile.handles_personal_data == "yes"
 
     # --- cross-tenant read negative --------------------------------------

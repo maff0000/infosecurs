@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Workplace</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Where do people normally work?</legend>
+        <p class="form-section__help">
+            Pick whichever is closest - you can add more detail or another location afterwards.
+        </p>
+
+        <div class="field {% if form.pattern.errors %}field--error{% endif %}">
+            {{ form.pattern }}
+            {% for error in form.pattern.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Continue</button>
+    </div>
+</form>
+{% endblock %}

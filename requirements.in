@@ -1,2 +1,8 @@
 Django==6.1.1
 psycopg[binary]==3.3.6
+# Federated customer sign-in (M004 - ADR-0002 "Authentication"). The
+# [socialaccount] extra pulls in requests/oauthlib/pyjwt[crypto], which
+# allauth's OAuth2 provider machinery (google/microsoft) depends on for the
+# token exchange/profile fetch - see identity/adapters.py and
+# config/settings.py's SOCIALACCOUNT_PROVIDERS block.
+django-allauth[socialaccount]==65.19.4
