@@ -25,6 +25,14 @@
   .provenance-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-2) var(--space-4); margin: 0; }
   @media (min-width: 560px) { .provenance-grid { grid-template-columns: 1fr 1fr; } }
   .hash-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; word-break: break-all; }
+  .badge--supports { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--contradicts { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--context { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .control-link-list { list-style: none; margin: 0 0 var(--space-3) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+  .control-link-list li { border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+  .control-link__title { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-1) 0; font-weight: 600; }
+  .control-link__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
+  .control-link__rationale { margin: 0 0 var(--space-2) 0; }
 </style>
 
 <div class="page-header">
@@ -131,7 +139,31 @@
 
 <div class="summary-card">
     <h2>Controls</h2>
-    <p>Not yet linked to any control. Control linking is delivered in a separate module.</p>
+    {% if item.control_links.all %}
+        <ul class="control-link-list">
+            {% for link in item.control_links.all %}
+                <li>
+                    <p class="control-link__title">
+                        {{ link.control_key_label }}
+                        <span class="badge badge--{{ link.relationship }}">{{ link.get_relationship_display }}</span>
+                    </p>
+                    <p class="control-link__meta">
+                        Linked {{ link.linked_at|date:"Y-m-d H:i" }} UTC by {{ link.linked_by|default:"unknown" }}
+                    </p>
+                    {% if link.rationale %}<p class="control-link__rationale">{{ link.rationale }}</p>{% endif %}
+                    <form method="post" action="{% url 'evidence:unlink_control' organisation.id item.id link.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="link-button">Unlink</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Not yet linked to any control.</p>
+    {% endif %}
+    <p style="margin: 0;">
+        <a class="button button--secondary" href="{% url 'evidence:link_control' organisation.id item.id %}">Link to a control</a>
+    </p>
 </div>
 
 {% if item.status == "active" %}

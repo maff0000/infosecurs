@@ -1,14 +1,32 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from activity.models import ActivityEvent
+from activity.services import record_event
 from organisations.views import get_member_organisation_or_404
 
 from risk_register.forms import RiskEditForm
 from risk_register.models import Risk
 from risk_register.services import generate_draft_risks
+
+# The RiskEditForm fields whose before/after values are worth preserving as
+# structured delta (Learning Signal Capture Addendum §3/§7): every field the
+# form actually lets a customer change. Kept as an explicit list, mirrored
+# from RiskEditForm.Meta.fields, rather than introspected from the form, so
+# it is obvious at a glance which fields this event type covers.
+_RISK_EDIT_DELTA_FIELDS = [
+    "title",
+    "threat",
+    "vulnerability",
+    "impact",
+    "likelihood",
+    "rationale",
+    "proposed_treatment",
+]
 
 
 def _get_member_risk_or_404(user, organisation_id, risk_id):
@@ -98,8 +116,47 @@ def risk_edit(request, organisation_id, risk_id):
 
     if request.method == "POST":
         form = RiskEditForm(request.POST, instance=risk)
+
+        # Snapshot the pre-change value of every editable field now, before
+        # `form.is_valid()` is even called below - not merely before
+        # `form.save()`. Django's `ModelForm._post_clean()` (invoked from
+        # inside `full_clean()`, which `is_valid()` triggers) already calls
+        # `construct_instance()` and sets the new field values directly
+        # onto `self.instance` - i.e. onto `risk` - as a side effect of
+        # validation itself, well before `.save()` persists anything. A
+        # snapshot taken after `is_valid()` would already see the *new*
+        # values on `risk`, not the "before" this event needs (Learning
+        # Signal Capture Addendum §3/§7 - the same discipline
+        # security_baseline.services.save_baseline_answers already uses for
+        # control_answer_changed, where the previous answer is read from
+        # the database before the write, not from a form-mutated instance).
+        previous_values = {
+            field: getattr(risk, field) for field in _RISK_EDIT_DELTA_FIELDS
+        }
+
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                form.save()
+
+                delta = {}
+                for field in _RISK_EDIT_DELTA_FIELDS:
+                    new_value = getattr(risk, field)
+                    if new_value != previous_values[field]:
+                        delta[field] = {
+                            "previous": previous_values[field],
+                            "new": new_value,
+                        }
+
+                if delta:
+                    record_event(
+                        organisation,
+                        ActivityEvent.EVENT_RISK_SUGGESTION_EDITED,
+                        actor=request.user,
+                        related_object_type="risk",
+                        related_object_id=str(risk.id),
+                        metadata=delta,
+                    )
+
             messages.success(request, f'Risk "{risk.title}" updated.')
             return redirect(
                 "risk_register:detail", organisation_id=organisation.id, risk_id=risk.id
@@ -143,9 +200,25 @@ def risk_dismiss(request, organisation_id, risk_id):
         messages.error(request, "Only a draft AI suggestion can be dismissed.")
         return redirect("risk_register:detail", organisation_id=organisation.id, risk_id=risk.id)
 
-    risk.status = Risk.STATUS_DISMISSED
-    risk.dismissed_by = request.user
-    risk.dismissed_at = timezone.now()
-    risk.save(update_fields=["status", "dismissed_by", "dismissed_at", "updated_at"])
+    with transaction.atomic():
+        risk.status = Risk.STATUS_DISMISSED
+        risk.dismissed_by = request.user
+        risk.dismissed_at = timezone.now()
+        risk.save(update_fields=["status", "dismissed_by", "dismissed_at", "updated_at"])
+
+        record_event(
+            organisation,
+            ActivityEvent.EVENT_RISK_SUGGESTION_DISMISSED,
+            actor=request.user,
+            related_object_type="risk",
+            related_object_id=str(risk.id),
+            metadata={
+                "title": risk.title,
+                "impact": risk.impact,
+                "likelihood": risk.likelihood,
+                "risk_band": risk.risk_band,
+            },
+        )
+
     messages.success(request, f'Risk "{risk.title}" dismissed.')
     return redirect("risk_register:list", organisation_id=organisation.id)

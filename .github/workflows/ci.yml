@@ -67,6 +67,7 @@ jobs:
           evidence/tests/test_storage.py
           remediation/tests/test_models.py
           activity/tests/test_models.py
+          security_state/tests/test_services.py
 
   integration:
     name: ci/integration
@@ -119,12 +120,17 @@ jobs:
           risk_register/tests/test_eval_command.py
           risk_register/tests/test_interpretation_service.py
           risk_register/tests/test_interpretation_views.py
+          risk_register/tests/test_learning_signal_capture.py
           evidence/tests/test_services.py
           evidence/tests/test_views.py
           evidence/tests/test_tenant_isolation.py
+          evidence/tests/test_link_services.py
           remediation/tests/test_http_ui.py
           remediation/tests/test_no_cascade_on_completion.py
           remediation/tests/test_tenant_isolation.py
+          remediation/tests/test_action_evidence_link.py
           activity/tests/test_services.py
           activity/tests/test_http_ui.py
           activity/tests/test_tenant_isolation.py
+          security_state/tests/test_views.py
+          security_state/tests/test_tenant_isolation.py

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Link evidence to a control — {{ item.title }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Link evidence to a control</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'evidence:detail' organisation.id item.id %}">&larr; Back to "{{ item.title }}"</a> &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<p class="page-header__subtitle">
+    This records a relationship between "{{ item.title }}" and one control. It never changes the
+    control's canonical answer — only the customer can do that, on the security baseline page.
+</p>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Link details</legend>
+
+        <div class="field {% if form.control_key.errors %}field--error{% endif %}">
+            <label for="{{ form.control_key.id_for_label }}">{{ form.control_key.label }} <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.control_key }}
+            {% for error in form.control_key.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.relationship.errors %}field--error{% endif %}">
+            <label for="{{ form.relationship.id_for_label }}">{{ form.relationship.label }} <span class="required-marker" aria-hidden="true">*</span></label>
+            <p class="field__help">{{ form.relationship.help_text }}</p>
+            {{ form.relationship }}
+            {% for error in form.relationship.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.rationale.errors %}field--error{% endif %}">
+            <label for="{{ form.rationale.id_for_label }}">{{ form.rationale.label }}</label>
+            {{ form.rationale }}
+            {% for error in form.rationale.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'evidence:detail' organisation.id item.id %}">Cancel</a>
+        <button type="submit" class="button button--primary">Link evidence</button>
+    </div>
+</form>
+{% endblock %}

@@ -7,10 +7,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from organisations.views import get_member_organisation_or_404
 
-from evidence import services
+from evidence import link_services, services
 from evidence.exceptions import EvidenceValidationError
-from evidence.forms import EvidenceExternalReferenceForm, EvidenceFileUploadForm
-from evidence.models import EvidenceItem
+from evidence.forms import ControlEvidenceLinkForm, EvidenceExternalReferenceForm, EvidenceFileUploadForm
+from evidence.models import ControlEvidenceLink, EvidenceItem
 from evidence.storage import CONTENT_TYPES, evidence_file_path
 
 
@@ -198,4 +198,76 @@ def evidence_withdraw(request, organisation_id, evidence_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, f'Evidence "{item.title}" withdrawn.')
+    return redirect("evidence:detail", organisation_id=organisation.id, evidence_id=item.id)
+
+
+@login_required
+def evidence_link_control(request, organisation_id, evidence_id):
+    """
+    Link this evidence item to a catalogue control (PID §6.4, §18).
+
+    Tenant scoping is identical to every other evidence view: the
+    organisation membership check and the evidence-item lookup both live
+    in `_get_member_evidence_item_or_404`, so a foreign/manipulated
+    evidence id in the URL is an ordinary 404. `link_services.
+    link_evidence_to_control` additionally re-verifies the tenant match
+    itself (defence in depth - see that function's docstring), so this
+    view never needs to trust its own lookup alone for the write.
+    """
+    organisation, item = _get_member_evidence_item_or_404(
+        request.user, organisation_id, evidence_id
+    )
+    request.session["current_organisation_id"] = str(organisation.id)
+
+    if request.method == "POST":
+        form = ControlEvidenceLinkForm(request.POST)
+        if form.is_valid():
+            try:
+                link_services.link_evidence_to_control(
+                    organisation,
+                    item,
+                    form.cleaned_data["control_key"],
+                    form.cleaned_data["relationship"],
+                    form.cleaned_data["rationale"],
+                    request.user,
+                )
+            except EvidenceValidationError as exc:
+                form.add_error(None, str(exc))
+                messages.error(
+                    request, "This evidence could not be linked. Please check the errors below."
+                )
+            else:
+                messages.success(request, "Evidence linked to control.")
+                return redirect(
+                    "evidence:detail", organisation_id=organisation.id, evidence_id=item.id
+                )
+        else:
+            messages.error(
+                request, "This evidence could not be linked. Please check the errors below."
+            )
+    else:
+        form = ControlEvidenceLinkForm()
+
+    return render(
+        request,
+        "evidence/link_control.html",
+        {"organisation": organisation, "item": item, "form": form},
+    )
+
+
+@login_required
+def evidence_unlink_control(request, organisation_id, evidence_id, link_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    organisation, item = _get_member_evidence_item_or_404(
+        request.user, organisation_id, evidence_id
+    )
+    # Scoped to both this organisation AND this evidence item - a link id
+    # belonging to another evidence item (even within the same
+    # organisation) is an ordinary 404, not just organisation-scoped.
+    link = get_object_or_404(
+        ControlEvidenceLink, id=link_id, organisation=organisation, evidence=item
+    )
+    link_services.unlink_evidence_from_control(link, request.user)
+    messages.success(request, "Evidence unlinked from control.")
     return redirect("evidence:detail", organisation_id=organisation.id, evidence_id=item.id)

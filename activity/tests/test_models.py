@@ -75,3 +75,41 @@ class TestActivityEventModel:
             organisation=org_a, event_type=ActivityEvent.EVENT_EVIDENCE_CREATED
         )
         assert event.human_summary() == "Evidence created"
+
+    # --- Learning Signal Capture Addendum event types (M003-2a) ------------
+
+    def test_risk_suggestion_edited_and_dismissed_are_valid_choices(self):
+        # Learning Signal Capture Addendum §7: PID §12's fixed list is
+        # illustrative, not exhaustive - the addendum authorises these two.
+        choice_keys = {choice[0] for choice in ActivityEvent.EVENT_TYPE_CHOICES}
+        assert ActivityEvent.EVENT_RISK_SUGGESTION_EDITED == "risk_suggestion_edited"
+        assert ActivityEvent.EVENT_RISK_SUGGESTION_DISMISSED == "risk_suggestion_dismissed"
+        assert "risk_suggestion_edited" in choice_keys
+        assert "risk_suggestion_dismissed" in choice_keys
+
+    def test_human_summary_for_risk_suggestion_edited(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_RISK_SUGGESTION_EDITED,
+            related_object_type="risk",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={
+                "impact": {"previous": 2, "new": 4},
+                "vulnerability": {"previous": "old", "new": "new"},
+            },
+        )
+        summary = event.human_summary()
+        assert "impact" in summary
+        assert "vulnerability" in summary
+
+    def test_human_summary_for_risk_suggestion_dismissed(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_RISK_SUGGESTION_DISMISSED,
+            related_object_type="risk",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"title": "Unpatched laptop OS", "impact": 4, "likelihood": 3, "risk_band": "high"},
+        )
+        summary = event.human_summary()
+        assert "Unpatched laptop OS" in summary
+        assert "dismissed" in summary.lower()

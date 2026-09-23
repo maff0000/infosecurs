@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
+from evidence.models import EvidenceItem
 from key_assets.models import KeyAsset
 from remediation.models import RemediationAction
 from security_baseline.catalogue import CATALOGUE
@@ -101,3 +102,37 @@ class RemediationActionForm(forms.ModelForm):
         if not title:
             raise forms.ValidationError("Title cannot be empty.")
         return title
+
+
+class ActionEvidenceAttachForm(forms.Form):
+    """
+    Minimal "pick one of the organisation's evidence items" form for
+    attaching evidence to an action (PID §6.6). No upload flow here -
+    evidence is uploaded via the `evidence` app itself; this form only
+    lets a Customer Zero user pick among evidence that already exists.
+
+    Requires `organisation` for the same reason as `RemediationActionForm`
+    above: the `evidence` choices must be scoped to that organisation, or
+    the dropdown itself would leak another tenant's evidence titles even
+    though `remediation.services.attach_evidence_to_action` would still
+    reject the cross-tenant save on submit.
+    """
+
+    evidence = forms.ModelChoiceField(
+        queryset=EvidenceItem.objects.none(),
+        label="Evidence",
+        help_text="Only this organisation's active evidence items are listed.",
+    )
+
+    def __init__(self, *args, organisation=None, **kwargs):
+        self._organisation = organisation
+        super().__init__(*args, **kwargs)
+        if organisation is not None:
+            self.fields["evidence"].queryset = EvidenceItem.objects.filter(
+                organisation=organisation, status=EvidenceItem.STATUS_ACTIVE
+            ).order_by("-created_at")
+        else:
+            # No organisation supplied - fail closed, same convention as
+            # RemediationActionForm.__init__ above.
+            self.fields["evidence"].queryset = EvidenceItem.objects.none()
+        _apply_field_css_classes(self)

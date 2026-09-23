@@ -117,7 +117,32 @@
 
 <div class="summary-card action-detail__section">
     <h2>Evidence</h2>
-    <p>No evidence attached yet. Evidence attachment for actions is a later, separate piece of work.</p>
+    {% if evidence_links %}
+        <ul>
+            {% for link in evidence_links %}
+                <li>
+                    <a href="{% url 'evidence:detail' organisation.id link.evidence.id %}">{{ link.evidence.title }}</a>
+                    &middot; attached by {{ link.linked_by|default:"—" }} on {{ link.linked_at }} (UTC)
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No evidence attached yet.</p>
+    {% endif %}
+
+    {% if attach_evidence_form.fields.evidence.queryset %}
+        <form method="post" action="{% url 'remediation:attach_evidence' organisation.id action.id %}" class="action-detail__attach-evidence-form">
+            {% csrf_token %}
+            {{ attach_evidence_form.evidence.label_tag }}
+            {{ attach_evidence_form.evidence }}
+            {% for error in attach_evidence_form.evidence.errors %}
+                <p class="form-error">{{ error }}</p>
+            {% endfor %}
+            <button type="submit" class="button button--secondary">Attach evidence</button>
+        </form>
+    {% else %}
+        <p>No active evidence available to attach yet. <a href="{% url 'evidence:list' organisation.id %}">Upload or add evidence</a> first.</p>
+    {% endif %}
 </div>
 
 <div class="form-actions">

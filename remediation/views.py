@@ -20,8 +20,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from organisations.views import get_member_organisation_or_404
-from remediation.forms import RemediationActionForm
+from remediation import services
+from remediation.forms import ActionEvidenceAttachForm, RemediationActionForm
 from remediation.models import RemediationAction
+from remediation.services import RemediationServiceError
 from risk_register.models import Risk
 
 
@@ -136,11 +138,46 @@ def action_create_from_risk(request, organisation_id, risk_id):
 @login_required
 def action_detail(request, organisation_id, action_id):
     organisation, action = _get_member_action_or_404(request.user, organisation_id, action_id)
+    evidence_links = action.evidence_links.select_related("evidence", "linked_by")
+    attach_form = ActionEvidenceAttachForm(organisation=organisation)
     return render(
         request,
         "remediation/detail.html",
-        {"organisation": organisation, "action": action},
+        {
+            "organisation": organisation,
+            "action": action,
+            "evidence_links": evidence_links,
+            "attach_evidence_form": attach_form,
+        },
     )
+
+
+@login_required
+def action_attach_evidence(request, organisation_id, action_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    organisation, action = _get_member_action_or_404(request.user, organisation_id, action_id)
+
+    form = ActionEvidenceAttachForm(request.POST, organisation=organisation)
+    if form.is_valid():
+        evidence = form.cleaned_data["evidence"]
+        try:
+            services.attach_evidence_to_action(
+                organisation=organisation,
+                action=action,
+                evidence=evidence,
+                linked_by=request.user,
+            )
+        except RemediationServiceError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request, f'Evidence "{evidence.title}" attached to "{action.title}".'
+            )
+    else:
+        messages.error(request, "The evidence could not be attached. Please check the errors below.")
+
+    return redirect("remediation:detail", organisation_id=organisation.id, action_id=action.id)
 
 
 @login_required

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ row.area }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--not-confirmed { background: var(--color-border); color: var(--color-text); }
+  .badge--not-applicable { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .badge--customer-stated { background: #e6eefb; color: #185ea8; }
+  .badge--supporting-evidence-attached { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--evidence-conflict { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--evidence-stale { background: #fdf1d6; color: #8a5a00; }
+  .badge--supports { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--contradicts { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--context { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .badge--stale { background: #fdf1d6; color: #8a5a00; }
+  .state-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .evidence-link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .evidence-link-list li { border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+  .action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .action-list li { border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+  .timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+  .timeline-list li { padding: var(--space-1) 0; border-bottom: 1px solid var(--color-border); font-size: 0.9rem; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ row.area }}</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'security_state:list' organisation.id %}">&larr; Back to security state</a> &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<div class="state-detail__status-row">
+    <span class="badge badge--{{ row.assurance_label|slugify }}">{{ row.assurance_label }}</span>
+</div>
+
+<div class="summary-card">
+    <h2>Canonical answer</h2>
+    <p>{{ row.question }}</p>
+    <dl class="provenance-grid">
+        <div>
+            <dt>Current answer</dt>
+            <dd>{{ row.answer_label }}</dd>
+        </div>
+        <div>
+            <dt>Last updated</dt>
+            <dd>{% if row.answer_updated_at %}{{ row.answer_updated_at|date:"Y-m-d H:i" }} UTC{% else %}Never answered{% endif %}</dd>
+        </div>
+    </dl>
+    {% if row.note %}
+        <p><strong>Note:</strong> {{ row.note }}</p>
+    {% endif %}
+    <p style="margin: 0;">
+        <a class="button button--secondary" href="{% url 'security_baseline:baseline' organisation.id %}">View / edit this control's canonical answer</a>
+    </p>
+</div>
+
+<div class="summary-card">
+    <h2>Linked evidence</h2>
+    {% if row.active_supporting_evidence or row.active_contradictory_evidence or row.stale_evidence or row.context_evidence %}
+        <ul class="evidence-link-list">
+            {% for link in row.active_contradictory_evidence %}
+                <li>
+                    <span class="badge badge--contradicts">Contradicts</span>
+                    <a href="{% url 'evidence:detail' organisation.id link.evidence.id %}">{{ link.evidence.title }}</a>
+                    &middot; {{ link.evidence.get_status_display }}
+                    {% if link.rationale %}<p style="margin: var(--space-1) 0 0 0;">{{ link.rationale }}</p>{% endif %}
+                </li>
+            {% endfor %}
+            {% for link in row.active_supporting_evidence %}
+                <li>
+                    <span class="badge badge--supports">Supports</span>
+                    <a href="{% url 'evidence:detail' organisation.id link.evidence.id %}">{{ link.evidence.title }}</a>
+                    &middot; {{ link.evidence.get_status_display }}
+                    {% if link.rationale %}<p style="margin: var(--space-1) 0 0 0;">{{ link.rationale }}</p>{% endif %}
+                </li>
+            {% endfor %}
+            {% for link in row.stale_evidence %}
+                <li>
+                    <span class="badge badge--{{ link.relationship }}">{{ link.get_relationship_display }}</span>
+                    <span class="badge badge--stale">Stale / inactive</span>
+                    <a href="{% url 'evidence:detail' organisation.id link.evidence.id %}">{{ link.evidence.title }}</a>
+                    &middot; {{ link.evidence.get_status_display }}
+                    {% if link.rationale %}<p style="margin: var(--space-1) 0 0 0;">{{ link.rationale }}</p>{% endif %}
+                </li>
+            {% endfor %}
+            {% for link in row.context_evidence %}
+                <li>
+                    <span class="badge badge--context">Context</span>
+                    <a href="{% url 'evidence:detail' organisation.id link.evidence.id %}">{{ link.evidence.title }}</a>
+                    &middot; {{ link.evidence.get_status_display }}
+                    {% if link.rationale %}<p style="margin: var(--space-1) 0 0 0;">{{ link.rationale }}</p>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No evidence linked to this control yet.</p>
+    {% endif %}
+    <p class="page-header__subtitle" style="margin-top: var(--space-3);">
+        Link evidence from the evidence item's own detail page.
+    </p>
+</div>
+
+<div class="summary-card">
+    <h2>Remediation actions</h2>
+    {% if open_actions or closed_actions %}
+        <ul class="action-list">
+            {% for action in open_actions %}
+                <li>
+                    <a href="{% url 'remediation:detail' organisation.id action.id %}">{{ action.title }}</a>
+                    &middot; {{ action.get_status_display }}
+                </li>
+            {% endfor %}
+            {% for action in closed_actions %}
+                <li>
+                    <a href="{% url 'remediation:detail' organisation.id action.id %}">{{ action.title }}</a>
+                    &middot; {{ action.get_status_display }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No remediation actions reference this control yet.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Activity</h2>
+    {% if events %}
+        <ul class="timeline-list">
+            {% for event in events %}
+                <li>{{ event.occurred_at|date:"Y-m-d H:i" }} UTC &middot; {{ event.human_summary }}{% if event.actor %} &middot; {{ event.actor }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No recorded activity for this control yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+title = "Infosecurs gitleaks config"
+
+# Extend, not replace, gitleaks' default ruleset - this file exists only to
+# allowlist specific, verified-harmless false positives, never to loosen
+# real secret detection.
+[extend]
+useDefault = true
+
+# False positive: evidence/link_services.py's ControlEvidenceLink lookup
+# does `.filter(evidence=evidence, control_key=control_key,
+# relationship=relationship)` - an ordinary Django ORM filter call where
+# the keyword argument name and the local variable it's bound to happen to
+# both be spelled "relationship". gitleaks' generic-api-key rule matches
+# this as a key=value pair purely on that textual coincidence; there is no
+# secret. The regex below matches gitleaks' own reported Secret value
+# exactly (verified locally against both the working tree and the same
+# commit range CI scans) - an inline `# gitleaks:allow` comment on the
+# offending line is not sufficient by itself, because gitleaks scans
+# historical commit diffs and the comment would only suppress the finding
+# in commits created after it was added, not the commit that already
+# introduced the un-commented line.
+[allowlist]
+description = "Django ORM filter kwarg false positive (relationship=relationship is not a secret)"
+regexes = [
+  '''relationship=relationship''',
+]

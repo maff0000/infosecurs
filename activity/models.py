@@ -77,6 +77,17 @@ class ActivityEvent(models.Model):
     EVENT_ACTION_STATUS_CHANGED = "action_status_changed"
     EVENT_ACTION_EVIDENCE_LINKED = "action_evidence_linked"
 
+    # Added by the M003-2a dispatch, per the Learning Signal Capture
+    # Addendum (docs/pids/M003-LEARNING-SIGNAL-CAPTURE-ADDENDUM.md, §7):
+    # PID §12's fixed list is illustrative ("such as"), not exhaustive, and
+    # the addendum is the authority for adding these two. They cover
+    # M002's risk-domain corrections named directly in the addendum's §3
+    # examples: an AI-suggested risk later edited, or dismissed, by a
+    # customer. See risk_register.views.risk_edit/risk_dismiss for the
+    # real emitters.
+    EVENT_RISK_SUGGESTION_EDITED = "risk_suggestion_edited"
+    EVENT_RISK_SUGGESTION_DISMISSED = "risk_suggestion_dismissed"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -87,6 +98,8 @@ class ActivityEvent(models.Model):
         (EVENT_ACTION_CREATED, "Action created"),
         (EVENT_ACTION_STATUS_CHANGED, "Action status changed"),
         (EVENT_ACTION_EVIDENCE_LINKED, "Action evidence linked"),
+        (EVENT_RISK_SUGGESTION_EDITED, "Risk suggestion edited"),
+        (EVENT_RISK_SUGGESTION_DISMISSED, "Risk suggestion dismissed"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -170,4 +183,10 @@ class ActivityEvent(models.Model):
             if self.metadata.get("note_changed"):
                 summary += " (note also changed)"
             return summary
+        if self.event_type == self.EVENT_RISK_SUGGESTION_EDITED:
+            changed_fields = ", ".join(sorted(self.metadata.keys())) or "a field"
+            return f"AI-suggested risk edited ({changed_fields} changed)"
+        if self.event_type == self.EVENT_RISK_SUGGESTION_DISMISSED:
+            title = self.metadata.get("title", "a suggested risk")
+            return f"AI-suggested risk '{title}' dismissed"
         return self.get_event_type_display()

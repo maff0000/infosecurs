@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "evidence",
     "remediation",
     "activity",
+    "security_state",
 ]
 
 MIDDLEWARE = [
