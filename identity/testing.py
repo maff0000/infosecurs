@@ -74,6 +74,7 @@ from __future__ import annotations
 
 import contextlib
 from unittest import mock
+from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
 # Fixed, synthetic identities. Never real people, never real provider data.
@@ -177,7 +178,18 @@ class _FakeRequestsSession:
         code = auth_header.removeprefix("Bearer ").strip()
         provider, persona = _persona_from_code(code)
 
-        if "googleapis.com" in url:
+        # Exact-hostname match, not substring containment (a bare
+        # "googleapis.com" in url check would also match an attacker-hosted
+        # "googleapis.com.evil.test" or "evilgoogleapis.com" - CodeQL
+        # "Incomplete URL substring sanitization"). `url` here only ever
+        # comes from allauth's own GoogleOAuth2Adapter._fetch_user_info,
+        # which requests exactly the default IDENTITY_URL,
+        # "https://www.googleapis.com/oauth2/v2/userinfo" (this project
+        # does not override SOCIALACCOUNT_PROVIDERS["google"]["IDENTITY_URL"]
+        # - see config/settings.py) - so an exact hostname match is both
+        # correct and precise, not a guess.
+        hostname = urlparse(url).hostname or ""
+        if hostname == "www.googleapis.com":
             # GoogleAccount's documented /v2/userinfo response shape.
             return _FakeResponse(
                 {
