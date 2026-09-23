@@ -47,7 +47,7 @@ def link_evidence_to_control(organisation, evidence, control_key, relationship, 
             "Cannot link evidence belonging to a different organisation."
         )
     if ControlEvidenceLink.objects.filter(
-        evidence=evidence, control_key=control_key, relationship=relationship
+        evidence=evidence, control_key=control_key, relationship=relationship  # gitleaks:allow
     ).exists():
         raise EvidenceValidationError(
             "This evidence is already linked to this control with this relationship."
