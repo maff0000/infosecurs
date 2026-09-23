@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Everyone works from home</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>One more thing</legend>
+        <p class="form-section__help">We'll record this as "Home / remote working".</p>
+
+        <div class="field {% if form.approx_people_count.errors %}field--error{% endif %}">
+            <label for="{{ form.approx_people_count.id_for_label }}">{{ form.approx_people_count.label }}</label>
+            <p class="field__help">{{ form.approx_people_count.help_text }}</p>
+            {{ form.approx_people_count }}
+            {% for error in form.approx_people_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'workplace:onboarding_start' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Save</button>
+    </div>
+</form>
+{% endblock %}

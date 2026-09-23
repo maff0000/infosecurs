@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Governance roles — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Governance roles</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p class="page-header__subtitle">
+    You are currently listed as the policy authoriser, security contact and senior leadership
+    representative. If that is not correct for any role, reassign it to another named person below.
+</p>
+
+{% for row in rows %}
+<fieldset class="form-section">
+    <legend>{{ row.label }}</legend>
+
+    {% if row.assignment %}
+        <p>
+            Currently assigned to <strong>{{ row.assignment.person.full_name }}</strong>{% if row.assignment.person.job_title %}, {{ row.assignment.person.job_title }}{% endif %}.
+        </p>
+        {% if row.assignment.assignee_is_inactive %}
+            <p class="message message--error" role="alert">
+                {{ row.assignment.person.full_name }} is currently marked inactive. Reassign this
+                role to an active person, or reactivate them, before relying on this assignment.
+            </p>
+        {% endif %}
+    {% else %}
+        <p>Not yet assigned.</p>
+    {% endif %}
+
+    {% if row.form.non_field_errors %}
+        <ul class="messages" role="alert">
+            {% for error in row.form.non_field_errors %}
+                <li class="message message--error">{{ error }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ row.form.role }}
+
+        <div class="field {% if row.form.person.errors %}field--error{% endif %}">
+            <label for="{{ row.form.person.id_for_label }}">{{ row.form.person.label }}</label>
+            {{ row.form.person }}
+            {% for error in row.form.person.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if row.form.new_person_full_name.errors %}field--error{% endif %}">
+            <label for="{{ row.form.new_person_full_name.id_for_label }}">{{ row.form.new_person_full_name.label }}</label>
+            {{ row.form.new_person_full_name }}
+            {% for error in row.form.new_person_full_name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if row.form.new_person_job_title.errors %}field--error{% endif %}">
+            <label for="{{ row.form.new_person_job_title.id_for_label }}">{{ row.form.new_person_job_title.label }}</label>
+            {{ row.form.new_person_job_title }}
+            {% for error in row.form.new_person_job_title.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="button button--primary">Reassign {{ row.label|lower }}</button>
+        </div>
+    </form>
+</fieldset>
+{% endfor %}
+{% endblock %}

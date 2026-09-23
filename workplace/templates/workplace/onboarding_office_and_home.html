@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Office + home working</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>About your office</legend>
+
+        <div class="field {% if form.office_name.errors %}field--error{% endif %}">
+            <label for="{{ form.office_name.id_for_label }}">{{ form.office_name.label }} <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.office_name }}
+            {% for error in form.office_name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.office_location_label.errors %}field--error{% endif %}">
+            <label for="{{ form.office_location_label.id_for_label }}">{{ form.office_location_label.label }}</label>
+            <p class="field__help">{{ form.office_location_label.help_text }}</p>
+            {{ form.office_location_label }}
+            {% for error in form.office_location_label.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.office_approx_people_count.errors %}field--error{% endif %}">
+            <label for="{{ form.office_approx_people_count.id_for_label }}">{{ form.office_approx_people_count.label }}</label>
+            {{ form.office_approx_people_count }}
+            {% for error in form.office_approx_people_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>About home working</legend>
+
+        <div class="field {% if form.home_approx_people_count.errors %}field--error{% endif %}">
+            <label for="{{ form.home_approx_people_count.id_for_label }}">{{ form.home_approx_people_count.label }}</label>
+            {{ form.home_approx_people_count }}
+            {% for error in form.home_approx_people_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'workplace:onboarding_start' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Save</button>
+    </div>
+</form>
+{% endblock %}

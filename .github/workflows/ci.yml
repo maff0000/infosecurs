@@ -68,6 +68,10 @@ jobs:
           remediation/tests/test_models.py
           activity/tests/test_models.py
           security_state/tests/test_services.py
+          governance/tests/test_models.py
+          governance/tests/test_services.py
+          workplace/tests/test_models.py
+          workplace/tests/test_services.py
 
   integration:
     name: ci/integration
@@ -134,3 +138,9 @@ jobs:
           activity/tests/test_tenant_isolation.py
           security_state/tests/test_views.py
           security_state/tests/test_tenant_isolation.py
+          governance/tests/test_tenant_isolation.py
+          governance/tests/test_views.py
+          workplace/tests/test_http_ui.py
+          workplace/tests/test_tenant_isolation.py
+          identity/tests/test_federated_login.py
+          identity/tests/test_unsafe_linking.py

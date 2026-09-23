@@ -113,3 +113,87 @@ class TestActivityEventModel:
         summary = event.human_summary()
         assert "Unpatched laptop OS" in summary
         assert "dismissed" in summary.lower()
+
+    # --- M004 governance/workplace event types (m004-1d-closeout) ----------
+
+    def test_m004_event_types_are_valid_choices(self):
+        # PID §22's expected M004 event list; PID §12's fixed list is
+        # illustrative, not exhaustive (see the m003-2a addition above) -
+        # this is the third dispatch to extend it on that basis.
+        choice_keys = {choice[0] for choice in ActivityEvent.EVENT_TYPE_CHOICES}
+        assert ActivityEvent.EVENT_ORGANISATION_PERSON_CREATED == "organisation_person_created"
+        assert ActivityEvent.EVENT_GOVERNANCE_ROLE_CHANGED == "governance_role_changed"
+        assert ActivityEvent.EVENT_WORKPLACE_CREATED == "workplace_created"
+        assert ActivityEvent.EVENT_WORKPLACE_UPDATED == "workplace_updated"
+        for key in (
+            "organisation_person_created",
+            "governance_role_changed",
+            "workplace_created",
+            "workplace_updated",
+        ):
+            assert key in choice_keys
+
+    def test_human_summary_for_organisation_person_created(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_ORGANISATION_PERSON_CREATED,
+            related_object_type="organisation_person",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"full_name": "Ada Lovelace"},
+        )
+        summary = event.human_summary()
+        assert "Ada Lovelace" in summary
+
+    def test_human_summary_for_governance_role_changed_first_assignment(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_GOVERNANCE_ROLE_CHANGED,
+            metadata={
+                "role": "policy_authoriser",
+                "previous_person_id": None,
+                "previous_person_name": None,
+                "new_person_id": "11111111-1111-1111-1111-111111111111",
+                "new_person_name": "Ada Lovelace",
+            },
+        )
+        summary = event.human_summary()
+        assert "policy_authoriser" in summary
+        assert "Ada Lovelace" in summary
+
+    def test_human_summary_for_governance_role_changed_reassignment(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_GOVERNANCE_ROLE_CHANGED,
+            metadata={
+                "role": "policy_authoriser",
+                "previous_person_id": "11111111-1111-1111-1111-111111111111",
+                "previous_person_name": "Ada Lovelace",
+                "new_person_id": "22222222-2222-2222-2222-222222222222",
+                "new_person_name": "Jane Smith",
+            },
+        )
+        summary = event.human_summary()
+        assert "Ada Lovelace" in summary
+        assert "Jane Smith" in summary
+
+    def test_human_summary_for_workplace_created(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_WORKPLACE_CREATED,
+            related_object_type="workplace",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"name": "London Head Office", "type": "dedicated_office"},
+        )
+        summary = event.human_summary()
+        assert "London Head Office" in summary
+
+    def test_human_summary_for_workplace_updated(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_WORKPLACE_UPDATED,
+            related_object_type="workplace",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"changed_fields": ["is_active"], "is_active": False},
+        )
+        summary = event.human_summary()
+        assert "is_active" in summary

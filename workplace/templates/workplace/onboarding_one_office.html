@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>We have one office</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>About your office</legend>
+
+        <div class="field {% if form.name.errors %}field--error{% endif %}">
+            <label for="{{ form.name.id_for_label }}">{{ form.name.label }} <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.name }}
+            {% for error in form.name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.location_label.errors %}field--error{% endif %}">
+            <label for="{{ form.location_label.id_for_label }}">{{ form.location_label.label }}</label>
+            <p class="field__help">{{ form.location_label.help_text }}</p>
+            {{ form.location_label }}
+            {% for error in form.location_label.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.approx_people_count.errors %}field--error{% endif %}">
+            <label for="{{ form.approx_people_count.id_for_label }}">{{ form.approx_people_count.label }}</label>
+            <p class="field__help">{{ form.approx_people_count.help_text }}</p>
+            {{ form.approx_people_count }}
+            {% for error in form.approx_people_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'workplace:onboarding_start' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Save</button>
+    </div>
+</form>
+{% endblock %}

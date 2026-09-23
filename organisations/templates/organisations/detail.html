@@ -19,6 +19,18 @@
 </div>
 
 <div class="summary-card">
+    <h2>Governance</h2>
+    <p>See and confirm who is listed as policy authoriser, security responsible person and senior leadership representative.</p>
+    <a class="button button--primary" href="{% url 'governance:roles' organisation.id %}">Open governance roles</a>
+</div>
+
+<div class="summary-card">
+    <h2>Workplace</h2>
+    <p>Describe where staff work - home, office, shared/coworking space, or a mix.</p>
+    <a class="button button--primary" href="{% url 'workplace:list' organisation.id %}">Open workplace</a>
+</div>
+
+<div class="summary-card">
     <h2>Security baseline</h2>
     {% if profile_exists %}
         <p>Answer a concise set of security-baseline questions for this organisation.</p>
