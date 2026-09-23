@@ -1,26 +1,19 @@
 """
 HTTP-level tests for the risk_register review/confirm/dismiss UI
-(PID §19, §20, §21). Uses `monkeypatch` to substitute `FakeGateway` for the
-view's default `LiteLLMGateway()` construction - the view/service contract
-under test (`risk_register.views.generate_draft_risks`) is exactly the same
-function either way (forge-engineer.md dispatch instructions,
-"Testability").
+(PID §19, §20, §21).
+
+`TestRiskGenerationView` REWRITTEN by the M002-3b dispatch: generation is
+now the deterministic scenario-instantiation engine
+(risk_register.scenario_engine) - there is no gateway to substitute any
+more, so these tests set up ordinary KeyAsset/BaselineAnswer fixtures and
+POST directly, exactly like a real request. No ai_platform import
+anywhere in this file.
 """
 import pytest
 from django.urls import reverse
 
-from ai_platform.testing import FakeGateway
-
-import risk_register.views as risk_views
+from key_assets.models import KeyAsset
 from risk_register.models import Risk
-from risk_register.services import generate_draft_risks as real_generate_draft_risks
-
-
-def _patch_gateway(monkeypatch, mode="valid", result=None):
-    def _fake_generate_draft_risks(organisation, gateway=None, **kwargs):
-        return real_generate_draft_risks(organisation, gateway=FakeGateway(mode=mode, result=result), **kwargs)
-
-    monkeypatch.setattr(risk_views, "generate_draft_risks", _fake_generate_draft_risks)
 
 
 @pytest.mark.django_db
@@ -29,37 +22,42 @@ class TestRiskGenerationView:
         response = client_a.get(reverse("risk_register:generate", args=[org_a.id]))
         assert response.status_code == 405
 
-    def test_post_success_creates_draft_risks_and_redirects_to_list(
-        self, client_a, org_a, profile_a, monkeypatch
-    ):
-        _patch_gateway(monkeypatch, mode="valid")
+    def test_post_success_creates_draft_risks_and_redirects_to_list(self, client_a, org_a):
+        KeyAsset.objects.create(
+            organisation=org_a, name="Staff laptop", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
         response = client_a.post(reverse("risk_register:generate", args=[org_a.id]))
         assert response.status_code == 302
         assert response.url == reverse("risk_register:list", args=[org_a.id])
-        assert Risk.objects.filter(organisation=org_a, status=Risk.STATUS_DRAFT_AI_SUGGESTED).count() == 1
+        assert Risk.objects.filter(organisation=org_a, status=Risk.STATUS_DRAFT_AI_SUGGESTED).count() > 0
 
-    def test_post_failure_creates_no_risk_and_shows_error(self, client_a, org_a, profile_a, monkeypatch):
-        _patch_gateway(monkeypatch, mode="invalid_schema")
+    def test_post_with_no_confirmed_assets_creates_no_risks_and_shows_a_clear_message(
+        self, client_a, org_a
+    ):
         response = client_a.post(reverse("risk_register:generate", args=[org_a.id]), follow=True)
         assert Risk.objects.filter(organisation=org_a).count() == 0
         messages = [str(m) for m in response.context["messages"]]
-        assert any("could not be completed" in m for m in messages)
+        assert any("did not propose any new risks" in m for m in messages)
 
-    def test_post_failure_leaves_existing_confirmed_risk_untouched(
-        self, client_a, org_a, profile_a, monkeypatch
+    def test_post_twice_creates_no_duplicates_and_leaves_a_confirmed_risk_untouched(
+        self, client_a, org_a
     ):
-        _patch_gateway(monkeypatch, mode="valid")
+        KeyAsset.objects.create(
+            organisation=org_a, name="Staff laptop", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
         client_a.post(reverse("risk_register:generate", args=[org_a.id]))
-        existing = Risk.objects.get(organisation=org_a)
+        existing = Risk.objects.filter(organisation=org_a).first()
         existing.status = Risk.STATUS_CONFIRMED
         existing.save()
+        before_count = Risk.objects.filter(organisation=org_a).count()
 
-        _patch_gateway(monkeypatch, mode="invalid_schema")
         client_a.post(reverse("risk_register:generate", args=[org_a.id]))
 
         existing.refresh_from_db()
         assert existing.status == Risk.STATUS_CONFIRMED
-        assert Risk.objects.filter(organisation=org_a).count() == 1
+        assert Risk.objects.filter(organisation=org_a).count() == before_count
 
 
 @pytest.mark.django_db

@@ -3,10 +3,11 @@ import uuid
 import pytest
 from django.urls import reverse
 
-from ai_platform.testing import FakeGateway
-
+from key_assets.models import KeyAsset
 from risk_register.models import Risk
 from risk_register.services import generate_draft_risks
+from security_baseline.catalogue import CATALOGUE_VERSION
+from security_baseline.models import BaselineAnswer, BaselineAssessment
 
 
 def _draft(org, **overrides):
@@ -115,67 +116,97 @@ class TestRiskTenantIsolation:
 
 
 @pytest.mark.django_db
-class TestAIRequestPayloadTenantIsolation:
+class TestScenarioEngineTenantIsolation:
     """
-    PID.md M002 §16, "the last item is critical": a cross-tenant fact
-    appearing in an AI prompt/request is a catastrophic defect even if the
-    UI never displays it.
-
-    This directly inspects what `GroundingPayload` was actually passed to
-    the (Fake) gateway for organisation A, and asserts organisation B's
-    profile/baseline/asset facts never appear in it - not merely that the
-    HTTP responses are isolated.
+    PID.md M002 §16, "the last item is critical", carried forward to the
+    deterministic scenario-instantiation engine that replaced the AI
+    request payload (M002-3b dispatch, PID §0.6). There is no outbound AI
+    prompt to inspect any more - this proves organisation A's generation
+    run can never be influenced by, or leak, organisation B's confirmed
+    assets or canonical baseline answers, by inspecting the actual created
+    `Risk` rows (title/vulnerability/grounding_refs/assumptions) rather
+    than an outbound payload, mirroring the rigour of the retired
+    payload-inspection test above.
     """
 
-    def test_fake_gateway_receives_only_organisation_as_own_facts(
-        self, org_a, org_b, profile_a, profile_b, baseline_a, baseline_b,
-        confirmed_asset_a, confirmed_asset_b,
-    ):
-        gw = FakeGateway(mode="valid")
-        generate_draft_risks(org_a, gateway=gw)
-
-        assert len(gw.calls) == 1
-        grounding_sent, _prompt_version = gw.calls[0]
-
-        # Correct tenant.
-        assert grounding_sent.organisation_id == str(org_a.pk)
-
-        # Org A's own facts are present.
-        assert grounding_sent.profile_facts["description"] == profile_a.description
-        assert any(a["id"] == str(confirmed_asset_a.id) for a in grounding_sent.asset_facts)
-
-        # Org B's facts are absent, in every fact group, by value.
-        assert profile_b.description not in grounding_sent.profile_facts.values()
-        assert profile_b.commercial_security_driver not in grounding_sent.profile_facts.values()
-        assert not any(a["id"] == str(confirmed_asset_b.id) for a in grounding_sent.asset_facts)
-        assert not any(a["name"] == confirmed_asset_b.name for a in grounding_sent.asset_facts)
-        baseline_notes = [entry["note"] for entry in grounding_sent.baseline_facts.values()]
-        assert not any("never for org A" in note for note in baseline_notes)
-
-        # Full JSON-serialised form (what would actually leave the process
-        # via ai_platform.prompts.risk_generation_v1.build_messages) must
-        # not contain org B's organisation id or any of its unique strings.
-        import json
-
-        serialised = json.dumps(
-            {
-                "profile_facts": grounding_sent.profile_facts,
-                "baseline_facts": grounding_sent.baseline_facts,
-                "asset_facts": grounding_sent.asset_facts,
-            }
+    def test_org_as_generation_ignores_org_bs_answer_to_the_same_control(self, org_a, org_b):
+        """
+        Org B answers a control 'no' for a scenario org A's confirmed
+        asset would also be eligible for; org A answers the SAME control
+        'yes' (so no risk should be generated for org A at all). If the
+        engine ever mixed up organisations when reading canonical baseline
+        answers, org A would incorrectly pick up org B's 'no'.
+        """
+        KeyAsset.objects.create(
+            organisation=org_a, name="Org A endpoint", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
         )
-        assert str(org_b.pk) not in serialised
-        assert confirmed_asset_b.name not in serialised
-        assert profile_b.description not in serialised
+        KeyAsset.objects.create(
+            organisation=org_b, name="Org B endpoint", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
+        assessment_a = BaselineAssessment.objects.create(
+            organisation=org_a, catalogue_version=CATALOGUE_VERSION
+        )
+        BaselineAnswer.objects.create(
+            assessment=assessment_a, question_key="device_encryption", answer="yes"
+        )
+        assessment_b = BaselineAssessment.objects.create(
+            organisation=org_b, catalogue_version=CATALOGUE_VERSION
+        )
+        BaselineAnswer.objects.create(
+            assessment=assessment_b, question_key="device_encryption", answer="no",
+            note="org B secret note - never for org A",
+        )
 
-    def test_fake_gateway_receives_only_organisation_b_own_facts_when_called_for_b(
-        self, org_a, org_b, profile_a, profile_b, confirmed_asset_a, confirmed_asset_b,
+        created_a = generate_draft_risks(org_a)
+
+        matching = [r for r in created_a if r.scenario_id == "endpoint_device_encryption_loss_theft"]
+        assert matching == []  # org A answered 'yes' - must not trigger regardless of org B
+        assert not any("org B secret note" in str(r.assumptions) for r in created_a)
+
+    def test_org_as_generation_never_creates_a_risk_referencing_org_bs_asset(self, org_a, org_b):
+        KeyAsset.objects.create(
+            organisation=org_a, name="Org A endpoint", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
+        other_org_asset = KeyAsset.objects.create(
+            organisation=org_b, name="Org B endpoint", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
+
+        created = generate_draft_risks(org_a)
+
+        assert created  # sanity: org A's own asset did produce candidates
+        assert all(r.key_asset_id != other_org_asset.id for r in created)
+        assert all(r.organisation_id == org_a.pk for r in created)
+        assert not any(str(other_org_asset.id) in ref for r in created for ref in r.grounding_refs)
+        assert not any(other_org_asset.name in r.title for r in created)
+
+    def test_org_as_generation_never_reads_org_bs_baseline_when_org_a_has_none_of_its_own(
+        self, org_a, org_b
     ):
-        gw = FakeGateway(mode="valid")
-        generate_draft_risks(org_b, gateway=gw)
+        """
+        Org A has no BaselineAssessment at all; org B has one answering the
+        same control 'no'. Every one of org A's device-encryption-scenario
+        risks must resolve via the 'missing answer -> unknown' default,
+        never via org B's row.
+        """
+        KeyAsset.objects.create(
+            organisation=org_a, name="Org A endpoint", category="endpoint",
+            criticality="medium", status=KeyAsset.STATUS_CONFIRMED,
+        )
+        assessment_b = BaselineAssessment.objects.create(
+            organisation=org_b, catalogue_version=CATALOGUE_VERSION
+        )
+        BaselineAnswer.objects.create(
+            assessment=assessment_b, question_key="device_encryption", answer="no",
+            note="org B only",
+        )
 
-        grounding_sent, _prompt_version = gw.calls[0]
-        assert grounding_sent.organisation_id == str(org_b.pk)
-        assert grounding_sent.profile_facts["description"] == profile_b.description
-        assert profile_a.description not in grounding_sent.profile_facts.values()
-        assert not any(a["id"] == str(confirmed_asset_a.id) for a in grounding_sent.asset_facts)
+        created = generate_draft_risks(org_a)
+
+        risk = next(r for r in created if r.scenario_id == "endpoint_device_encryption_loss_theft")
+        assert "not confirmed" in risk.vulnerability
+        assert "is not enabled" not in risk.vulnerability  # the assertive 'no' wording org B's answer would produce
+        assert "org B only" not in str(risk.assumptions)

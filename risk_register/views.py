@@ -4,7 +4,6 @@ from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from ai_platform.orchestration import GenerationFailed
 from organisations.views import get_member_organisation_or_404
 
 from risk_register.forms import RiskEditForm
@@ -51,30 +50,26 @@ def risk_generate(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
 
-    try:
-        created, _record = generate_draft_risks(organisation)
-    except GenerationFailed as exc:
-        # PID §14: a gateway outage must leave existing baseline, assets and
-        # confirmed risks untouched. generate_draft_risks() never writes a
-        # Risk row unless generation fully succeeded, so there is nothing to
-        # roll back here - this is purely reporting the failure clearly.
-        messages.error(
+    # PID §0.6/§0.7 (M002-3b dispatch): generation is now a deterministic
+    # scenario-instantiation pass - no AI call, no gateway, and therefore
+    # nothing here that can fail with a gateway/network error. It can only
+    # ever add new draft Risk rows or find nothing new to propose; existing
+    # confirmed/dismissed risks are structurally untouched either way (see
+    # risk_register.scenario_engine's dedup rule).
+    created = generate_draft_risks(organisation)
+    if created:
+        messages.success(
             request,
-            "AI risk generation could not be completed right now, so no new "
-            "suggestions were created. Your existing baseline, key assets and "
-            f"confirmed risks are unchanged. ({exc})",
+            f"Generated {len(created)} new AI-suggested risk(s) for review.",
         )
     else:
-        if created:
-            messages.success(
-                request,
-                f"Generated {len(created)} new AI-suggested risk(s) for review.",
-            )
-        else:
-            messages.success(
-                request,
-                "AI risk generation completed but did not propose any new risks.",
-            )
+        messages.success(
+            request,
+            "Risk generation completed but did not propose any new risks. "
+            "This can happen if there are no confirmed key assets yet, or "
+            "every applicable scenario for your confirmed assets and "
+            "baseline answers was already generated previously.",
+        )
 
     return redirect("risk_register:list", organisation_id=organisation.id)
 
