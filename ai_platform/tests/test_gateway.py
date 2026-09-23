@@ -93,15 +93,19 @@ def test_generate_still_rejects_a_version_that_is_not_registered_at_all(groundin
         gateway.generate(grounding, "risk_generation_v999_does_not_exist")
 
 
-def test_build_messages_for_version_resolves_v1_and_v2_and_rejects_unknown():
+def test_build_messages_for_version_resolves_v1_and_v2_and_v3_and_rejects_unknown():
     from ai_platform.prompts import KNOWN_PROMPT_VERSIONS, build_messages_for_version
     from ai_platform.prompts.risk_generation_v1 import build_messages as v1_build_messages
     from ai_platform.prompts.risk_generation_v2 import build_messages as v2_build_messages
+    from ai_platform.prompts.risk_generation_v3 import build_messages as v3_build_messages
 
     assert build_messages_for_version("risk_generation_v1") is v1_build_messages
     assert build_messages_for_version("risk_generation_v2") is v2_build_messages
+    assert build_messages_for_version("risk_generation_v3") is v3_build_messages
     assert build_messages_for_version("not_a_real_version") is None
-    assert set(KNOWN_PROMPT_VERSIONS) == {"risk_generation_v1", "risk_generation_v2"}
+    assert set(KNOWN_PROMPT_VERSIONS) == {
+        "risk_generation_v1", "risk_generation_v2", "risk_generation_v3",
+    }
 
 
 # --- Credential handling (PID §9.2, never log the credential) ---------------

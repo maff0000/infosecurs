@@ -52,7 +52,7 @@ def _baseline(**answers) -> dict:
 
 
 _M365_ASSET = {
-    "id": "aaaaaaaa-0000-0000-0000-000000000001",
+    "id": "6747bc6a-843f-4744-b9f7-3757d875cf20",
     "name": "Microsoft 365 tenant",
     "category": "identity_or_productivity",
     "criticality": "high",
@@ -60,7 +60,7 @@ _M365_ASSET = {
 }
 
 _AWS_ASSET = {
-    "id": "aaaaaaaa-0000-0000-0000-000000000002",
+    "id": "b2a4e3eb-fcfb-4e4d-815c-ada4d5da7504",
     "name": "AWS production environment",
     "category": "cloud_service",
     "criticality": "high",
@@ -68,7 +68,7 @@ _AWS_ASSET = {
 }
 
 _ENDPOINTS_ASSET = {
-    "id": "aaaaaaaa-0000-0000-0000-000000000003",
+    "id": "417b16e3-c464-4951-9296-d3a584aa165e",
     "name": "Employee endpoints",
     "category": "endpoint",
     "criticality": "medium",
@@ -210,7 +210,7 @@ GOLDEN_CORPUS = [
                 incident_reporting_route="yes",
             ),
             asset_facts=[_M365_ASSET, {
-                "id": "aaaaaaaa-0000-0000-0000-000000000004",
+                "id": "eb3014ad-77e8-4e76-bc0c-5df0305c72b1",
                 "name": "Client health records",
                 "category": "information",
                 "criticality": "critical",

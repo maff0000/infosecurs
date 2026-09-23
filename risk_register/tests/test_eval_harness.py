@@ -135,8 +135,59 @@ class TestRunEvalMechanics:
         gw = FakeGateway(mode="valid")
         report = run_eval(gw)
         assert report["corpus_version"] == "m002-golden-corpus-v1"
-        # M002 repair (2026-09-23): harness wiring moved to
-        # risk_generation_v2 alongside risk_register.services - see
-        # ai_platform/prompts/risk_generation_v2.py's docstring.
-        assert report["prompt_version"] == "risk_generation_v2"
+        # M002 repair round 2 (2026-09-23): harness wiring moved to
+        # risk_generation_v3 alongside risk_register.services - see
+        # ai_platform/prompts/risk_generation_v3.py's docstring.
+        assert report["prompt_version"] == "risk_generation_v3"
         assert "generated_at" in report
+
+
+class TestGoldenCorpusAssetIds:
+    """
+    M002 repair round 2 (2026-09-23): the corpus's synthetic asset ids used
+    to be highly repetitive ("aaaaaaaa-0000-0000-0000-000000000001" etc.) -
+    the live PID §18 eval showed this shape is a real transcription trap
+    for the model (it dropped a repeated hyphen group while copying). The
+    corpus was regenerated with realistic, non-repetitive uuid4-shaped ids
+    (see golden_corpus.py). These tests pin that property so it cannot
+    silently regress back to a repetitive pattern.
+    """
+
+    def _all_asset_ids(self):
+        ids = []
+        for case in GOLDEN_CORPUS:
+            for asset in case["grounding"].asset_facts:
+                ids.append(asset["id"])
+        return ids
+
+    def test_no_asset_id_contains_a_run_of_three_or_more_repeated_hex_groups(self):
+        # A "0000" (or similar) hyphen-separated group repeated 3+ times in
+        # one id is exactly the shape that produced the live transcription
+        # failure - assert every corpus asset id's groups are not that.
+        for asset_id in self._all_asset_ids():
+            groups = asset_id.split("-")
+            assert len(groups) == 5, f"{asset_id!r} is not a well-formed UUID"
+            from collections import Counter
+
+            counts = Counter(groups)
+            most_common_count = counts.most_common(1)[0][1]
+            assert most_common_count < 3, (
+                f"asset id {asset_id!r} repeats one hyphen group {most_common_count} "
+                "times - regressing back to the transcription-trap shape the live "
+                "eval found (see golden_corpus.py module docstring)"
+            )
+
+    def test_asset_ids_are_well_formed(self):
+        import uuid
+
+        for asset_id in self._all_asset_ids():
+            uuid.UUID(asset_id)  # raises ValueError if malformed
+
+    def test_asset_ids_are_unique_within_each_case(self):
+        # The same fixture asset object (e.g. _M365_ASSET) is deliberately
+        # reused across multiple corpus cases (see golden_corpus.py), so
+        # uniqueness is only meaningful within one case's own asset_facts -
+        # never two different ids inside the same case colliding.
+        for case in GOLDEN_CORPUS:
+            ids = [asset["id"] for asset in case["grounding"].asset_facts]
+            assert len(ids) == len(set(ids)), f"case {case['key']!r} has duplicate asset ids"

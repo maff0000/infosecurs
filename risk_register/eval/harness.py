@@ -36,7 +36,7 @@ import dataclasses
 import datetime
 
 from ai_platform.orchestration import GenerationFailed, generate_risks
-from ai_platform.prompts.risk_generation_v2 import PROMPT_VERSION
+from ai_platform.prompts.risk_generation_v3 import PROMPT_VERSION
 
 from risk_register.eval.golden_corpus import CORPUS_VERSION, GOLDEN_CORPUS, ensure_eval_organisations
 

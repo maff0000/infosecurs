@@ -21,12 +21,11 @@ class TestRunAiEvalCommandFakeGateway:
         assert report["case_count"] == 8
         assert len(report["cases"]) == 8
         assert report["corpus_version"] == "m002-golden-corpus-v1"
-        # M002 repair (2026-09-23): risk_register wiring moved to
-        # risk_generation_v2 after the live PID §18 eval found the v1
-        # prompt's grounding_refs formatting instruction was not reliably
-        # followed under real model conditions - see
-        # ai_platform/prompts/risk_generation_v2.py's docstring.
-        assert report["prompt_version"] == "risk_generation_v2"
+        # M002 repair round 2 (2026-09-23): risk_register wiring moved to
+        # risk_generation_v3 after the live PID §18 eval found v2's
+        # asset-id copy fidelity and empty-asset_reference failure modes -
+        # see ai_platform/prompts/risk_generation_v3.py's docstring.
+        assert report["prompt_version"] == "risk_generation_v3"
 
     def test_writes_report_to_output_file_when_requested(self, tmp_path):
         out = io.StringIO()

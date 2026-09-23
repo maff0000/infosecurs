@@ -9,8 +9,8 @@ place that maps a `prompt_version` string to the versioned module that
 knows how to render it, so the gateway never has to hardcode a version.
 
 Kept as a plain dict, not a generic plugin/entry-point system: PID §25
-reproducibility doctrine says two known versions do not justify more
-machinery than this. Adding a new version: create `risk_generation_vN.py`
+reproducibility doctrine says a handful of known versions does not justify
+more machinery than this. Adding a new version: create `risk_generation_vN.py`
 (see `risk_generation_v1.py`'s docstring for why versions are never mutated
 in place), then add its `PROMPT_VERSION -> module` entry to
 `_PROMPT_MODULES_BY_VERSION` below.
@@ -19,11 +19,12 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from ai_platform.prompts import risk_generation_v1, risk_generation_v2
+from ai_platform.prompts import risk_generation_v1, risk_generation_v2, risk_generation_v3
 
 _PROMPT_MODULES_BY_VERSION = {
     risk_generation_v1.PROMPT_VERSION: risk_generation_v1,
     risk_generation_v2.PROMPT_VERSION: risk_generation_v2,
+    risk_generation_v3.PROMPT_VERSION: risk_generation_v3,
 }
 
 # Exposed for error messages / diagnostics - never mutated at runtime.
