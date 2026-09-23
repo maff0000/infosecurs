@@ -26,6 +26,7 @@ from typing import Optional
 
 from ai_platform.contracts import ContractValidationError, GenerationResult, GroundingPayload
 from ai_platform.interpretation_contracts import InterpretationRequest, InterpretationResponse
+from ai_platform.policy_contracts import PolicyGenerationResult, PolicyGroundingPayload
 
 # Governed, generic Trinity alias (Central Architecture correction,
 # 2026-09-22). Not Infosecurs-specific - see PID §9.1, ARCHITECTURE.md "AI".
@@ -123,7 +124,44 @@ class RiskInterpretationGateway(abc.ABC):
         raise NotImplementedError
 
 
-class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway):
+class PolicyGenerationGateway(abc.ABC):
+    """Provider-neutral POLICY-generation boundary (M004 PID §13,
+    m004-2a-policy-foundation dispatch).
+
+    Deliberately a separate ABC from `RiskGenerationGateway`/
+    `RiskInterpretationGateway`, not a third abstract method bolted onto
+    either of them - same reasoning `RiskInterpretationGateway`'s own
+    docstring already gives for why IT is a separate ABC from
+    `RiskGenerationGateway`: this task has its own request/response
+    contract (`PolicyGroundingPayload`/`PolicyGenerationResult`, from
+    `ai_platform.policy_contracts`), and every existing
+    `RiskGenerationGateway`/`RiskInterpretationGateway` implementation/test-
+    double only ever needed to satisfy `generate()`/`interpret()`. Adding
+    `generate_policy()` as a third abstractmethod on either existing ABC
+    would force every existing gateway test double to grow a meaningless
+    implementation of a method those tests have no reason to exercise.
+    `LiteLLMGateway` below implements all THREE ABCs on the one concrete
+    class - reusing its HTTP/retry/credential mechanics for all three tasks
+    - which is exactly what the "don't duplicate the retry/timeout/
+    credential mechanics" instruction requires; `ai_platform.testing.
+    FakePolicyGateway` is this ABC's own, separate test double, mirroring
+    `FakeGateway`/`FakeInterpretationGateway`'s mode-based pattern.
+    """
+
+    @abc.abstractmethod
+    def generate_policy(
+        self, grounding: PolicyGroundingPayload, prompt_version: str
+    ) -> PolicyGenerationResult:
+        """Run one policy-generation call and return a validated
+        `PolicyGenerationResult`.
+
+        Raises a `GatewayError` subclass on any failure - never returns a
+        partially-valid result.
+        """
+        raise NotImplementedError
+
+
+class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway, PolicyGenerationGateway):
     """Real implementation - the existing Trinity LiteLLM-compatible
     gateway (PID §9.1, §9.2, §24).
 
@@ -250,6 +288,74 @@ class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway):
             payload, prompt_version, request.expected_indices
         )
 
+    def generate_policy(
+        self, grounding: PolicyGroundingPayload, prompt_version: str
+    ) -> PolicyGenerationResult:
+        """`PolicyGenerationGateway.generate_policy` (M004
+        m004-2a-policy-foundation dispatch). Reuses this class's own
+        `_send`/`_read_credential`/`_raise_for_status`/
+        `_extract_structured_content` exactly as `generate()`/`interpret()`
+        do above - same HTTP client, same lazy config loading, same error
+        taxonomy, same credential handling - only the built request
+        messages and the response contract parser differ.
+
+        Model alias: reuses `AI_RISK_MODEL_ALIAS` (PID §13 names the same
+        governed `trinity-core` alias for policy generation as for risk
+        generation - there is no separate policy-specific model-alias env
+        var to invent).
+        """
+        # Local imports: keep config/prompt loading lazy, and keep this
+        # module importable without Django settings configured - same
+        # reasoning as generate()/interpret() above.
+        from config.env import optional_env, require_env
+
+        from ai_platform.prompts import (
+            KNOWN_POLICY_PROMPT_VERSIONS,
+            build_policy_messages_for_version,
+        )
+
+        build_messages = build_policy_messages_for_version(prompt_version)
+        if build_messages is None:
+            raise InvalidResponseError(
+                f"requested prompt_version {prompt_version!r} is not one of the "
+                f"policy-generation prompt versions this gateway build knows how "
+                f"to render {KNOWN_POLICY_PROMPT_VERSIONS!r}"
+            )
+
+        base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
+        key_file = require_env("AI_GATEWAY_API_KEY_FILE")
+        model_alias = optional_env("AI_RISK_MODEL_ALIAS", DEFAULT_MODEL_ALIAS)
+
+        api_key = self._read_credential(key_file)
+
+        request_body = json.dumps(
+            {
+                "model": model_alias,
+                "messages": build_messages(grounding),
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            url=f"{base_url}/v1/chat/completions",
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+
+        status, raw_body = self._send(http_request)
+        self._raise_for_status(status, raw_body)
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidResponseError("AI gateway response was not valid JSON") from exc
+
+        return self._parse_openai_policy_response(payload, prompt_version)
+
     def _send(self, request: urllib.request.Request):
         """Perform the HTTP call, translating transport failures into typed
         gateway exceptions. Never logs/echoes the Authorization header."""
@@ -372,6 +478,29 @@ class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway):
             return InterpretationResponse.from_response_dict(
                 structured,
                 expected_indices=expected_indices,
+                resolved_model=resolved_model,
+                prompt_version=prompt_version,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except ContractValidationError as exc:
+            raise InvalidResponseError(str(exc)) from exc
+
+    @staticmethod
+    def _parse_openai_policy_response(
+        payload: dict, prompt_version: str
+    ) -> PolicyGenerationResult:
+        """Policy-generation-task counterpart to `_parse_openai_response`/
+        `_parse_openai_interpretation_response` - same envelope unwrap
+        (`_extract_structured_content`), different response-contract
+        parser (`PolicyGenerationResult.from_response_dict`)."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
+
+        try:
+            return PolicyGenerationResult.from_response_dict(
+                structured,
                 resolved_model=resolved_model,
                 prompt_version=prompt_version,
                 prompt_tokens=prompt_tokens,

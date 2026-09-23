@@ -35,9 +35,21 @@ class AIInvocationRecord(models.Model):
     # historical AIInvocationRecord's task_type stop reliably describing
     # what call actually happened.
     TASK_RISK_INTERPRETATION = "risk_interpretation"
+    # M004 PID §13/§14 (m004-2a-policy-foundation dispatch): AI drafting of
+    # the Information Security Policy from an already-assembled,
+    # already-tenant-scoped `PolicyGroundingPayload`. A third distinct
+    # task_type, for the same reason the two above are distinct from each
+    # other - a different call shape (ai_platform.policy_contracts, not
+    # ai_platform.contracts/interpretation_contracts) doing a materially
+    # different job (draft policy prose, never touch risk_register.Risk at
+    # all) - collapsing it into an existing task_type would make a
+    # historical AIInvocationRecord's task_type stop reliably describing
+    # what call actually happened.
+    TASK_POLICY_GENERATION = "policy_generation"
     TASK_TYPE_CHOICES = [
         (TASK_INITIAL_RISK_GENERATION, "Initial risk generation"),
         (TASK_RISK_INTERPRETATION, "Risk interpretation"),
+        (TASK_POLICY_GENERATION, "Policy generation"),
     ]
 
     STATUS_PENDING = "pending"
@@ -169,6 +181,30 @@ class AIInvocationRecord(models.Model):
         """
         canonical = json.dumps(
             {"candidates": [c.to_wire_dict() for c in request.candidates]},
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def hash_policy_grounding(grounding) -> str:
+        """Canonical SHA-256 hash of a
+        `ai_platform.policy_contracts.PolicyGroundingPayload`'s facts
+        (M004 PID §13, m004-2a-policy-foundation dispatch). Mirrors
+        `hash_grounding` exactly - same rationale (PID §13: an immutable
+        reference to what was sent, without duplicating the raw payload in
+        the database) - but over this task's own fact-group shape.
+        """
+        canonical = json.dumps(
+            {
+                "organisation_id": grounding.organisation_id,
+                "organisation_facts": grounding.organisation_facts,
+                "workplace_facts": grounding.workplace_facts,
+                "governance_facts": grounding.governance_facts,
+                "baseline_facts": grounding.baseline_facts,
+                "security_state_facts": grounding.security_state_facts,
+                "open_risk_facts": grounding.open_risk_facts,
+            },
             sort_keys=True,
             default=str,
         )

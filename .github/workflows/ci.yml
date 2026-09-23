@@ -72,6 +72,9 @@ jobs:
           governance/tests/test_services.py
           workplace/tests/test_models.py
           workplace/tests/test_services.py
+          policy/tests/test_models.py
+          policy/tests/test_grounding.py
+          policy/tests/test_services.py
 
   integration:
     name: ci/integration
@@ -144,3 +147,5 @@ jobs:
           workplace/tests/test_tenant_isolation.py
           identity/tests/test_federated_login.py
           identity/tests/test_unsafe_linking.py
+          policy/tests/test_http_ui.py
+          policy/tests/test_tenant_isolation.py

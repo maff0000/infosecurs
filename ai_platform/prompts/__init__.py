@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from ai_platform.prompts import (
+    policy_generation_v1,
     risk_generation_v1,
     risk_generation_v2,
     risk_generation_v3,
@@ -65,4 +66,23 @@ def build_interpretation_messages_for_version(prompt_version: str) -> Optional[C
     `prompt_version` for the interpretation task, or `None` if
     `prompt_version` is not one this build knows how to render."""
     module = _INTERPRETATION_PROMPT_MODULES_BY_VERSION.get(prompt_version)
+    return module.build_messages if module is not None else None
+
+
+# --- Policy-generation task (M004 m004-2a-policy-foundation dispatch) -
+# separate registry, same reasoning as the interpretation registry above:
+# this task's `build_messages` callable takes a `PolicyGroundingPayload`,
+# a different argument type from either other task's. -----------------------
+_POLICY_PROMPT_MODULES_BY_VERSION = {
+    policy_generation_v1.PROMPT_VERSION: policy_generation_v1,
+}
+
+KNOWN_POLICY_PROMPT_VERSIONS = tuple(_POLICY_PROMPT_MODULES_BY_VERSION)
+
+
+def build_policy_messages_for_version(prompt_version: str) -> Optional[Callable]:
+    """Return the `build_messages(grounding)` callable that renders
+    `prompt_version` for the policy-generation task, or `None` if
+    `prompt_version` is not one this build knows how to render."""
+    module = _POLICY_PROMPT_MODULES_BY_VERSION.get(prompt_version)
     return module.build_messages if module is not None else None

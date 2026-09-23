@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "governance",
     "workplace",
     "identity",
+    "policy",
 ]
 
 MIDDLEWARE = [

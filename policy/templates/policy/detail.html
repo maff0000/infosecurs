@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Information Security Policy — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Information Security Policy</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <form method="post" action="{% url 'policy:generate' organisation.id %}">
+        {% csrf_token %}
+        <button type="submit" class="button button--primary">Generate policy draft</button>
+    </form>
+</div>
+
+{% if version %}
+    <p class="page-header__subtitle">
+        Version {{ version.version_number }} &mdash; {{ version.get_status_display }}
+    </p>
+    <h2>{{ version.title }}</h2>
+
+    {% if version.review_warnings %}
+        <section class="form-section">
+            <legend>Review warnings</legend>
+            <ul>
+                {% for warning in version.review_warnings %}
+                    <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+
+    {% for section in version.sections %}
+        <section class="form-section">
+            <legend>{{ section.section_key }}</legend>
+            <p>{{ section.content }}</p>
+        </section>
+    {% endfor %}
+{% else %}
+    <p>No policy draft has been generated yet.</p>
+{% endif %}
+{% endblock %}
