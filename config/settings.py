@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "security_baseline",
     "key_assets",
     "ai_platform",
+    "risk_register",
 ]
 
 MIDDLEWARE = [

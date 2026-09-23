@@ -37,4 +37,14 @@
         <p>Complete the organisation profile first to see starter asset suggestions.</p>
     {% endif %}
 </div>
+
+<div class="summary-card">
+    <h2>Risk register</h2>
+    {% if profile_exists %}
+        <p>Generate AI-suggested initial risks grounded in your profile, baseline and key assets, then review, edit, confirm or dismiss each one.</p>
+        <a class="button button--primary" href="{% url 'risk_register:list' organisation.id %}">Open risk register</a>
+    {% else %}
+        <p>Complete the organisation profile, security baseline and key assets first to generate an initial risk register.</p>
+    {% endif %}
+</div>
 {% endblock %}

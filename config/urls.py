@@ -17,4 +17,8 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/assets/",
         include("key_assets.urls"),
     ),
+    path(
+        "organisations/<uuid:organisation_id>/risks/",
+        include("risk_register.urls"),
+    ),
 ]

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{{ risk.title }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .risk-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--ai-suggested { background: #fdf1d6; color: #8a5a00; }
+  .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--band-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--band-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--band-high { background: #fbe6d6; color: #a3521f; }
+  .badge--band-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+  .risk-detail__section { margin-bottom: var(--space-4); }
+  .risk-detail__label { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .risk-detail__ratings { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+  .risk-detail__rating { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+  .risk-detail__rating-value { font-size: 1.4rem; font-weight: 700; }
+  .grounding-list, .assumptions-list { margin: 0; padding-left: 1.2rem; }
+  .grounding-list li { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+  .provenance-note {
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ risk.title }}</h1>
+        <p class="page-header__subtitle"><a href="{% url 'risk_register:list' organisation.id %}">&larr; Back to risk register</a> &middot; {{ organisation.name }}</p>
+    </div>
+</div>
+
+<div class="risk-detail__status-row">
+    {% if risk.status == "draft_ai_suggested" %}
+        <span class="badge badge--ai-suggested">AI suggested — not yet confirmed</span>
+    {% elif risk.status == "confirmed" %}
+        <span class="badge badge--confirmed">Customer confirmed</span>
+    {% else %}
+        <span class="badge badge--dismissed">Dismissed</span>
+    {% endif %}
+    <span class="badge badge--band-{{ risk.risk_band }}">{{ risk.risk_band_label }} risk &middot; score {{ risk.score }}</span>
+</div>
+
+<div class="provenance-note">
+    {% if risk.source == "ai" %}
+        This risk was <strong>AI suggested</strong> - a draft proposal for you to review, not an
+        established fact about your organisation. It becomes part of your confirmed risk register
+        only when you explicitly confirm it below.
+    {% else %}
+        This is a <strong>manually recorded</strong> risk.
+    {% endif %}
+    {% if risk.status == "confirmed" %}
+        Confirmed by {{ risk.confirmed_by }} on {{ risk.confirmed_at }} (UTC).
+    {% elif risk.status == "dismissed" %}
+        Dismissed by {{ risk.dismissed_by }} on {{ risk.dismissed_at }} (UTC).
+    {% endif %}
+</div>
+
+<div class="risk-detail__ratings" style="margin-top: var(--space-4);">
+    <div class="risk-detail__rating">
+        <p class="risk-detail__label">Impact</p>
+        <p class="risk-detail__rating-value">{{ risk.get_impact_display }}</p>
+    </div>
+    <div class="risk-detail__rating">
+        <p class="risk-detail__label">Likelihood</p>
+        <p class="risk-detail__rating-value">{{ risk.get_likelihood_display }}</p>
+    </div>
+    <div class="risk-detail__rating">
+        <p class="risk-detail__label">Score (impact &times; likelihood)</p>
+        <p class="risk-detail__rating-value">{{ risk.score }} — {{ risk.risk_band_label }}</p>
+    </div>
+</div>
+
+<div class="summary-card risk-detail__section" style="margin-top: var(--space-4);">
+    <h2>Threat &amp; vulnerability</h2>
+    <p class="risk-detail__label">Threat</p>
+    <p>{{ risk.threat }}</p>
+    <p class="risk-detail__label">Vulnerability / exposure</p>
+    <p>{{ risk.vulnerability }}</p>
+    {% if risk.asset_reference %}
+        <p class="risk-detail__label">Asset / context reference</p>
+        <p>
+            {% if risk.key_asset %}
+                <a href="{% url 'key_assets:edit' organisation.id risk.key_asset.id %}">{{ risk.key_asset.name }}</a>
+            {% else %}
+                {{ risk.asset_reference }}
+            {% endif %}
+        </p>
+    {% endif %}
+</div>
+
+<div class="summary-card risk-detail__section">
+    <h2>Rationale &amp; proposed treatment</h2>
+    <p class="risk-detail__label">Rationale</p>
+    <p>{{ risk.rationale }}</p>
+    <p class="risk-detail__label">Proposed treatment / next action</p>
+    <p>{{ risk.proposed_treatment }}</p>
+</div>
+
+<div class="summary-card risk-detail__section">
+    <h2>Grounding</h2>
+    <p class="risk-detail__label">What this risk was grounded in</p>
+    {% if risk.grounding_refs %}
+        <ul class="grounding-list">
+            {% for ref in risk.grounding_refs %}<li>{{ ref }}</li>{% endfor %}
+        </ul>
+    {% else %}
+        <p>No grounding references recorded (manually created risk).</p>
+    {% endif %}
+    <p class="risk-detail__label" style="margin-top: var(--space-3);">Assumptions / unknowns</p>
+    {% if risk.assumptions %}
+        <ul class="assumptions-list">
+            {% for assumption in risk.assumptions %}<li>{{ assumption }}</li>{% endfor %}
+        </ul>
+    {% else %}
+        <p>None recorded.</p>
+    {% endif %}
+</div>
+
+<div class="form-actions">
+    {% if risk.status == "draft_ai_suggested" %}
+        <a class="button button--secondary" href="{% url 'risk_register:edit' organisation.id risk.id %}">Edit</a>
+        <form method="post" action="{% url 'risk_register:dismiss' organisation.id risk.id %}">
+            {% csrf_token %}
+            <button type="submit" class="link-button">Dismiss</button>
+        </form>
+        <form method="post" action="{% url 'risk_register:confirm' organisation.id risk.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--primary">Confirm</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

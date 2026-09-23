@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Risk register — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .risk-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .risk-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .risk-card--dismissed { opacity: 0.65; }
+  .risk-card__body { flex: 1 1 360px; min-width: 0; }
+  .risk-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .risk-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
+  .risk-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--ai-suggested { background: #fdf1d6; color: #8a5a00; }
+  .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--band-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--band-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--band-high { background: #fbe6d6; color: #a3521f; }
+  .badge--band-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+  .risk-section { margin-bottom: var(--space-5); }
+  .risk-section__intro { color: var(--color-text-muted); margin: -8px 0 var(--space-3) 0; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Risk register</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <form method="post" action="{% url 'risk_register:generate' organisation.id %}">
+        {% csrf_token %}
+        <button type="submit" class="button button--primary">Generate initial risks</button>
+    </form>
+</div>
+
+<div class="empty-state" style="text-align: left;">
+    <p>
+        Generation asks the governed AI adapter to propose draft risks grounded in your organisation
+        profile, security baseline and confirmed key assets. Suggestions are always <strong>AI suggested</strong>
+        until you review and explicitly confirm them - nothing here becomes part of your confirmed risk
+        register on its own.
+    </p>
+</div>
+
+<section class="risk-section">
+    <h2>AI suggested (needs review)</h2>
+    <p class="risk-section__intro">
+        These are draft proposals for you to review. Nothing is confirmed until you say so.
+    </p>
+    {% if draft_risks %}
+        <div class="risk-grid">
+            {% for risk in draft_risks %}
+                <div class="risk-card">
+                    <div class="risk-card__body">
+                        <p class="risk-card__title">
+                            <a href="{% url 'risk_register:detail' organisation.id risk.id %}">{{ risk.title }}</a>
+                            <span class="badge badge--ai-suggested">AI suggested</span>
+                            <span class="badge badge--band-{{ risk.risk_band }}">{{ risk.risk_band_label }} ({{ risk.score }})</span>
+                        </p>
+                        <p class="risk-card__meta">{{ risk.threat }}</p>
+                    </div>
+                    <div class="risk-card__actions">
+                        <a class="button button--secondary" href="{% url 'risk_register:detail' organisation.id risk.id %}">Review</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>No AI suggestions pending review. Generate initial risks to get started.</p></div>
+    {% endif %}
+</section>
+
+<section class="risk-section">
+    <h2>Confirmed</h2>
+    <p class="risk-section__intro">Customer confirmed. This is your active risk register.</p>
+    {% if confirmed_risks %}
+        <div class="risk-grid">
+            {% for risk in confirmed_risks %}
+                <div class="risk-card">
+                    <div class="risk-card__body">
+                        <p class="risk-card__title">
+                            <a href="{% url 'risk_register:detail' organisation.id risk.id %}">{{ risk.title }}</a>
+                            <span class="badge badge--confirmed">Customer confirmed</span>
+                            <span class="badge badge--band-{{ risk.risk_band }}">{{ risk.risk_band_label }} ({{ risk.score }})</span>
+                        </p>
+                        <p class="risk-card__meta">{{ risk.threat }}</p>
+                    </div>
+                    <div class="risk-card__actions">
+                        <a class="button button--secondary" href="{% url 'risk_register:detail' organisation.id risk.id %}">View</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>No confirmed risks yet.</p></div>
+    {% endif %}
+</section>
+
+{% if dismissed_risks %}
+    <section class="risk-section">
+        <h2>Dismissed</h2>
+        <p class="risk-section__intro">Kept here for reference. Not part of the confirmed risk register.</p>
+        <div class="risk-grid">
+            {% for risk in dismissed_risks %}
+                <div class="risk-card risk-card--dismissed">
+                    <div class="risk-card__body">
+                        <p class="risk-card__title">
+                            <a href="{% url 'risk_register:detail' organisation.id risk.id %}">{{ risk.title }}</a>
+                            <span class="badge badge--dismissed">Dismissed</span>
+                        </p>
+                        <p class="risk-card__meta">{{ risk.threat }}</p>
+                    </div>
+                    <div class="risk-card__actions">
+                        <a class="button button--secondary" href="{% url 'risk_register:detail' organisation.id risk.id %}">View</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+{% endblock %}
