@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Edit draft — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Edit draft policy</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'policy:version_detail' organisation.id version.id %}">&larr; Back to version</a>
+            &middot; {{ organisation.name }} &middot; Version {{ version.version_number }}
+        </p>
+    </div>
+</div>
+
+<div class="form-card">
+    <p class="form-card__intro">
+        This is still a <strong>draft</strong>. Review and edit each section below, then approve it
+        once it is ready.
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="field {% if form.title.errors %}field--error{% endif %}">
+            <label for="{{ form.title.id_for_label }}">Title</label>
+            {{ form.title }}
+            {% if form.title.errors %}<p class="field__error">{{ form.title.errors|join:", " }}</p>{% endif %}
+        </div>
+
+        <div class="field {% if form.next_review_date.errors %}field--error{% endif %}">
+            <label for="{{ form.next_review_date.id_for_label }}">Next review date</label>
+            {{ form.next_review_date }}
+            {% if form.next_review_date.errors %}<p class="field__error">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
+        </div>
+
+        {% for field in form %}
+            {% if field.name != "title" and field.name != "next_review_date" %}
+                <div class="field {% if field.errors %}field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<p class="field__error">{{ field.errors|join:", " }}</p>{% endif %}
+                </div>
+            {% endif %}
+        {% endfor %}
+
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'policy:version_detail' organisation.id version.id %}">Cancel</a>
+            <button type="submit" class="button button--primary">Save changes</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

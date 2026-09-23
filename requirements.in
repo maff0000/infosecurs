@@ -6,3 +6,9 @@ psycopg[binary]==3.3.6
 # token exchange/profile fetch - see identity/adapters.py and
 # config/settings.py's SOCIALACCOUNT_PROVIDERS block.
 django-allauth[socialaccount]==65.19.4
+# Approved-policy PDF rendering (M004 PID §19, m004-2b-policy-lifecycle
+# dispatch). Pure-Python, high-level platypus flowable API - no
+# system-level Cairo/Pango dependency to add to the Dockerfile (unlike
+# WeasyPrint), keeping this within the build-reproducibility discipline in
+# docs/delivery/BUILD-REPRODUCIBILITY.md. See policy/pdf.py.
+reportlab==5.0.1

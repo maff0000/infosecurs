@@ -77,12 +77,20 @@ class PolicyVersion(models.Model):
     ]
 
     GENERATION_SOURCE_AI = "ai"
-    # V1 has no other generation source yet, but this is named as a choice
-    # field anyway, not a boolean - PID §15's own field list calls it
-    # "generation source" - leaving room for a future non-AI-authored
-    # version (e.g. a fully manual draft) without a schema change.
+    # Added by the m004-2b-policy-lifecycle dispatch: the "future
+    # non-AI-authored version" the field's original docstring anticipated
+    # ("leaving room for a future non-AI-authored version (e.g. a fully
+    # manual draft) without a schema change") has now arrived - a new draft
+    # created FROM an approved version (PID §15 "later create a new
+    # draft/version") is a plain content copy, not a fresh AI call, and
+    # honestly recording that distinction here is what lets
+    # `policy.services.create_new_draft_from_approved` avoid reusing
+    # `EVENT_POLICY_DRAFT_GENERATED` (an AI-specific event, see that
+    # event's own docstring in activity/models.py) for a manual copy.
+    GENERATION_SOURCE_MANUAL = "manual"
     GENERATION_SOURCE_CHOICES = [
         (GENERATION_SOURCE_AI, "AI generated"),
+        (GENERATION_SOURCE_MANUAL, "Manually created (copied from a previous version)"),
     ]
 
     APPROVAL_MODE_DIRECT = "direct"

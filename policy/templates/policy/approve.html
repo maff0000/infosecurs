@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if mode == "direct" %}Approve policy{% else %}Record external approval{% endif %}
+    — {{ organisation.name }} — {{ product_name }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        {% if mode == "direct" %}
+            <h1>Approve policy directly</h1>
+        {% else %}
+            <h1>Record external approval</h1>
+        {% endif %}
+        <p class="page-header__subtitle">
+            <a href="{% url 'policy:version_detail' organisation.id version.id %}">&larr; Back to version</a>
+            &middot; {{ organisation.name }} &middot; {{ version.title }} (version {{ version.version_number }})
+        </p>
+    </div>
+</div>
+
+<div class="form-card">
+    {% if mode == "direct" %}
+        <p class="form-card__intro">
+            You are listed as the Policy Authoriser for this organisation. Confirming below records
+            that <strong>you, {{ policy_authoriser.full_name }}</strong>, approve this policy directly.
+        </p>
+    {% else %}
+        <p class="form-card__intro">
+            The assigned Policy Authoriser is <strong>{{ policy_authoriser.full_name }}{% if policy_authoriser.job_title %}, {{ policy_authoriser.job_title }}{% endif %}</strong>,
+            who does not sign in to Infosecurs themselves. Confirming below records that <strong>you</strong>
+            (the Account Holder) are noting that {{ policy_authoriser.full_name }} approved this policy
+            <strong>outside Infosecurs</strong> — it does not mean {{ policy_authoriser.full_name }} logged in
+            or approved it themselves within the system.
+        </p>
+    {% endif %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+        <div class="field {% if form.next_review_date.errors %}field--error{% endif %}">
+            <label for="{{ form.next_review_date.id_for_label }}">Next review date</label>
+            {% if form.next_review_date.help_text %}<p class="field__help">{{ form.next_review_date.help_text }}</p>{% endif %}
+            {{ form.next_review_date }}
+            {% if form.next_review_date.errors %}<p class="field__error">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'policy:version_detail' organisation.id version.id %}">Cancel</a>
+            {% if mode == "direct" %}
+                <button type="submit" class="button button--primary">Confirm direct approval</button>
+            {% else %}
+                <button type="submit" class="button button--primary">Confirm external approval was recorded</button>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}
