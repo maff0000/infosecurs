@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Edit risk — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Edit risk</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'risk_register:detail' organisation.id risk.id %}">&larr; Back to risk</a> &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<div class="form-card">
+    <p class="form-card__intro">
+        This risk is still an <strong>AI suggestion</strong>. Edit anything that isn't quite right before
+        you confirm it - nothing here is part of your confirmed risk register yet.
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">
+                    {{ field.label }}{% if field.field.required %} <span class="required-marker">*</span>{% endif %}
+                </label>
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {{ field }}
+                {% if field.errors %}<p class="field__error">{{ field.errors|join:", " }}</p>{% endif %}
+            </div>
+        {% endfor %}
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'risk_register:detail' organisation.id risk.id %}">Cancel</a>
+            <button type="submit" class="button button--primary">Save changes</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

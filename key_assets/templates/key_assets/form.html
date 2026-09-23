@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == "edit" %}Edit asset{% else %}Add asset{% endif %} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{% if mode == "edit" %}Edit asset{% else %}Add asset{% endif %}</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Asset details</legend>
+        {% if mode == "edit" and asset.status == "suggested" %}
+            <p class="form-section__help">
+                This is a suggested asset - it isn't part of your confirmed asset baseline yet.
+                Editing it here does not confirm it; use "Confirm" on the Key Assets page once it looks right.
+            </p>
+        {% endif %}
+
+        <div class="field {% if form.name.errors %}field--error{% endif %}">
+            <label for="{{ form.name.id_for_label }}">Name <span class="required-marker" aria-hidden="true">*</span></label>
+            <p class="field__help">What the asset is, in plain language.</p>
+            {{ form.name }}
+            {% for error in form.name.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.category.errors %}field--error{% endif %}">
+            <label for="{{ form.category.id_for_label }}">Category <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.category }}
+            {% for error in form.category.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.criticality.errors %}field--error{% endif %}">
+            <label for="{{ form.criticality.id_for_label }}">Business criticality <span class="required-marker" aria-hidden="true">*</span></label>
+            <p class="field__help">How much it would matter to the business if this asset were compromised or unavailable.</p>
+            {{ form.criticality }}
+            {% for error in form.criticality.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.description.errors %}field--error{% endif %}">
+            <label for="{{ form.description.id_for_label }}">Short description</label>
+            <p class="field__help">Optional.</p>
+            {{ form.description }}
+            {% for error in form.description.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions">
+        <a class="button button--secondary" href="{% url 'key_assets:list' organisation.id %}">Cancel</a>
+        <button type="submit" class="button button--primary">
+            {% if mode == "edit" %}Save changes{% else %}Add asset{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Security baseline — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Security baseline</h1>
+    <p class="page-header__subtitle">{{ organisation.name }}</p>
+</div>
+
+<p class="form-card__intro">
+    These answers are <strong>statements you confirm</strong>, not controls the system has independently
+    verified. Answer honestly, including "Not confirmed" where you're not sure - an accurate "unknown" is more
+    useful than a guess. You can change any answer later as your organisation's security improves.
+</p>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="baseline-form" novalidate>
+    {% csrf_token %}
+
+    {% for question in questions %}
+        <fieldset class="form-section">
+            <legend>{{ question.item.area }}</legend>
+
+            <div class="field {% if question.answer_field.errors %}field--error{% endif %}">
+                <label for="{{ question.answer_field.id_for_label }}">{{ question.item.question }}</label>
+                {% if question.item.help_text %}
+                    <p class="field__help">{{ question.item.help_text }}</p>
+                {% endif %}
+                {{ question.answer_field }}
+                {% for error in question.answer_field.errors %}
+                    <p class="field__error" role="alert">{{ error }}</p>
+                {% endfor %}
+            </div>
+
+            <div class="field {% if question.note_field.errors %}field--error{% endif %}">
+                <label for="{{ question.note_field.id_for_label }}">Note (optional)</label>
+                <p class="field__help">Anything that explains the answer. This is your note, not an instruction to any automated system.</p>
+                {{ question.note_field }}
+                {% for error in question.note_field.errors %}
+                    <p class="field__error" role="alert">{{ error }}</p>
+                {% endfor %}
+            </div>
+        </fieldset>
+    {% endfor %}
+
+    <p class="page-header__subtitle">Catalogue version: {{ catalogue_version }}</p>
+
+    <div class="form-actions form-actions--sticky">
+        <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">Back</a>
+        <button type="submit" class="button button--primary">Save security baseline</button>
+    </div>
+</form>
+{% endblock %}

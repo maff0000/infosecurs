@@ -17,4 +17,34 @@
         <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">Start profile</a>
     {% endif %}
 </div>
+
+<div class="summary-card">
+    <h2>Security baseline</h2>
+    {% if profile_exists %}
+        <p>Answer a concise set of security-baseline questions for this organisation.</p>
+        <a class="button button--primary" href="{% url 'security_baseline:baseline' organisation.id %}">Open security baseline</a>
+    {% else %}
+        <p>Complete the organisation profile first to start the security baseline.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Key assets</h2>
+    {% if profile_exists %}
+        <p>Review deterministic starter suggestions and confirm the assets that matter most.</p>
+        <a class="button button--primary" href="{% url 'key_assets:list' organisation.id %}">Open key assets</a>
+    {% else %}
+        <p>Complete the organisation profile first to see starter asset suggestions.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
+    <h2>Risk register</h2>
+    {% if profile_exists %}
+        <p>Generate AI-suggested initial risks grounded in your profile, baseline and key assets, then review, edit, confirm or dismiss each one.</p>
+        <a class="button button--primary" href="{% url 'risk_register:list' organisation.id %}">Open risk register</a>
+    {% else %}
+        <p>Complete the organisation profile, security baseline and key assets first to generate an initial risk register.</p>
+    {% endif %}
+</div>
 {% endblock %}
