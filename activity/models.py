@@ -110,6 +110,32 @@ class ActivityEvent(models.Model):
     # `policy.services.generate_policy_draft`.
     EVENT_POLICY_DRAFT_GENERATED = "policy_draft_generated"
 
+    # Added by the m004-2b-policy-lifecycle dispatch, per PID §16-17, §22.
+    # Real emitters: `policy.views.policy_edit` (edited),
+    # `policy.services.approve_policy_directly` /
+    # `record_external_policy_approval` (approved - the same event type for
+    # BOTH approval modes, distinguished only by `metadata["approval_mode"]`
+    # - see ADR-0002 §4.1: the event *type* is not where the honesty
+    # distinction is drawn, the wording built from that metadata is),
+    # `policy.services._finalise_approval` (superseded, emitted for the
+    # PREVIOUS approved version when a new one is approved).
+    EVENT_POLICY_DRAFT_EDITED = "policy_draft_edited"
+    EVENT_POLICY_APPROVED = "policy_approved"
+    EVENT_POLICY_SUPERSEDED = "policy_superseded"
+    # A new draft created FROM an approved version (PID §15 "later create a
+    # new draft/version... without overwriting the previously approved
+    # version") is a plain content copy, not an AI call - deliberately a
+    # DIFFERENT event type from `EVENT_POLICY_DRAFT_GENERATED`, whose own
+    # docstring above ties it specifically to
+    # `policy.services.generate_policy_draft`'s AI-invocation path (that
+    # emitter records `ai_invocation_record`/`prompt_version`; this one has
+    # neither). Reusing the AI event here would blur exactly the kind of
+    # provenance distinction this activity trail exists to preserve - see
+    # `policy.models.PolicyVersion.GENERATION_SOURCE_MANUAL`'s docstring for
+    # the same reasoning applied to the model layer. Real emitter:
+    # `policy.services.create_new_draft_from_approved`.
+    EVENT_POLICY_NEW_DRAFT_CREATED = "policy_new_draft_created"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -127,6 +153,10 @@ class ActivityEvent(models.Model):
         (EVENT_WORKPLACE_CREATED, "Workplace created"),
         (EVENT_WORKPLACE_UPDATED, "Workplace updated"),
         (EVENT_POLICY_DRAFT_GENERATED, "Policy draft generated"),
+        (EVENT_POLICY_DRAFT_EDITED, "Policy draft edited"),
+        (EVENT_POLICY_APPROVED, "Policy approved"),
+        (EVENT_POLICY_SUPERSEDED, "Policy superseded"),
+        (EVENT_POLICY_NEW_DRAFT_CREATED, "New policy draft created from approved version"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -235,4 +265,29 @@ class ActivityEvent(models.Model):
         if self.event_type == self.EVENT_POLICY_DRAFT_GENERATED:
             version_number = self.metadata.get("version_number", "?")
             return f"Policy draft generated (version {version_number})"
+        if self.event_type == self.EVENT_POLICY_DRAFT_EDITED:
+            parts = []
+            changed_sections = self.metadata.get("changed_sections", [])
+            if changed_sections:
+                parts.append(f"{len(changed_sections)} section(s)")
+            if self.metadata.get("title_changed"):
+                parts.append("title")
+            if self.metadata.get("next_review_date_changed"):
+                parts.append("next review date")
+            changed_desc = ", ".join(parts) or "details"
+            return f"Policy draft edited ({changed_desc} changed)"
+        if self.event_type == self.EVENT_POLICY_APPROVED:
+            version_number = self.metadata.get("version_number", "?")
+            approval_mode = self.metadata.get("approval_mode", "?")
+            return f"Policy version {version_number} approved ({approval_mode})"
+        if self.event_type == self.EVENT_POLICY_SUPERSEDED:
+            superseded_by = self.metadata.get("superseded_by_version_number", "?")
+            return f"Policy version superseded by version {superseded_by}"
+        if self.event_type == self.EVENT_POLICY_NEW_DRAFT_CREATED:
+            version_number = self.metadata.get("version_number", "?")
+            source_version_number = self.metadata.get("source_version_number", "?")
+            return (
+                f"New policy draft (version {version_number}) created from "
+                f"approved version {source_version_number}"
+            )
         return self.get_event_type_display()

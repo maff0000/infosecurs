@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ version.title }} (v{{ version.version_number }}) — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ version.title }}</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'policy:detail' organisation.id %}">&larr; Back to policy overview</a>
+            &middot; {{ organisation.name }} &middot; Version {{ version.version_number }} &mdash; {{ version.get_status_display }}
+        </p>
+    </div>
+    <div class="form-actions">
+        {% if version.status == "draft" %}
+            <a class="button button--secondary" href="{% url 'policy:version_edit' organisation.id version.id %}">Edit draft</a>
+            {% if can_approve_directly %}
+                <a class="button button--primary" href="{% url 'policy:version_approve_direct' organisation.id version.id %}">Approve this policy</a>
+            {% elif can_record_external %}
+                <a class="button button--primary" href="{% url 'policy:version_approve_external' organisation.id version.id %}">Record external approval</a>
+            {% elif not policy_authoriser %}
+                <p class="field__help">No Policy Authoriser is currently assigned.</p>
+            {% endif %}
+        {% elif version.status == "approved" %}
+            <a class="button button--secondary" href="{% url 'policy:version_download' organisation.id version.id %}">Download PDF</a>
+            <form method="post" action="{% url 'policy:version_new_draft' organisation.id version.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button button--primary">Create new draft to edit</button>
+            </form>
+        {% elif version.status == "superseded" %}
+            <a class="button button--secondary" href="{% url 'policy:version_download' organisation.id version.id %}">Download PDF</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if approval_summary %}
+    <p><strong>{{ approval_summary }}</strong></p>
+{% endif %}
+
+{% if version.status == "superseded" and version.superseded_by %}
+    <p class="field__help">
+        This version has been superseded by
+        <a href="{% url 'policy:version_detail' organisation.id version.superseded_by.id %}">version {{ version.superseded_by.version_number }}</a>.
+    </p>
+{% endif %}
+
+{% if version.next_review_date %}
+    <p>Next review date: {{ version.next_review_date }}</p>
+{% endif %}
+
+{% if version.review_warnings %}
+    <section class="form-section">
+        <legend>Review warnings</legend>
+        <ul>
+            {% for warning in version.review_warnings %}
+                <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+
+{% for section in version.sections %}
+    <section class="form-section">
+        <legend>{{ section.section_key }}</legend>
+        <p>{{ section.content }}</p>
+    </section>
+{% endfor %}
+{% endblock %}

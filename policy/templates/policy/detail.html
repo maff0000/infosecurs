@@ -16,9 +16,14 @@
 
 {% if version %}
     <p class="page-header__subtitle">
-        Version {{ version.version_number }} &mdash; {{ version.get_status_display }}
+        Latest: version {{ version.version_number }} &mdash; {{ version.get_status_display }}
+        &middot; <a href="{% url 'policy:version_detail' organisation.id version.id %}">View full version</a>
     </p>
     <h2>{{ version.title }}</h2>
+
+    {% if approval_summary %}
+        <p><strong>{{ approval_summary }}</strong></p>
+    {% endif %}
 
     {% if version.review_warnings %}
         <section class="form-section">
@@ -37,6 +42,21 @@
             <p>{{ section.content }}</p>
         </section>
     {% endfor %}
+
+    {% if versions|length > 1 %}
+        <section class="form-section">
+            <legend>Version history</legend>
+            <ul>
+                {% for v in versions %}
+                    <li>
+                        <a href="{% url 'policy:version_detail' organisation.id v.id %}">
+                            Version {{ v.version_number }} &mdash; {{ v.get_status_display }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
 {% else %}
     <p>No policy draft has been generated yet.</p>
 {% endif %}
