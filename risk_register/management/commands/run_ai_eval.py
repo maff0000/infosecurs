@@ -1,20 +1,24 @@
 """
-M002 golden-corpus AI evaluation command (PID §18).
+M002 golden-corpus AI evaluation command (PID §18, corrected for the
+interpretation task by the M002-3e dispatch).
 
     python manage.py run_ai_eval --gateway=fake
     python manage.py run_ai_eval --gateway=live
 
-`--gateway=fake` runs the harness against `ai_platform.testing.FakeGateway`
-- proves the harness mechanics and report format are correct, with no
-external network call whatsoever. This is what this dispatch's own test
-suite exercises (see risk_register/tests/test_eval_command.py).
+`--gateway=fake` runs the harness against
+`ai_platform.testing.FakeInterpretationGateway` - proves the harness
+mechanics, the real scenario-instantiation -> interpretation pipeline, and
+the report format are correct, with no external network call whatsoever.
+This is what this dispatch's own test suite exercises (see
+risk_register/tests/test_eval_command.py).
 
 `--gateway=live` constructs the real `ai_platform.gateway.LiteLLMGateway`
-and runs the corpus against the configured `trinity-core` alias on the
-actual Trinity gateway (PID §24 preflight, §9.2 external configuration).
-This dispatch does not have a working credential for that gateway and does
-not run this mode - the PL runs it separately once PID §24's preflight is
-satisfied.
+- which implements BOTH `RiskGenerationGateway` and
+`RiskInterpretationGateway` (see that class's own docstring) - and runs the
+corpus against the configured `trinity-core` alias on the actual Trinity
+gateway (PID §24 preflight, §9.2 external configuration). This dispatch
+does not have a working credential for that gateway and does not run this
+mode - the PL runs it separately once PID §24's preflight is satisfied.
 """
 import json
 from pathlib import Path
@@ -25,16 +29,16 @@ from risk_register.eval.harness import run_eval
 
 
 class Command(BaseCommand):
-    help = "Run the M002 risk-generation golden corpus (PID §18) against a fake or live AI gateway."
+    help = "Run the M002 AI risk-interpretation golden corpus (PID §18) against a fake or live AI gateway."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--gateway",
             choices=["fake", "live"],
             required=True,
-            help="'fake' uses ai_platform.testing.FakeGateway (no network call). "
-                 "'live' uses ai_platform.gateway.LiteLLMGateway against the "
-                 "configured trinity-core alias.",
+            help="'fake' uses ai_platform.testing.FakeInterpretationGateway (no "
+                 "network call). 'live' uses ai_platform.gateway.LiteLLMGateway "
+                 "against the configured trinity-core alias.",
         )
         parser.add_argument(
             "--output",
@@ -46,9 +50,9 @@ class Command(BaseCommand):
         gateway_choice = options["gateway"]
 
         if gateway_choice == "fake":
-            from ai_platform.testing import FakeGateway
+            from ai_platform.testing import FakeInterpretationGateway
 
-            gateway = FakeGateway(mode="valid")
+            gateway = FakeInterpretationGateway(mode="valid")
         else:
             from ai_platform.gateway import LiteLLMGateway
 
