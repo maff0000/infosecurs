@@ -25,8 +25,14 @@ services:
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      # Persistent, Docker-mounted path external to the application image
+      # (M003 PID §9/§21) - evidence bytes must outlive/be independent of
+      # any image rebuild, and must never be served from a public
+      # static/media directory.
+      EVIDENCE_STORAGE_ROOT: /data/evidence
     volumes:
       - .:/app
+      - infosecurs_evidence_data:/data/evidence
     ports:
       - "127.0.0.1:${WEB_HOST_PORT:-8000}:8000"
     depends_on:
@@ -35,3 +41,4 @@ services:
 
 volumes:
   infosecurs_postgres_data:
+  infosecurs_evidence_data:

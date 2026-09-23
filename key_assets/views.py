@@ -156,7 +156,12 @@ def key_asset_detail(request, organisation_id, asset_id):
         if form.is_valid():
             # Same code path as security_baseline.views.baseline_view -
             # never a second BaselineAnswer writer (PID §0.5).
-            save_baseline_answers(organisation, form.cleaned_data, question_keys=question_keys)
+            save_baseline_answers(
+                organisation,
+                form.cleaned_data,
+                question_keys=question_keys,
+                actor=request.user,
+            )
             messages.success(request, "Protection checks saved.")
             return redirect(
                 "key_assets:detail", organisation_id=organisation.id, asset_id=asset.id

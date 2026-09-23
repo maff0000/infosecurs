@@ -21,4 +21,13 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/risks/",
         include("risk_register.urls"),
     ),
+    path(
+        "organisations/<uuid:organisation_id>/evidence/",
+        include("evidence.urls"),
+    ),
+    path(
+        "organisations/<uuid:organisation_id>/actions/",
+        include("remediation.urls"),
+    ),
+    path("organisations/", include("activity.urls")),
 ]

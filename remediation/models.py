@@ -1,0 +1,177 @@
+"""
+Tenant-owned Remediation Action domain (docs/pids/M003-EVIDENCE-AND-SECURITY-STATE.md
+§6.5, §13).
+
+This app builds ONLY `RemediationAction`. It deliberately does not build
+`EvidenceItem`, `ControlEvidenceLink`, `ActionEvidenceLink` (§6.6 - a later
+dispatch adds that once both this app's `RemediationAction` and the
+parallel m003-1a-evidence dispatch's `EvidenceItem` exist), the Current
+Security State projection (§7), or the Activity timeline (§12).
+
+Core invariant this file exists to protect (§6.5, §13 - "non-negotiable"):
+completing a `RemediationAction` (status -> `done` or `accepted`) must
+NEVER automatically:
+  - change a `security_baseline.BaselineAnswer` - enforced simply by this
+    app never importing or writing to that model anywhere, full stop;
+  - mark the linked `risk_register.Risk` resolved - enforced the same way:
+    this app never writes to `Risk.status` anywhere, full stop;
+  - claim a control is implemented - this is a UI-wording discipline (see
+    remediation/templates/remediation/*.html and the STATUS_CHOICES labels
+    below), not just a code discipline (PID §19 "AI suggested" / "Customer
+    confirmed" wording-honesty precedent, applied here to "Accepted" vs
+    "Done").
+
+`status=accepted` specifically means the organisation consciously accepts
+the issue/risk for now - it does NOT mean the underlying control
+requirement is met (PID §6.5). The label text below says so explicitly so
+this distinction is visible in the product, not only in code comments.
+"""
+import uuid
+
+from django.conf import settings
+from django.db import models
+
+from key_assets.models import KeyAsset
+from organisations.models import Organisation
+from risk_register.models import Risk
+from security_baseline.catalogue import CATALOGUE_BY_KEY
+
+
+class RemediationAction(models.Model):
+    """
+    A tenant-owned remediation action (PID §6.5).
+
+    Deliberately small: a fixed 4-state status field with ordinary
+    transitions, not a configurable workflow engine (PID §6.5's explicit
+    non-goal).
+    """
+
+    STATUS_OPEN = "open"
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_DONE = "done"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_IN_PROGRESS, "In progress"),
+        (STATUS_DONE, "Done"),
+        (
+            STATUS_ACCEPTED,
+            "Accepted (risk consciously accepted for now — not the same as done)",
+        ),
+    ]
+    # Statuses from which the action can still be actively worked.
+    ACTIVE_STATUSES = (STATUS_OPEN, STATUS_IN_PROGRESS)
+    # Statuses that leave the action's active pipeline. Both are terminal
+    # dispositions for the *action*; neither one, by itself, is a claim
+    # about the underlying control or risk (see module docstring).
+    CLOSED_STATUSES = (STATUS_DONE, STATUS_ACCEPTED)
+
+    PRIORITY_LOW = "low"
+    PRIORITY_MEDIUM = "medium"
+    PRIORITY_HIGH = "high"
+    PRIORITY_CRITICAL = "critical"
+    PRIORITY_CHOICES = [
+        (PRIORITY_LOW, "Low"),
+        (PRIORITY_MEDIUM, "Medium"),
+        (PRIORITY_HIGH, "High"),
+        (PRIORITY_CRITICAL, "Critical"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="remediation_actions"
+    )
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="What needs to be done. Pre-filled from a risk's proposed treatment when created from a risk.",
+    )
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    priority = models.CharField(max_length=16, choices=PRIORITY_CHOICES, default=PRIORITY_MEDIUM)
+
+    # --- Optional context references ---------------------------------------
+    risk = models.ForeignKey(
+        Risk,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="remediation_actions",
+        help_text="The risk this action addresses, if created from one (PID §13).",
+    )
+    control_key = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=(
+            "Optional reference to a security_baseline catalogue control "
+            "key. A plain CharField, not a ForeignKey - same convention as "
+            "risk_register.Risk.scenario_id, since the catalogue is "
+            "versioned Python data (security_baseline/catalogue.py), not a "
+            "database table."
+        ),
+    )
+    key_asset = models.ForeignKey(
+        KeyAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="remediation_actions",
+    )
+
+    # --- People / dates -------------------------------------------------
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_remediation_actions",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_remediation_actions",
+    )
+    target_date = models.DateField(null=True, blank=True)
+
+    # Set only when the action leaves the active pipeline (status ->
+    # done or accepted) - see STATUS_TRANSITION views in remediation/views.py.
+    # Never set by the general create/edit form.
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completed_remediation_actions",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} ({self.organisation}) [{self.status}]"
+
+    @property
+    def is_closed(self) -> bool:
+        return self.status in self.CLOSED_STATUSES
+
+    def control_key_label(self) -> str:
+        """
+        Human-readable label for `control_key`, looked up from the
+        security_baseline catalogue (read-only reference - this app never
+        writes to security_baseline). Falls back to the raw key if the
+        catalogue does not (or no longer) contain it, so a historical
+        action never renders blank/broken just because the catalogue
+        evolved.
+        """
+        if not self.control_key:
+            return ""
+        entry = CATALOGUE_BY_KEY.get(self.control_key)
+        return entry["area"] if entry else self.control_key

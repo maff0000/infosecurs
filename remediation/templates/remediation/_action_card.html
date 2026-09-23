@@ -1,0 +1,23 @@
+{% comment %}
+Shared action-summary card, included from remediation/list.html for each
+status group. Expects `action` and `organisation` in context (both are
+already in scope wherever this is included).
+{% endcomment %}
+<div class="action-card {% if action.is_closed %}action-card--closed{% endif %}">
+    <div class="action-card__body">
+        <p class="action-card__title">
+            <a href="{% url 'remediation:detail' organisation.id action.id %}">{{ action.title }}</a>
+            <span class="badge badge--{{ action.status }}">{{ action.get_status_display }}</span>
+            <span class="badge badge--priority-{{ action.priority }}">{{ action.get_priority_display }} priority</span>
+        </p>
+        <p class="action-card__meta">
+            {% if action.risk %}From risk: {{ action.risk.title }} &middot; {% endif %}
+            {% if action.control_key %}Control: {{ action.control_key_label }} &middot; {% endif %}
+            {% if action.assigned_to %}Assigned to {{ action.assigned_to.username }} &middot; {% endif %}
+            {% if action.target_date %}Target {{ action.target_date }}{% else %}No target date{% endif %}
+        </p>
+    </div>
+    <div class="action-card__actions">
+        <a class="button button--secondary" href="{% url 'remediation:detail' organisation.id action.id %}">View</a>
+    </div>
+</div>

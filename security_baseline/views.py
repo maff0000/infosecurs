@@ -32,7 +32,9 @@ def baseline_view(request, organisation_id):
             # The single code path that writes a BaselineAnswer row (PID
             # §0.5) - shared with key_assets.views.key_asset_detail's
             # filtered protection-checks page.
-            assessment = save_baseline_answers(organisation, form.cleaned_data)
+            assessment = save_baseline_answers(
+                organisation, form.cleaned_data, actor=request.user
+            )
             messages.success(request, "Security baseline saved.")
             return redirect("security_baseline:baseline", organisation_id=organisation.id)
         messages.error(

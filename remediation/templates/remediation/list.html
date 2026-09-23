@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Remediation actions — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .action-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .action-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .action-card--closed { opacity: 0.8; }
+  .action-card__body { flex: 1 1 320px; min-width: 0; }
+  .action-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .action-card__title a { color: inherit; text-decoration: none; }
+  .action-card__title a:hover { text-decoration: underline; }
+  .action-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
+  .action-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--open { background: var(--color-border); color: var(--color-text); }
+  .badge--in_progress { background: #fdf1d6; color: #8a5a00; }
+  .badge--done { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--accepted { background: #e6eefb; color: #185ea8; }
+  .badge--priority-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--priority-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--priority-high { background: #fbe6d6; color: #a3521f; }
+  .badge--priority-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+  .action-section { margin-bottom: var(--space-5); }
+  .action-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .action-filters a {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .action-filters a.is-active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Remediation actions</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <a class="button button--primary" href="{% url 'remediation:create' organisation.id %}">New action</a>
+</div>
+
+<div class="action-filters" role="navigation" aria-label="Filter by status">
+    <a href="{% url 'remediation:list' organisation.id %}" class="{% if not status_filter %}is-active{% endif %}">All</a>
+    {% for value, label in status_choices %}
+        <a href="{% url 'remediation:list' organisation.id %}?status={{ value }}" class="{% if status_filter == value %}is-active{% endif %}">{{ label }}</a>
+    {% endfor %}
+</div>
+
+{% if not status_filter or status_filter == "open" %}
+<section class="action-section">
+    <h2>Open</h2>
+    {% if open_actions %}
+        <div class="action-grid">
+            {% for action in open_actions %}
+                {% include "remediation/_action_card.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>No open actions.</p></div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if not status_filter or status_filter == "in_progress" %}
+<section class="action-section">
+    <h2>In progress</h2>
+    {% if in_progress_actions %}
+        <div class="action-grid">
+            {% for action in in_progress_actions %}
+                {% include "remediation/_action_card.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>Nothing in progress.</p></div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if not status_filter or status_filter == "done" %}
+<section class="action-section">
+    <h2>Done</h2>
+    {% if done_actions %}
+        <div class="action-grid">
+            {% for action in done_actions %}
+                {% include "remediation/_action_card.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>Nothing marked done yet.</p></div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if not status_filter or status_filter == "accepted" %}
+<section class="action-section">
+    <h2>Accepted</h2>
+    <p class="page-header__subtitle" style="margin: -8px 0 var(--space-3) 0;">
+        Consciously accepted for now — this does not mean the underlying control requirement is met.
+    </p>
+    {% if accepted_actions %}
+        <div class="action-grid">
+            {% for action in accepted_actions %}
+                {% include "remediation/_action_card.html" %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>Nothing accepted.</p></div>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}
