@@ -153,3 +153,5 @@ jobs:
           policy/tests/test_edit.py
           policy/tests/test_approval.py
           policy/tests/test_download.py
+          policy/tests/test_eval_harness.py
+          policy/tests/test_eval_command.py
