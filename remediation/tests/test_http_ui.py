@@ -4,6 +4,7 @@ HTTP-level tests for the remediation product UI (PID §6.5, §13, §18, §19).
 import pytest
 from django.urls import reverse
 
+from activity.models import ActivityEvent
 from remediation.models import RemediationAction
 
 
@@ -34,6 +35,31 @@ class TestActionCreate:
         assert action.priority == "high"
         assert action.created_by_id == user_a.id
         assert action.risk_id is None
+
+    def test_post_emits_action_created_event(self, client_a, org_a, user_a):
+        client_a.post(
+            reverse("remediation:create", args=[org_a.id]),
+            {
+                "title": "Enable MFA everywhere",
+                "description": "Roll out MFA to all staff accounts.",
+                "priority": "high",
+                "control_key": "",
+                "key_asset": "",
+                "assigned_to": "",
+                "target_date": "",
+            },
+        )
+        action = RemediationAction.objects.get(organisation=org_a)
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_ACTION_CREATED
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_type == "remediation_action"
+        assert event.related_object_id == str(action.id)
+        assert event.metadata == {
+            "title": "Enable MFA everywhere",
+            "created_from_risk": False,
+        }
 
     def test_visiting_the_create_page_never_creates_an_action_by_itself(self, client_a, org_a):
         """Creation is explicit (PID §13) - a bare GET must never create a row."""
@@ -91,6 +117,31 @@ class TestActionCreateFromRisk:
         assert action.risk_id == risk_a.id
         assert action.status == RemediationAction.STATUS_OPEN
         assert action.created_by_id == user_a.id
+
+    def test_post_emits_action_created_event_with_risk_id(self, client_a, org_a, risk_a, user_a):
+        client_a.post(
+            reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id]),
+            {
+                "title": risk_a.title,
+                "description": risk_a.proposed_treatment,
+                "priority": "medium",
+                "control_key": "",
+                "key_asset": "",
+                "assigned_to": "",
+                "target_date": "",
+            },
+        )
+        action = RemediationAction.objects.get(organisation=org_a)
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_ACTION_CREATED
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_id == str(action.id)
+        assert event.metadata == {
+            "title": risk_a.title,
+            "created_from_risk": True,
+            "risk_id": str(risk_a.id),
+        }
 
     def test_user_can_edit_prefilled_content_before_creating(self, client_a, org_a, risk_a):
         """PID §13: 'user reviews/edits' - the prefill is not forced through verbatim."""
@@ -191,6 +242,22 @@ class TestActionLifecycleTransitions:
         action.refresh_from_db()
         assert action.status == RemediationAction.STATUS_IN_PROGRESS
 
+    def test_start_emits_action_status_changed_event(self, client_a, org_a, user_a):
+        action = RemediationAction.objects.create(
+            organisation=org_a, title="A", created_by=user_a
+        )
+        client_a.post(reverse("remediation:start", args=[org_a.id, action.id]))
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_ACTION_STATUS_CHANGED
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_type == "remediation_action"
+        assert event.related_object_id == str(action.id)
+        assert event.metadata == {
+            "previous_status": RemediationAction.STATUS_OPEN,
+            "new_status": RemediationAction.STATUS_IN_PROGRESS,
+        }
+
     def test_start_rejected_when_not_open(self, client_a, org_a, user_a):
         action = RemediationAction.objects.create(
             organisation=org_a, title="A", created_by=user_a, status=RemediationAction.STATUS_DONE
@@ -221,6 +288,25 @@ class TestActionLifecycleTransitions:
         action.refresh_from_db()
         assert action.status == RemediationAction.STATUS_DONE
 
+    def test_complete_emits_action_status_changed_event(self, client_a, org_a, user_a):
+        action = RemediationAction.objects.create(
+            organisation=org_a,
+            title="A",
+            created_by=user_a,
+            status=RemediationAction.STATUS_IN_PROGRESS,
+        )
+        client_a.post(reverse("remediation:complete", args=[org_a.id, action.id]))
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_ACTION_STATUS_CHANGED
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_type == "remediation_action"
+        assert event.related_object_id == str(action.id)
+        assert event.metadata == {
+            "previous_status": RemediationAction.STATUS_IN_PROGRESS,
+            "new_status": RemediationAction.STATUS_DONE,
+        }
+
     def test_complete_rejected_when_already_closed(self, client_a, org_a, user_a):
         action = RemediationAction.objects.create(
             organisation=org_a, title="A", created_by=user_a, status=RemediationAction.STATUS_ACCEPTED
@@ -239,6 +325,22 @@ class TestActionLifecycleTransitions:
         assert action.status == RemediationAction.STATUS_ACCEPTED
         assert action.completed_by_id == user_a.id
         assert action.completed_at is not None
+
+    def test_accept_emits_action_status_changed_event(self, client_a, org_a, user_a):
+        action = RemediationAction.objects.create(
+            organisation=org_a, title="A", created_by=user_a
+        )
+        client_a.post(reverse("remediation:accept", args=[org_a.id, action.id]))
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_ACTION_STATUS_CHANGED
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_type == "remediation_action"
+        assert event.related_object_id == str(action.id)
+        assert event.metadata == {
+            "previous_status": RemediationAction.STATUS_OPEN,
+            "new_status": RemediationAction.STATUS_ACCEPTED,
+        }
 
     def test_accept_rejected_when_already_closed(self, client_a, org_a, user_a):
         action = RemediationAction.objects.create(

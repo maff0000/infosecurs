@@ -6,6 +6,8 @@ in exactly one place.
 """
 from django.db import transaction
 
+from activity.models import ActivityEvent
+from activity.services import record_event
 from evidence.exceptions import EvidenceValidationError
 from evidence.models import EvidenceItem
 from evidence.storage import detect_and_hash, safe_display_filename, store_uploaded_file
@@ -52,7 +54,16 @@ def create_file_evidence(
     )
 
     if supersedes is not None:
-        _apply_supersession(supersedes, item)
+        _apply_supersession(supersedes, item, actor)
+
+    record_event(
+        organisation,
+        ActivityEvent.EVENT_EVIDENCE_CREATED,
+        actor=actor,
+        related_object_type="evidence_item",
+        related_object_id=str(item.id),
+        metadata={"kind": "file", "title": item.title},
+    )
 
     return item
 
@@ -88,12 +99,21 @@ def create_external_reference_evidence(
     )
 
     if supersedes is not None:
-        _apply_supersession(supersedes, item)
+        _apply_supersession(supersedes, item, actor)
+
+    record_event(
+        organisation,
+        ActivityEvent.EVENT_EVIDENCE_CREATED,
+        actor=actor,
+        related_object_type="evidence_item",
+        related_object_id=str(item.id),
+        metadata={"kind": "external_reference", "title": item.title},
+    )
 
     return item
 
 
-def _apply_supersession(old_item, new_item):
+def _apply_supersession(old_item, new_item, actor):
     if old_item.organisation_id != new_item.organisation_id:
         # Defence in depth: views.py resolves `supersedes` scoped to the
         # same organisation before this is ever called, so this should be
@@ -109,10 +129,32 @@ def _apply_supersession(old_item, new_item):
     old_item.superseded_by = new_item
     old_item.save(update_fields=["status", "superseded_by", "updated_at"])
 
+    # Always called from inside one of the two @transaction.atomic create_*
+    # functions above, so this event write shares that same transaction
+    # (PID §17) without needing its own atomic block here.
+    record_event(
+        old_item.organisation,
+        ActivityEvent.EVENT_EVIDENCE_SUPERSEDED,
+        actor=actor,
+        related_object_type="evidence_item",
+        related_object_id=str(old_item.id),
+        metadata={"superseded_by": str(new_item.id)},
+    )
 
-def withdraw_evidence(item):
+
+@transaction.atomic
+def withdraw_evidence(item, actor):
     """Mark an active evidence item withdrawn. Never deletes it."""
     if item.status != EvidenceItem.STATUS_ACTIVE:
         raise EvidenceValidationError("Only active evidence can be withdrawn.")
     item.status = EvidenceItem.STATUS_WITHDRAWN
     item.save(update_fields=["status", "updated_at"])
+
+    record_event(
+        item.organisation,
+        ActivityEvent.EVENT_EVIDENCE_WITHDRAWN,
+        actor=actor,
+        related_object_type="evidence_item",
+        related_object_id=str(item.id),
+        metadata={},
+    )

@@ -193,7 +193,7 @@ def evidence_withdraw(request, organisation_id, evidence_id):
         request.user, organisation_id, evidence_id
     )
     try:
-        services.withdraw_evidence(item)
+        services.withdraw_evidence(item, request.user)
     except EvidenceValidationError as exc:
         messages.error(request, str(exc))
     else:
