@@ -19,6 +19,14 @@ are the original M002 authorisation, preserved as written. This amendment
 supersedes the specific parts identified below; it does not replace the
 whole document, and everything not named here still stands.
 
+**Amended in place once, 2026-09-23, same day: §0.4/§0.4a (catalogue size
++ the `unknown`≠`no` invariant), §0.5 (asset-specific UX made REQUIRED, not
+deferrable), and §0.7 (no `AI novel suggestion` Risk status — every
+persisted M002 V1 risk originates from the catalogue) reflect Central
+Architecture's final rulings after reviewing the first landed version of
+this section. Approved with no further checkpoint required before
+M002 PRODUCT_GREEN.
+
 ### 0.1 Why
 
 Implementation reached a working AI-integrated slice — Security Baseline,
@@ -104,24 +112,57 @@ platform; cloud environment; hosted business application/service;
 important business/customer information; people/users; network/location
 only where useful.
 
-**Keep the first catalogue small.** Target roughly 20–30 high-value threat
-scenarios, not hundreds of generic entries. Do not import a CVE/MITRE/GRC
-taxonomy into M002.
+**Keep the first catalogue small.** Roughly 12–20 high-value, obvious SME
+scenarios is preferred if that gives good initial coverage — the earlier
+20–30 figure is a ceiling/rough range, not a delivery quota (Central
+Architecture ruling, 2026-09-23). Do not create filler scenarios merely to
+hit a count. The initial methodology should stay small, readable and
+reviewable. Do not import a CVE/MITRE/GRC taxonomy into M002.
 
-### 0.5 Asset-specific protection checks — extends §6, does not replace it
+Each scenario carries only what is needed to deterministically connect:
+stable scenario ID; applicable asset category; exposure; relevant
+canonical control key(s); the relevant answer-state/applicability rule
+(see §0.4a below — this is where `unknown` is kept distinct from `no`);
+threat event; vulnerability/control-gap wording where established;
+consequence; suggested treatment. Application code owns all organisation
+IDs, asset UUIDs, control IDs, scenario IDs and database relationships —
+the catalogue never asks the AI to reproduce or manufacture any of these.
 
-Reuse the existing `security_baseline` questions/answer-state model. Make
-the product *experience* asset-oriented wherever practical — e.g. an
-employee-laptop asset surfaces device encryption, endpoint protection,
-patching, backup, remote-working/access considerations; Microsoft 365/
-identity surfaces staff MFA, admin MFA, privileged-account separation,
-phishing protection, joiner/mover/leaver access removal.
+### 0.4a Critical semantic invariant — `unknown` != `no`
 
-**Non-negotiable:** there must remain exactly one canonical answer for a
-given control fact even when it is surfaced from more than one journey
-(e.g. an asset-specific view and the general baseline view showing the
-same question). Do not create a second, potentially contradictory,
-storage location for the same fact.
+A control answer of `unknown` must never deterministically become a
+statement that the control is absent. Example: `device_encryption =
+unknown` may instantiate a scenario requiring clarification around
+loss/theft exposure, but the system must not state "the laptop is
+unencrypted." Only once the customer confirms `no` may the corresponding
+control gap be established. The scenario-instantiation engine's
+applicability rules must carry this distinction explicitly — an `unknown`
+answer and a `no` answer are different inputs producing different
+(though related) scenario instances, never collapsed into one. This
+applies throughout the methodology engine, not only to `device_encryption`.
+
+### 0.5 Asset-specific protection checks — REQUIRED for M002 V1 (Central Architecture ruling, 2026-09-23), extends §6
+
+Not a deferrable enhancement. The intended journey is:
+
+```text
+Organisation -> Assets -> relevant protection questions -> scenarios -> risks
+```
+
+Reuse the existing `security_baseline` questions/answer-state model — do
+not build a second question model. Asset pages must surface the relevant
+existing canonical baseline/control answers directly, e.g.: an
+employee-endpoint asset surfaces device encryption, endpoint protection,
+patching, backup, applicable remote-access considerations; an identity/
+Microsoft 365/Google Workspace asset surfaces staff MFA, admin MFA,
+privileged-account separation, phishing protection, joiner/mover/leaver.
+The general Security Baseline page (§6) may remain as-is alongside this.
+
+**Non-negotiable:** there must remain exactly one canonical stored answer
+per control fact even when it is surfaced from more than one journey.
+Editing an answer from an asset-contextual page edits the same canonical
+`security_baseline` record the general baseline page reads/writes — never
+a second, asset-local, potentially contradictory copy.
 
 ### 0.6 Critical AI boundary correction — supersedes §9.1, §9.3, §10 entirely; corrects §8's `asset_reference` field
 
@@ -151,18 +192,18 @@ deduplicate closely related scenarios; explain why a scenario matters.
 
 It must not create organisational facts.
 
-**For M002 V1, prefer risk candidates originating from the deterministic
-methodology catalogue** (§0.4, instantiated per-tenant from actual asset/
-control-state data). If AI identifies a genuinely novel risk outside the
-catalogue, it is recorded separately as an explicitly unvalidated
-`AI novel suggestion` requiring customer/practitioner review — it must
-never silently create new catalogue truth. (This is additive to, not a
-replacement for, the existing `draft_ai_suggested` / `confirmed` /
-`dismissed` status model in §8 — a catalogue-originated candidate and an
-`AI novel suggestion` both still require explicit customer confirmation
-before becoming a confirmed risk; §2's core invariant — "AI may propose,
-AI may not silently establish organisational truth" — is unchanged and
-still governs both paths.)
+**M002 V1 requirement, tightened by Central Architecture ruling
+2026-09-23: every persisted `Risk` row must originate from `versioned
+methodology catalogue -> deterministic scenario instantiation` (§0.4),
+with no exception.** There is no "AI novel suggestion" `Risk` status and
+AI never originates a persisted `Risk` row outside the catalogue in M002
+V1 — this deliberately keeps M002's security ontology deterministic. AI
+may identify a possible additional concern, a clarification question, or
+a methodology coverage gap; these are recorded only as interpretation/
+clarification output attached to the catalogue-originated candidate(s) or
+the generation run, never turned into a new `Risk` row or new catalogue
+truth. (A later module may reconsider surfacing AI-originated candidates
+for practitioner review — not part of M002 V1.)
 
 ### 0.8 Vulnerability-scanning boundary — clarifies §1, §4 non-goals
 

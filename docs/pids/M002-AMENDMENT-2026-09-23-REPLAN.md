@@ -9,6 +9,17 @@ amendment itself.
 
 No product code has changed as a result of this document. It is a plan.
 
+**Update, same day:** Central Architecture reviewed the first version of
+this replan and the landed PID §0 against GitHub and approved it with
+three final rulings (no `AI novel suggestion` Risk status in M002 V1;
+asset-specific protection UX is REQUIRED not deferrable; catalogue size
+preference is ~12-20, not 20-30) plus the `unknown`≠`no` invariant. The PID
+itself was amended in place to reflect these (§0.4/§0.4a/§0.5/§0.7) rather
+than layered with a second append section, since nothing had been built
+against the first wording yet. The KEEP/MODIFY/RETIRE table and sequence
+below are updated to match; no further Central Architecture checkpoint is
+required before M002 PRODUCT_GREEN.
+
 ---
 
 ## 1. What triggered this
@@ -34,7 +45,7 @@ reproduce identifiers; fix the division of labour instead.
 |---|---|---|
 | `catalogue.py` (12 baseline areas) | **KEEP** | Unaffected. Still the canonical control-fact catalogue. |
 | `BaselineAssessment` / `BaselineAnswer` models | **KEEP** | Already the single canonical answer store §0.5 requires — asset-oriented surfacing reads/writes here, never a second copy. |
-| Views/forms/templates | **KEEP**, optionally **MODIFY** | Core flow unaffected. Asset-contextual entry points (§0.5, e.g. answering MFA questions from the M365 asset page) are a UX enhancement, not required for V1 correctness — can defer. |
+| Views/forms/templates | **KEEP**, unchanged | Core flow unaffected. Asset-contextual entry points are new surfaces added in `key_assets`/asset views (below), reading/writing this same canonical model — not a change to `security_baseline` itself. |
 | Tests | **KEEP** | Unaffected. |
 
 ### `key_assets` app
@@ -43,7 +54,9 @@ reproduce identifiers; fix the division of labour instead.
 |---|---|---|
 | `KeyAsset` model + category/criticality enums | **KEEP**, unchanged | Categories already match §0.4's asset-category list exactly. |
 | `suggestions.py` (deterministic starter suggestions) | **KEEP**, unchanged | This *is* journey step 2 ("Asset discovery") already. |
-| Views/forms/templates/tests | **KEEP** | Unaffected. |
+| Asset list/create/edit views/templates | **KEEP** | Unaffected. |
+| Asset detail view/template | **MODIFY, REQUIRED for V1** | Central Architecture ruling: must surface the relevant canonical `security_baseline` answers for that asset's category (§0.5) — reads/writes the same canonical `BaselineAnswer` rows via `security_baseline`'s own forms/model, never a duplicate. This is new asset-contextual surface area, not a new question model. |
+| Tests | **KEEP**, **+MODIFY** for the new asset-contextual surface | Existing tests unaffected; new tests needed for "edit from asset view = same canonical record" (no duplicate-answer regression). |
 
 ### `ai_platform` app
 
@@ -61,7 +74,7 @@ reproduce identifiers; fix the division of labour instead.
 | Component | Disposition | Why |
 |---|---|---|
 | `Risk` model — `impact`/`likelihood`/computed `score`/`risk_band` properties | **KEEP**, unchanged | Deterministic scoring mechanism is sound and architecture-independent. |
-| `Risk` model — `source`/`status` enums | **MODIFY** | Add a distinct state for an AI "novel suggestion" outside the catalogue (§0.7) — never silently equal to a catalogue-originated candidate. |
+| `Risk` model — `source`/`status` enums | **KEEP**, unchanged | No `AI novel suggestion` status in M002 V1 (Central Architecture ruling) — every persisted `Risk` row originates from the catalogue, so the existing `draft_ai_suggested`/`confirmed`/`dismissed` set (with `source=ai`, since AI still interprets/prioritises catalogue candidates) is sufficient as-is. |
 | `Risk` model — new fields | **NEW** | `exposure`, `vulnerability`/`control_gap`, `threat_event`, `consequence`, and a reference to the catalogue scenario that produced the candidate (§0.2 derivation spine). |
 | `Risk.key_asset` FK, `asset_reference` | **KEEP the FK**, **RETIRE the free-text AI-authored string** | Populated deterministically by application code from the scenario instantiation — never parsed out of model output (§0.6). |
 | `grounding.py` (`build_grounding_payload`) | **RETIRE the shape**, **KEEP the safety discipline** | The reverse-one-to-one-traversal / explicit-organisation-filter tenant-scoping pattern is exactly right and must be carried into its replacement unchanged. The *content* it assembles (raw fact bag for open generation) is superseded by the new deterministic scenario-instantiation engine (§5). |
@@ -74,10 +87,10 @@ reproduce identifiers; fix the division of labour instead.
 
 | Component | Disposition |
 |---|---|
-| Versioned methodology catalogue (asset category → exposures → control checks → threat events → consequence types → suggested treatments, ~20–30 scenarios) | **NEW** |
+| Versioned methodology catalogue (asset category → exposures → control checks → threat events → consequence types → suggested treatments, ~12–20 scenarios preferred, 20–30 as a ceiling not a quota) | **NEW** |
 | Deterministic scenario-instantiation engine (assets + control-state answers + catalogue → candidate `Risk` rows, no AI) | **NEW** — this is the core of the corrected architecture. |
 | New AI practitioner-interpretation contract + prompt | **NEW**, reusing `ai_platform.gateway`'s mechanism |
-| Asset-specific protection-check UX | **NEW**, deferrable enhancement (§0.5 says "wherever practical," not mandatory for V1) |
+| Asset-specific protection-check UX | **NEW, REQUIRED for V1** (Central Architecture ruling — not deferrable) |
 
 ## 3. Revised bounded delivery sequence
 
@@ -87,22 +100,31 @@ pattern already used for M002 Phase 1/2.
 
 ```text
 Phase M002-3a (parallel, independent)
-  - Methodology catalogue (data module, ~20-30 scenarios)
-  - Risk model migration (new fields, new status value) - schema only
+  - Methodology catalogue (data module, ~12-20 scenarios preferred, each
+    scenario carrying the exact field set PID §0.4 specifies, including
+    the unknown-vs-no applicability rule per §0.4a)
+  - Risk model migration (new exposure/vulnerability/threat_event/
+    consequence/scenario fields; no new status value - schema only)
 
 Phase M002-3b (depends on 3a)
   - Deterministic scenario-instantiation engine
-    (assets + control-state + catalogue -> candidate Risk rows, no AI)
+    (assets + control-state + catalogue -> candidate Risk rows, no AI,
+    unknown != no honoured throughout)
     Reuses risk_register/grounding.py's tenant-scoping discipline.
 
 Phase M002-3c (depends on 3b)
   - AI practitioner-interpretation layer: new ai_platform contract + prompt
-    + orchestration wiring over 3b's assembled candidates. Reuses
-    ai_platform/gateway.py's HTTP/retry/credential mechanism unchanged.
+    + orchestration wiring over 3b's assembled candidates - interpretation/
+    clarification/prioritisation only, never a new persisted Risk row.
+    Reuses ai_platform/gateway.py's HTTP/retry/credential mechanism
+    unchanged.
 
 Phase M002-3d (depends on 3b, can run alongside 3c)
-  - Views/templates rewire for the new fields and two-phase generate flow.
-    Review/confirm/dismiss/edit semantics unchanged.
+  - Risk register views/templates rewire for the new fields and two-phase
+    generate flow. Review/confirm/dismiss/edit semantics unchanged.
+  - Asset-oriented protection UX, REQUIRED for V1 (Central Architecture
+    ruling): key_assets asset-detail surfaces the relevant canonical
+    security_baseline answers per §0.5, editing the same canonical record.
 
 Phase M002-3e (depends on 3c + 3d)
   - Golden corpus + eval harness rework for the new contract.
