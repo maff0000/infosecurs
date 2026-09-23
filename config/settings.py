@@ -50,6 +50,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "core",
     "organisations",
+    "security_baseline",
+    "key_assets",
+    "ai_platform",
 ]
 
 MIDDLEWARE = [

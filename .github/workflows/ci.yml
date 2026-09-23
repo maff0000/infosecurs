@@ -56,6 +56,9 @@ jobs:
           organisations/tests/test_models.py
           organisations/tests/test_persistence.py
           organisations/tests/test_bootstrap.py
+          security_baseline/tests/test_models.py
+          key_assets/tests/test_models.py
+          key_assets/tests/test_suggestions.py
 
   integration:
     name: ci/integration
@@ -86,10 +89,16 @@ jobs:
       - name: Bootstrap - clean database migrates successfully
         run: python manage.py migrate --noinput
 
-      - name: HTTP / auth / tenant-isolation tests
+      - name: HTTP / auth / tenant-isolation / AI-adapter tests
         run: >
           pytest -v
           organisations/tests/test_auth.py
           organisations/tests/test_tenant_isolation.py
           organisations/tests/test_http_ui.py
           core/tests/
+          security_baseline/tests/test_auth.py
+          security_baseline/tests/test_http_ui.py
+          security_baseline/tests/test_tenant_isolation.py
+          key_assets/tests/test_http_ui.py
+          key_assets/tests/test_tenant_isolation.py
+          ai_platform/tests/

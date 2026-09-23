@@ -12,4 +12,9 @@ urlpatterns = [
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", include("core.urls")),
     path("organisations/", include("organisations.urls")),
+    path("organisations/", include("security_baseline.urls")),
+    path(
+        "organisations/<uuid:organisation_id>/assets/",
+        include("key_assets.urls"),
+    ),
 ]

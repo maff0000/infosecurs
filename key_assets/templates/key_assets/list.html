@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Key assets — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .asset-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .asset-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .asset-card--dismissed { opacity: 0.65; }
+  .asset-card__body { flex: 1 1 320px; min-width: 0; }
+  .asset-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .asset-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
+  .asset-card__description { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
+  .asset-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--suggested { background: #fdf1d6; color: #8a5a00; }
+  .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }
+  .asset-section { margin-bottom: var(--space-5); }
+  .asset-section__intro { color: var(--color-text-muted); margin: -8px 0 var(--space-3) 0; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Key assets</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <a class="button button--primary" href="{% url 'key_assets:create' organisation.id %}">Add asset</a>
+</div>
+
+{% if not profile_exists %}
+    <div class="empty-state">
+        <p>Complete the organisation profile first, so Infosecurs can suggest a starting list of key assets from it.</p>
+        <a class="button button--secondary" href="{% url 'organisations:profile' organisation.id %}">Go to organisation profile</a>
+    </div>
+{% endif %}
+
+<section class="asset-section">
+    <h2>Suggested assets</h2>
+    <p class="asset-section__intro">
+        Infosecurs suggested these from your organisation profile. They are not part of your confirmed
+        asset baseline until you review and confirm them - edit anything that isn't quite right first.
+    </p>
+    {% if suggested_assets %}
+        <div class="asset-grid">
+            {% for asset in suggested_assets %}
+                <div class="asset-card">
+                    <div class="asset-card__body">
+                        <p class="asset-card__title">
+                            {{ asset.name }}
+                            <span class="badge badge--suggested">Suggested</span>
+                        </p>
+                        <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
+                        {% if asset.description %}<p class="asset-card__description">{{ asset.description }}</p>{% endif %}
+                    </div>
+                    <div class="asset-card__actions">
+                        <form method="post" action="{% url 'key_assets:confirm' organisation.id asset.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="button button--primary">Confirm</button>
+                        </form>
+                        <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
+                        <form method="post" action="{% url 'key_assets:dismiss' organisation.id asset.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="link-button">Dismiss</button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>No pending suggestions right now.</p></div>
+    {% endif %}
+</section>
+
+<section class="asset-section">
+    <h2>Confirmed assets</h2>
+    {% if confirmed_assets %}
+        <div class="asset-grid">
+            {% for asset in confirmed_assets %}
+                <div class="asset-card">
+                    <div class="asset-card__body">
+                        <p class="asset-card__title">
+                            {{ asset.name }}
+                            <span class="badge badge--confirmed">Confirmed</span>
+                        </p>
+                        <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
+                        {% if asset.description %}<p class="asset-card__description">{{ asset.description }}</p>{% endif %}
+                    </div>
+                    <div class="asset-card__actions">
+                        <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><p>No confirmed assets yet. Confirm a suggestion above, or add one manually.</p></div>
+    {% endif %}
+</section>
+
+{% if dismissed_assets %}
+    <section class="asset-section">
+        <h2>Dismissed</h2>
+        <p class="asset-section__intro">Kept here for reference. They are not part of the confirmed asset baseline.</p>
+        <div class="asset-grid">
+            {% for asset in dismissed_assets %}
+                <div class="asset-card asset-card--dismissed">
+                    <div class="asset-card__body">
+                        <p class="asset-card__title">
+                            {{ asset.name }}
+                            <span class="badge badge--dismissed">Dismissed</span>
+                        </p>
+                        <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
+                    </div>
+                    <div class="asset-card__actions">
+                        <a class="button button--secondary" href="{% url 'key_assets:edit' organisation.id asset.id %}">Edit</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+{% endblock %}
