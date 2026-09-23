@@ -15,10 +15,13 @@ key_assets.views.key_asset_confirm/dismiss.
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from activity.models import ActivityEvent
+from activity.services import record_event
 from organisations.views import get_member_organisation_or_404
 from remediation import services
 from remediation.forms import ActionEvidenceAttachForm, RemediationActionForm
@@ -77,7 +80,17 @@ def action_create(request, organisation_id):
             action = form.save(commit=False)
             action.organisation = organisation
             action.created_by = request.user
-            action.save()
+            with transaction.atomic():
+                action.save()
+                record_event(
+                    organisation,
+                    ActivityEvent.EVENT_ACTION_CREATED,
+                    actor=request.user,
+                    control_key=action.control_key,
+                    related_object_type="remediation_action",
+                    related_object_id=str(action.id),
+                    metadata={"title": action.title, "created_from_risk": False},
+                )
             messages.success(request, f'Remediation action "{action.title}" created.')
             return redirect("remediation:detail", organisation_id=organisation.id, action_id=action.id)
         messages.error(request, "The action could not be created. Please check the errors below.")
@@ -114,7 +127,21 @@ def action_create_from_risk(request, organisation_id, risk_id):
             action.organisation = organisation
             action.risk = risk
             action.created_by = request.user
-            action.save()
+            with transaction.atomic():
+                action.save()
+                record_event(
+                    organisation,
+                    ActivityEvent.EVENT_ACTION_CREATED,
+                    actor=request.user,
+                    control_key=action.control_key,
+                    related_object_type="remediation_action",
+                    related_object_id=str(action.id),
+                    metadata={
+                        "title": action.title,
+                        "created_from_risk": True,
+                        "risk_id": str(risk.id),
+                    },
+                )
             messages.success(
                 request, f'Remediation action "{action.title}" created from this risk.'
             )
@@ -211,8 +238,19 @@ def action_start(request, organisation_id, action_id):
         messages.error(request, "Only an open action can be moved to in progress.")
         return redirect("remediation:detail", organisation_id=organisation.id, action_id=action.id)
 
+    previous_status = action.status
     action.status = RemediationAction.STATUS_IN_PROGRESS
-    action.save(update_fields=["status", "updated_at"])
+    with transaction.atomic():
+        action.save(update_fields=["status", "updated_at"])
+        record_event(
+            organisation,
+            ActivityEvent.EVENT_ACTION_STATUS_CHANGED,
+            actor=request.user,
+            control_key=action.control_key,
+            related_object_type="remediation_action",
+            related_object_id=str(action.id),
+            metadata={"previous_status": previous_status, "new_status": action.status},
+        )
     messages.success(request, f'Action "{action.title}" is now in progress.')
     return redirect("remediation:detail", organisation_id=organisation.id, action_id=action.id)
 
@@ -231,10 +269,21 @@ def action_complete(request, organisation_id, action_id):
     # risk_register.Risk or security_baseline.BaselineAnswer - see the
     # module docstring in remediation/models.py for why that is a
     # non-negotiable invariant, not an oversight.
+    previous_status = action.status
     action.status = RemediationAction.STATUS_DONE
     action.completed_by = request.user
     action.completed_at = timezone.now()
-    action.save(update_fields=["status", "completed_by", "completed_at", "updated_at"])
+    with transaction.atomic():
+        action.save(update_fields=["status", "completed_by", "completed_at", "updated_at"])
+        record_event(
+            organisation,
+            ActivityEvent.EVENT_ACTION_STATUS_CHANGED,
+            actor=request.user,
+            control_key=action.control_key,
+            related_object_type="remediation_action",
+            related_object_id=str(action.id),
+            metadata={"previous_status": previous_status, "new_status": action.status},
+        )
     messages.success(
         request,
         f'Action "{action.title}" marked done. This does not automatically change the '
@@ -255,10 +304,21 @@ def action_accept(request, organisation_id, action_id):
 
     # Same non-negotiable invariant as action_complete above: this touches
     # ONLY this row, never Risk or BaselineAnswer.
+    previous_status = action.status
     action.status = RemediationAction.STATUS_ACCEPTED
     action.completed_by = request.user
     action.completed_at = timezone.now()
-    action.save(update_fields=["status", "completed_by", "completed_at", "updated_at"])
+    with transaction.atomic():
+        action.save(update_fields=["status", "completed_by", "completed_at", "updated_at"])
+        record_event(
+            organisation,
+            ActivityEvent.EVENT_ACTION_STATUS_CHANGED,
+            actor=request.user,
+            control_key=action.control_key,
+            related_object_type="remediation_action",
+            related_object_id=str(action.id),
+            metadata={"previous_status": previous_status, "new_status": action.status},
+        )
     messages.success(
         request,
         f'Action "{action.title}" accepted. This means the organisation consciously '

@@ -5,6 +5,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from activity.models import ActivityEvent
 from evidence.models import ControlEvidenceLink, EvidenceItem
 from evidence import link_services, services
 
@@ -111,7 +112,7 @@ class TestEvidenceUploadView:
             valid_until=None,
             uploaded_file=_upload(),
         )
-        services.withdraw_evidence(old)
+        services.withdraw_evidence(old, user_a)
         response = client_a.get(reverse("evidence:upload", args=[org_a.id]) + f"?supersedes={old.id}")
         assert response.status_code == 404
 
@@ -209,7 +210,7 @@ class TestEvidenceDetailAndListViews:
             source_label="", observed_at=None, valid_until=None,
             reference_url="https://example.test/withdrawn",
         )
-        services.withdraw_evidence(withdrawn)
+        services.withdraw_evidence(withdrawn, user_a)
 
         response = client_a.get(reverse("evidence:list", args=[org_a.id]))
         assert response.status_code == 200
@@ -285,6 +286,24 @@ class TestEvidenceWithdrawView:
         assert response.status_code == 302
         item.refresh_from_db()
         assert item.status == EvidenceItem.STATUS_WITHDRAWN
+
+    def test_post_records_the_requesting_user_as_the_withdrawal_actor(self, client_a, org_a, user_a):
+        """
+        HTTP-level check (not just service-level) that the view's
+        `services.withdraw_evidence(item, request.user)` call site actually
+        threads the logged-in user through as the event's actor.
+        """
+        item = services.create_external_reference_evidence(
+            organisation=org_a, actor=user_a, title="To withdraw", description="",
+            source_label="", observed_at=None, valid_until=None,
+            reference_url="https://example.test/x",
+        )
+        client_a.post(reverse("evidence:withdraw", args=[org_a.id, item.id]))
+        event = ActivityEvent.objects.get(
+            organisation=org_a, event_type=ActivityEvent.EVENT_EVIDENCE_WITHDRAWN
+        )
+        assert event.actor_id == user_a.id
+        assert event.related_object_id == str(item.id)
 
     def test_get_is_not_allowed(self, client_a, org_a, user_a):
         item = services.create_external_reference_evidence(
