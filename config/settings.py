@@ -187,6 +187,46 @@ if DJANGO_ENV == "production":
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
+    # M006 PID §12 finding, documented not fixed here (PID §25 defers real
+    # deployment/proxy topology decisions to a later production-readiness
+    # gate; this project is not yet authorised to choose one):
+    #
+    # SECURE_SSL_REDIRECT=True makes Django redirect any request it thinks
+    # is plain HTTP to an https:// URL. Django decides "is this HTTPS"
+    # via request.is_secure(), which - with no SECURE_PROXY_SSL_HEADER set
+    # (there is none, anywhere in this codebase, today) - looks ONLY at the
+    # literal connection scheme Django's own process received. In the
+    # extremely common real deployment shape where a reverse proxy
+    # terminates TLS and forwards plain HTTP internally to this app, every
+    # request arrives here as plain HTTP regardless of what the end client
+    # used - so Django would redirect it, the client would come back on
+    # HTTPS, the proxy would again forward plain HTTP internally, and
+    # Django would redirect again: an infinite redirect loop, not a
+    # one-off misconfiguration. This was reproduced live (not just reasoned
+    # about) during the M006 Round 4 dispatch by terminating TLS with a
+    # throwaway self-signed-cert proxy in front of a disposable
+    # DJANGO_ENV=production stack and forwarding plaintext to Django
+    # underneath, with no SECURE_PROXY_SSL_HEADER configured - see
+    # docs/evidence/M006-ROUND4-PRODCONFIG-HEALTH.md for the exact
+    # reproduction and captured output.
+    #
+    # The fix, when this project is actually authorised to choose a real
+    # deployment/proxy topology, is Django's own SECURE_PROXY_SSL_HEADER
+    # setting (e.g. ("HTTP_X_FORWARDED_PROTO", "https")) - but ONLY once
+    # it is verified that every request path to this app is guaranteed to
+    # go through a proxy that (a) always sets that header itself, and
+    # (b) is never reachable by a client that could set/spoof it directly,
+    # since a wrongly-trusted header is a request-forgery vector the other
+    # way. Choosing and verifying that is explicitly out of scope for
+    # M006 (PID §25) - not decided here.
+    #
+    # `manage.py check --deploy` separately flags security.W004
+    # (SECURE_HSTS_SECONDS unset) under this same DJANGO_ENV=production
+    # configuration. HSTS is the same class of decision: safe only once the
+    # real deployment topology guarantees the entire site (including every
+    # subdomain, if INCLUDE_SUBDOMAINS is ever added) is HTTPS-only, and a
+    # long max-age is not easily reversible if that assumption turns out to
+    # be wrong. Documented here for the same reason, not enabled.
 
 # ---------------------------------------------------------------------------
 # Internationalisation / time
