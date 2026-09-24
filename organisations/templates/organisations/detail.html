@@ -81,6 +81,16 @@
 </div>
 
 <div class="summary-card">
+    <h2>Questionnaire Assurance</h2>
+    {% if profile_exists %}
+        <p>Paste one security questionnaire question and get a grounded, honest draft answer.</p>
+        <a class="button button--primary" href="{% url 'questionnaire:list' organisation.id %}">Open questionnaire assurance</a>
+    {% else %}
+        <p>Complete the organisation profile first.</p>
+    {% endif %}
+</div>
+
+<div class="summary-card">
     <h2>Evidence</h2>
     {% if profile_exists %}
         <p>Upload a file or add an external reference to support, contradict or contextualise a security-baseline answer.</p>

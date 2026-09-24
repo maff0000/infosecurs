@@ -26,11 +26,18 @@ from ai_platform.gateway import (
     GatewayTimeoutError,
     InvalidResponseError,
     PolicyGenerationGateway,
+    QuestionnaireDraftingGateway,
+    QuestionnaireInterpretationGateway,
     RiskGenerationGateway,
     RiskInterpretationGateway,
 )
 from ai_platform.interpretation_contracts import InterpretationOutcome, InterpretationResponse
 from ai_platform.policy_contracts import PolicyGenerationResult, PolicyReviewWarning, PolicySection
+from ai_platform.questionnaire_drafting_contracts import QuestionnaireDraft
+from ai_platform.questionnaire_interpretation_contracts import (
+    INTENT_UNCLEAR,
+    QuestionnaireInterpretation,
+)
 
 
 def default_valid_result(prompt_version: str = "risk_generation_v1") -> GenerationResult:
@@ -330,3 +337,160 @@ class FakePolicyGateway(PolicyGenerationGateway):
             raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
 
         raise ValueError(f"FakePolicyGateway: unknown mode {self.mode!r}")
+
+
+def default_valid_questionnaire_interpretation_result(
+    request, prompt_version: str = "questionnaire_interpretation_v1"
+) -> QuestionnaireInterpretation:
+    """A minimal, valid `QuestionnaireInterpretation` - the default "happy
+    path" fixture `FakeQuestionnaireInterpretationGateway(mode="valid")`
+    builds when no explicit `result` is supplied (M005 m005-1-foundation
+    dispatch). Deliberately conservative - `intent_type="unclear"`,
+    `selected_keys=[]` - so this fixture is always contract-valid
+    regardless of what `request.available_keys` a specific call happened to
+    carry (mirroring `default_valid_interpretation_result`'s own reasoning
+    for being shaped by the request rather than fixed content): an
+    "unclear" interpretation with no selected keys is always well-formed
+    per `QuestionnaireInterpretation.__post_init__` and
+    `from_response_dict`'s invented-key check (an empty `selected_keys` can
+    never contain an invented key). Tests that need a SPECIFIC
+    intent/scope/selection construct their own `QuestionnaireInterpretation`
+    and pass it as `result`.
+    """
+    return QuestionnaireInterpretation(
+        intent_type=INTENT_UNCLEAR,
+        requirement_scope="unspecified",
+        requirement_summary="Fixture: could not confidently classify this question.",
+        selected_keys=[],
+        evidence_explicitly_requested=False,
+        ambiguous=True,
+        ambiguity_note="Fixture: default fixture interpretation is always 'unclear'.",
+        resolved_model="fixture-model/fake-v1",
+        prompt_version=prompt_version,
+        prompt_tokens=64,
+        completion_tokens=32,
+    )
+
+
+class FakeQuestionnaireInterpretationGateway(QuestionnaireInterpretationGateway):
+    """Deterministic `QuestionnaireInterpretationGateway` double (M005
+    m005-1-foundation dispatch), mirroring `FakeGateway`/
+    `FakeInterpretationGateway`/`FakePolicyGateway`'s mode-based pattern
+    exactly - see any of those classes' own docstrings for the shared
+    rationale (PID §17-equivalent: mechanical tests must never require a
+    live external LLM).
+
+    Modes: ``"valid"``, ``"invalid_schema"``, ``"timeout"``,
+    ``"auth_error"``, ``"rate_limit"``, ``"retryable"``,
+    ``"fail_then_succeed"``, ``"always_fail_retryable"`` - identical
+    meaning to every other fake gateway's own modes of the same name.
+
+    `calls` records every `(request, prompt_version)` pair passed to
+    `interpret_questionnaire_question`, in order, so a test can assert on
+    exactly what was sent - including proving that hostile/prompt-
+    injection-shaped text in `request.question_text` is passed through
+    completely unchanged, and that this fake's behaviour does not vary with
+    the *content* of that text (only with its own constructor-selected
+    `mode`).
+    """
+
+    def __init__(self, mode: str = "valid", result: Optional[QuestionnaireInterpretation] = None):
+        self.mode = mode
+        self._result = result
+        self.calls: list = []
+
+    def interpret_questionnaire_question(
+        self, request, prompt_version: str
+    ) -> QuestionnaireInterpretation:
+        self.calls.append((request, prompt_version))
+
+        if self.mode == "valid":
+            return self._result or default_valid_questionnaire_interpretation_result(
+                request, prompt_version
+            )
+        if self.mode == "invalid_schema":
+            raise InvalidResponseError("fixture: gateway returned an unparseable/invalid payload")
+        if self.mode == "timeout":
+            raise GatewayTimeoutError("fixture: gateway timed out")
+        if self.mode == "auth_error":
+            raise GatewayAuthError("fixture: gateway rejected credentials")
+        if self.mode == "rate_limit":
+            raise GatewayRateLimitError("fixture: gateway rate limit exceeded")
+        if self.mode == "retryable":
+            raise GatewayConnectionError("fixture: retryable gateway/network failure")
+        if self.mode == "fail_then_succeed":
+            if len(self.calls) == 1:
+                raise GatewayConnectionError("fixture: transient failure on first attempt")
+            return self._result or default_valid_questionnaire_interpretation_result(
+                request, prompt_version
+            )
+        if self.mode == "always_fail_retryable":
+            raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
+
+        raise ValueError(f"FakeQuestionnaireInterpretationGateway: unknown mode {self.mode!r}")
+
+
+def default_valid_questionnaire_draft_result(
+    request, prompt_version: str = "questionnaire_drafting_v1"
+) -> QuestionnaireDraft:
+    """A minimal, valid `QuestionnaireDraft` - the default "happy path"
+    fixture `FakeQuestionnaireDraftingGateway(mode="valid")` builds when no
+    explicit `result` is supplied (M005 m005-1-foundation dispatch).
+    `grounding_handles_used=[]` for the same "always contract-valid
+    regardless of what this specific request carried" reasoning
+    `default_valid_questionnaire_interpretation_result` documents - an
+    empty list can never reference a key outside `request.interpretation.
+    selected_keys`, whatever that set happens to be."""
+    return QuestionnaireDraft(
+        answer_text=f"Fixture answer text for outcome {request.outcome}.",
+        answer_summary="",
+        grounding_handles_used=[],
+        customer_review_note="",
+        resolved_model="fixture-model/fake-v1",
+        prompt_version=prompt_version,
+        prompt_tokens=64,
+        completion_tokens=32,
+    )
+
+
+class FakeQuestionnaireDraftingGateway(QuestionnaireDraftingGateway):
+    """Deterministic `QuestionnaireDraftingGateway` double (M005
+    m005-1-foundation dispatch), mirroring every other fake gateway's
+    mode-based pattern exactly.
+
+    Modes: ``"valid"``, ``"invalid_schema"``, ``"timeout"``,
+    ``"auth_error"``, ``"rate_limit"``, ``"retryable"``,
+    ``"fail_then_succeed"``, ``"always_fail_retryable"``.
+
+    `calls` records every `(request, prompt_version)` pair passed to
+    `draft_questionnaire_answer`, in order.
+    """
+
+    def __init__(self, mode: str = "valid", result: Optional[QuestionnaireDraft] = None):
+        self.mode = mode
+        self._result = result
+        self.calls: list = []
+
+    def draft_questionnaire_answer(self, request, prompt_version: str) -> QuestionnaireDraft:
+        self.calls.append((request, prompt_version))
+
+        if self.mode == "valid":
+            return self._result or default_valid_questionnaire_draft_result(request, prompt_version)
+        if self.mode == "invalid_schema":
+            raise InvalidResponseError("fixture: gateway returned an unparseable/invalid payload")
+        if self.mode == "timeout":
+            raise GatewayTimeoutError("fixture: gateway timed out")
+        if self.mode == "auth_error":
+            raise GatewayAuthError("fixture: gateway rejected credentials")
+        if self.mode == "rate_limit":
+            raise GatewayRateLimitError("fixture: gateway rate limit exceeded")
+        if self.mode == "retryable":
+            raise GatewayConnectionError("fixture: retryable gateway/network failure")
+        if self.mode == "fail_then_succeed":
+            if len(self.calls) == 1:
+                raise GatewayConnectionError("fixture: transient failure on first attempt")
+            return self._result or default_valid_questionnaire_draft_result(request, prompt_version)
+        if self.mode == "always_fail_retryable":
+            raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
+
+        raise ValueError(f"FakeQuestionnaireDraftingGateway: unknown mode {self.mode!r}")

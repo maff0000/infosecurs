@@ -63,5 +63,9 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/policy/",
         include("policy.urls"),
     ),
+    path(
+        "organisations/<uuid:organisation_id>/questionnaire/",
+        include("questionnaire.urls"),
+    ),
     path("organisations/", include("activity.urls")),
 ]

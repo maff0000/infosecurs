@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Questionnaire Assurance — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Questionnaire Assurance</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<section class="form-section">
+    <legend>Paste one security questionnaire question</legend>
+    <form method="post" action="{% url 'questionnaire:analyse' organisation.id %}">
+        {% csrf_token %}
+        <p>
+            <label for="id_question_text">Paste one security questionnaire question</label><br>
+            <textarea id="id_question_text" name="question_text" rows="4" style="width: 100%;" required></textarea>
+        </p>
+        <p>
+            <label for="id_source_label">Source / customer label (optional)</label><br>
+            <input id="id_source_label" name="source_label" type="text" style="width: 100%;">
+        </p>
+        <button type="submit" class="button button--primary">Analyse and draft answer</button>
+    </form>
+</section>
+
+{% if questions %}
+    <section class="form-section">
+        <legend>Questions asked so far</legend>
+        <ul>
+            {% for q in questions %}
+                <li>
+                    <strong>{{ q.question_text|truncatechars:120 }}</strong>
+                    {% if q.source_label %}&mdash; {{ q.source_label }}{% endif %}
+                    {% with latest=q.responses.first %}
+                        {% if latest %}
+                            &middot;
+                            <a href="{% url 'questionnaire:response_detail' organisation.id latest.id %}">
+                                {{ latest.get_outcome_display|default:latest.outcome }} ({{ latest.get_status_display }})
+                            </a>
+                        {% endif %}
+                    {% endwith %}
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+{% endblock %}

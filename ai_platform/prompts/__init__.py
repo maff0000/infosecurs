@@ -21,6 +21,8 @@ from typing import Callable, Optional
 
 from ai_platform.prompts import (
     policy_generation_v1,
+    questionnaire_drafting_v1,
+    questionnaire_interpretation_v1,
     risk_generation_v1,
     risk_generation_v2,
     risk_generation_v3,
@@ -85,4 +87,48 @@ def build_policy_messages_for_version(prompt_version: str) -> Optional[Callable]
     `prompt_version` for the policy-generation task, or `None` if
     `prompt_version` is not one this build knows how to render."""
     module = _POLICY_PROMPT_MODULES_BY_VERSION.get(prompt_version)
+    return module.build_messages if module is not None else None
+
+
+# --- Questionnaire-interpretation task (M005 m005-1-foundation dispatch) -
+# separate registry, same reasoning as every other task's own registry
+# above: this task's `build_messages` callable takes a
+# `QuestionnaireInterpretationRequest`, a different argument type from any
+# other task. -----------------------------------------------------------
+_QUESTIONNAIRE_INTERPRETATION_PROMPT_MODULES_BY_VERSION = {
+    questionnaire_interpretation_v1.PROMPT_VERSION: questionnaire_interpretation_v1,
+}
+
+KNOWN_QUESTIONNAIRE_INTERPRETATION_PROMPT_VERSIONS = tuple(
+    _QUESTIONNAIRE_INTERPRETATION_PROMPT_MODULES_BY_VERSION
+)
+
+
+def build_questionnaire_interpretation_messages_for_version(
+    prompt_version: str,
+) -> Optional[Callable]:
+    """Return the `build_messages(request)` callable that renders
+    `prompt_version` for the questionnaire-interpretation task, or `None`
+    if `prompt_version` is not one this build knows how to render."""
+    module = _QUESTIONNAIRE_INTERPRETATION_PROMPT_MODULES_BY_VERSION.get(prompt_version)
+    return module.build_messages if module is not None else None
+
+
+# --- Questionnaire-answer-drafting task (M005 m005-1-foundation dispatch) -
+# separate registry, same reasoning again: `build_messages` here takes a
+# `QuestionnaireDraftingRequest`. -----------------------------------------
+_QUESTIONNAIRE_DRAFTING_PROMPT_MODULES_BY_VERSION = {
+    questionnaire_drafting_v1.PROMPT_VERSION: questionnaire_drafting_v1,
+}
+
+KNOWN_QUESTIONNAIRE_DRAFTING_PROMPT_VERSIONS = tuple(
+    _QUESTIONNAIRE_DRAFTING_PROMPT_MODULES_BY_VERSION
+)
+
+
+def build_questionnaire_drafting_messages_for_version(prompt_version: str) -> Optional[Callable]:
+    """Return the `build_messages(request)` callable that renders
+    `prompt_version` for the questionnaire-answer-drafting task, or `None`
+    if `prompt_version` is not one this build knows how to render."""
+    module = _QUESTIONNAIRE_DRAFTING_PROMPT_MODULES_BY_VERSION.get(prompt_version)
     return module.build_messages if module is not None else None

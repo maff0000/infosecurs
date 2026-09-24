@@ -27,6 +27,14 @@ from typing import Optional
 from ai_platform.contracts import ContractValidationError, GenerationResult, GroundingPayload
 from ai_platform.interpretation_contracts import InterpretationRequest, InterpretationResponse
 from ai_platform.policy_contracts import PolicyGenerationResult, PolicyGroundingPayload
+from ai_platform.questionnaire_drafting_contracts import (
+    QuestionnaireDraft,
+    QuestionnaireDraftingRequest,
+)
+from ai_platform.questionnaire_interpretation_contracts import (
+    QuestionnaireInterpretation,
+    QuestionnaireInterpretationRequest,
+)
 
 # Governed, generic Trinity alias (Central Architecture correction,
 # 2026-09-22). Not Infosecurs-specific - see PID §9.1, ARCHITECTURE.md "AI".
@@ -161,7 +169,79 @@ class PolicyGenerationGateway(abc.ABC):
         raise NotImplementedError
 
 
-class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway, PolicyGenerationGateway):
+class QuestionnaireInterpretationGateway(abc.ABC):
+    """Provider-neutral QUESTIONNAIRE-INTERPRETATION boundary (M005
+    m005-1-foundation dispatch).
+
+    Deliberately a separate ABC from `RiskGenerationGateway`/
+    `RiskInterpretationGateway`/`PolicyGenerationGateway` - same reasoning
+    each of those already gives for being separate from one another: this
+    task has its own request/response contract
+    (`QuestionnaireInterpretationRequest`/`QuestionnaireInterpretation`,
+    from `ai_platform.questionnaire_interpretation_contracts`), and every
+    existing gateway implementation/test-double only ever needed to satisfy
+    the methods its own task(s) required. `LiteLLMGateway` below implements
+    this ABC alongside the other three on one concrete class (five ABCs in
+    total, once `QuestionnaireDraftingGateway` is added too) - reusing its
+    HTTP/retry/credential mechanics for every task; `ai_platform.testing.
+    FakeQuestionnaireInterpretationGateway` is this ABC's own, separate test
+    double.
+
+    Deliberately a SEPARATE ABC from `QuestionnaireDraftingGateway` too
+    (two new ABCs, not one) - mirroring how `RiskGenerationGateway`/
+    `RiskInterpretationGateway` are two separate ABCs on one concrete class
+    for the same reason (see that pair's own docstrings): interpretation
+    and drafting are different call shapes doing materially different jobs,
+    and a test double that only exercises one of them should never be
+    forced to implement a meaningless stub of the other.
+    """
+
+    @abc.abstractmethod
+    def interpret_questionnaire_question(
+        self, request: QuestionnaireInterpretationRequest, prompt_version: str
+    ) -> QuestionnaireInterpretation:
+        """Run one questionnaire-interpretation call and return a validated
+        `QuestionnaireInterpretation`.
+
+        Raises a `GatewayError` subclass on any failure - never returns a
+        partially-valid result, and never returns a result carrying a
+        `selected_keys` entry that was not offered in `request.
+        available_keys` (see `QuestionnaireInterpretation.
+        from_response_dict`).
+        """
+        raise NotImplementedError
+
+
+class QuestionnaireDraftingGateway(abc.ABC):
+    """Provider-neutral QUESTIONNAIRE-ANSWER-DRAFTING boundary (M005
+    m005-1-foundation dispatch). See `QuestionnaireInterpretationGateway`'s
+    own docstring for why this is a separate ABC from every other task,
+    including that one.
+    """
+
+    @abc.abstractmethod
+    def draft_questionnaire_answer(
+        self, request: QuestionnaireDraftingRequest, prompt_version: str
+    ) -> QuestionnaireDraft:
+        """Run one questionnaire-answer-drafting call and return a
+        validated `QuestionnaireDraft`.
+
+        Raises a `GatewayError` subclass on any failure - never returns a
+        partially-valid result, and never returns a result whose
+        `grounding_handles_used` references a key outside `request.
+        interpretation.selected_keys` (see `QuestionnaireDraft.
+        from_response_dict`).
+        """
+        raise NotImplementedError
+
+
+class LiteLLMGateway(
+    RiskGenerationGateway,
+    RiskInterpretationGateway,
+    PolicyGenerationGateway,
+    QuestionnaireInterpretationGateway,
+    QuestionnaireDraftingGateway,
+):
     """Real implementation - the existing Trinity LiteLLM-compatible
     gateway (PID §9.1, §9.2, §24).
 
@@ -356,6 +436,136 @@ class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway, PolicyGen
 
         return self._parse_openai_policy_response(payload, prompt_version)
 
+    def interpret_questionnaire_question(
+        self, request: QuestionnaireInterpretationRequest, prompt_version: str
+    ) -> QuestionnaireInterpretation:
+        """`QuestionnaireInterpretationGateway.interpret_questionnaire_question`
+        (M005 m005-1-foundation dispatch). Reuses this class's own
+        `_send`/`_read_credential`/`_raise_for_status`/
+        `_extract_structured_content` exactly as every other task's method
+        does above - same HTTP client, same lazy config loading, same error
+        taxonomy, same credential handling - only the built request
+        messages and the response contract parser differ.
+
+        Model alias: reuses `AI_RISK_MODEL_ALIAS` - PID §21 names the same
+        governed `trinity-core` alias for both questionnaire tasks as for
+        risk/policy generation; there is no questionnaire-specific
+        model-alias env var to invent.
+        """
+        # Local imports: keep config/prompt loading lazy, and keep this
+        # module importable without Django settings configured - same
+        # reasoning as every other method above.
+        from config.env import optional_env, require_env
+
+        from ai_platform.prompts import (
+            KNOWN_QUESTIONNAIRE_INTERPRETATION_PROMPT_VERSIONS,
+            build_questionnaire_interpretation_messages_for_version,
+        )
+
+        build_messages = build_questionnaire_interpretation_messages_for_version(prompt_version)
+        if build_messages is None:
+            raise InvalidResponseError(
+                f"requested prompt_version {prompt_version!r} is not one of the "
+                f"questionnaire-interpretation prompt versions this gateway build "
+                f"knows how to render {KNOWN_QUESTIONNAIRE_INTERPRETATION_PROMPT_VERSIONS!r}"
+            )
+
+        base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
+        key_file = require_env("AI_GATEWAY_API_KEY_FILE")
+        model_alias = optional_env("AI_RISK_MODEL_ALIAS", DEFAULT_MODEL_ALIAS)
+
+        api_key = self._read_credential(key_file)
+
+        request_body = json.dumps(
+            {
+                "model": model_alias,
+                "messages": build_messages(request),
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            url=f"{base_url}/v1/chat/completions",
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+
+        status, raw_body = self._send(http_request)
+        self._raise_for_status(status, raw_body)
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidResponseError("AI gateway response was not valid JSON") from exc
+
+        return self._parse_openai_questionnaire_interpretation_response(
+            payload, prompt_version, request.available_keys
+        )
+
+    def draft_questionnaire_answer(
+        self, request: QuestionnaireDraftingRequest, prompt_version: str
+    ) -> QuestionnaireDraft:
+        """`QuestionnaireDraftingGateway.draft_questionnaire_answer` (M005
+        m005-1-foundation dispatch). Reuses this class's own mechanics
+        exactly as every other task's method does above."""
+        # Local imports: keep config/prompt loading lazy, and keep this
+        # module importable without Django settings configured - same
+        # reasoning as every other method above.
+        from config.env import optional_env, require_env
+
+        from ai_platform.prompts import (
+            KNOWN_QUESTIONNAIRE_DRAFTING_PROMPT_VERSIONS,
+            build_questionnaire_drafting_messages_for_version,
+        )
+
+        build_messages = build_questionnaire_drafting_messages_for_version(prompt_version)
+        if build_messages is None:
+            raise InvalidResponseError(
+                f"requested prompt_version {prompt_version!r} is not one of the "
+                f"questionnaire-drafting prompt versions this gateway build knows "
+                f"how to render {KNOWN_QUESTIONNAIRE_DRAFTING_PROMPT_VERSIONS!r}"
+            )
+
+        base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
+        key_file = require_env("AI_GATEWAY_API_KEY_FILE")
+        model_alias = optional_env("AI_RISK_MODEL_ALIAS", DEFAULT_MODEL_ALIAS)
+
+        api_key = self._read_credential(key_file)
+
+        request_body = json.dumps(
+            {
+                "model": model_alias,
+                "messages": build_messages(request),
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            url=f"{base_url}/v1/chat/completions",
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+
+        status, raw_body = self._send(http_request)
+        self._raise_for_status(status, raw_body)
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidResponseError("AI gateway response was not valid JSON") from exc
+
+        return self._parse_openai_questionnaire_drafting_response(
+            payload, prompt_version, request.interpretation.selected_keys
+        )
+
     def _send(self, request: urllib.request.Request):
         """Perform the HTTP call, translating transport failures into typed
         gateway exceptions. Never logs/echoes the Authorization header."""
@@ -501,6 +711,60 @@ class LiteLLMGateway(RiskGenerationGateway, RiskInterpretationGateway, PolicyGen
         try:
             return PolicyGenerationResult.from_response_dict(
                 structured,
+                resolved_model=resolved_model,
+                prompt_version=prompt_version,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except ContractValidationError as exc:
+            raise InvalidResponseError(str(exc)) from exc
+
+    @staticmethod
+    def _parse_openai_questionnaire_interpretation_response(
+        payload: dict, prompt_version: str, available_keys: list
+    ) -> QuestionnaireInterpretation:
+        """Questionnaire-interpretation-task counterpart to
+        `_parse_openai_response`/`_parse_openai_interpretation_response`/
+        `_parse_openai_policy_response` - same envelope unwrap
+        (`_extract_structured_content`), different response-contract parser
+        (`QuestionnaireInterpretation.from_response_dict`). `available_keys`
+        is threaded through so that parser can enforce "AI may only select
+        offered catalogue keys" (see that method's own docstring)."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
+
+        try:
+            return QuestionnaireInterpretation.from_response_dict(
+                structured,
+                available_keys=available_keys,
+                resolved_model=resolved_model,
+                prompt_version=prompt_version,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except ContractValidationError as exc:
+            raise InvalidResponseError(str(exc)) from exc
+
+    @staticmethod
+    def _parse_openai_questionnaire_drafting_response(
+        payload: dict, prompt_version: str, selected_keys: list
+    ) -> QuestionnaireDraft:
+        """Questionnaire-answer-drafting-task counterpart to the other
+        tasks' own `_parse_openai_*_response` methods - same envelope
+        unwrap, different response-contract parser
+        (`QuestionnaireDraft.from_response_dict`). `selected_keys` is
+        threaded through so that parser can enforce "grounding_handles_used
+        may only reference keys the interpretation actually selected" (see
+        that method's own docstring)."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
+
+        try:
+            return QuestionnaireDraft.from_response_dict(
+                structured,
+                selected_keys=selected_keys,
                 resolved_model=resolved_model,
                 prompt_version=prompt_version,
                 prompt_tokens=prompt_tokens,

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Questionnaire response — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Questionnaire response</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <a href="{% url 'questionnaire:list' organisation.id %}">Back to Questionnaire Assurance</a>
+</div>
+
+<section class="form-section">
+    <legend>Question</legend>
+    <p>{{ question.question_text }}</p>
+    {% if question.source_label %}<p><em>{{ question.source_label }}</em></p>{% endif %}
+</section>
+
+<section class="form-section">
+    <legend>What this is asking</legend>
+    <p>{{ response.interpreted_requirement_summary }}</p>
+</section>
+
+<section class="form-section">
+    <legend>Outcome</legend>
+    <p><strong>{{ response.outcome }}</strong> ({{ response.get_status_display }})</p>
+</section>
+
+<section class="form-section">
+    <legend>Draft response</legend>
+    <p>{{ response.current_answer_text }}</p>
+</section>
+
+{% if response.review_warnings %}
+    <section class="form-section">
+        <legend>What needs attention?</legend>
+        <ul>
+            {% for warning in response.review_warnings %}
+                <li>{{ warning }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+
+<section class="form-section">
+    <legend>Why this answer?</legend>
+    <p>Canonical facts used:</p>
+    <ul>
+        {% for key in response.selected_keys %}
+            <li>{{ key }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

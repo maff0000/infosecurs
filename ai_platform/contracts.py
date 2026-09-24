@@ -72,6 +72,29 @@ def _require_dict_list(value: Any, field: str) -> list:
     return list(value)
 
 
+def _require_bool(value: Any, field: str) -> bool:
+    """Generic bool-field validator (M005 m005-1-foundation dispatch, added
+    for `ai_platform.questionnaire_interpretation_contracts`/
+    `ai_platform.questionnaire_drafting_contracts`' boolean fields -
+    `evidence_explicitly_requested`/`ambiguous`). Kept here alongside the
+    other generic, task-shape-independent helpers rather than defined
+    per-task, for the same reason those helpers already live here (PID
+    §9.3's "invalid/unparseable output is a failed generation, not
+    partially trusted data" discipline, applied uniformly)."""
+    if not isinstance(value, bool):
+        raise ContractValidationError(f"'{field}' must be a bool, got {value!r}")
+    return value
+
+
+def _require_str_allow_blank(value: Any, field: str) -> str:
+    """Like `_require_str`, but a blank string is a legitimate value (e.g.
+    an optional label/note field that may genuinely be empty), not a
+    validation failure - only a non-string is rejected."""
+    if not isinstance(value, str):
+        raise ContractValidationError(f"'{field}' must be a string, got {value!r}")
+    return value
+
+
 @dataclasses.dataclass(frozen=True)
 class GroundingPayload:
     """What goes INTO a generation call (PID §9.3, §10).

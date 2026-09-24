@@ -14,6 +14,7 @@ Risk domain - the later Risk-domain module is expected to record a foreign
 key from its own `Risk`/candidate rows back to the `AIInvocationRecord`
 that produced them, not the other way round.
 """
+import dataclasses
 import hashlib
 import json
 import uuid
@@ -46,10 +47,32 @@ class AIInvocationRecord(models.Model):
     # historical AIInvocationRecord's task_type stop reliably describing
     # what call actually happened.
     TASK_POLICY_GENERATION = "policy_generation"
+    # M005 PID §21 (m005-1-foundation dispatch): AI semantic interpretation
+    # of one arbitrary, untrusted external questionnaire question against
+    # the questionnaire canonical-key catalogue
+    # (`questionnaire.catalogue`). A fourth distinct task_type, for the
+    # same reason the three above are distinct from each other and from
+    # one another - a different call shape
+    # (`ai_platform.questionnaire_interpretation_contracts`, not any
+    # existing task's contracts) doing a materially different job (identify
+    # WHAT a question asks, never whether the organisation satisfies it -
+    # see that contract module's own docstring for why this task never
+    # touches assurance-outcome truth at all).
+    TASK_QUESTIONNAIRE_INTERPRETATION = "questionnaire_interpretation"
+    # M005 PID §21 (m005-1-foundation dispatch): AI drafting of a concise
+    # questionnaire answer from an already-validated interpretation, an
+    # application-derived (never AI-chosen) outcome, and a bounded
+    # grounding snapshot. A fifth distinct task_type - a different call
+    # shape (`ai_platform.questionnaire_drafting_contracts`) doing a
+    # materially different job (write wording consistent with a FIXED
+    # outcome, never decide or change that outcome).
+    TASK_QUESTIONNAIRE_DRAFTING = "questionnaire_answer_drafting"
     TASK_TYPE_CHOICES = [
         (TASK_INITIAL_RISK_GENERATION, "Initial risk generation"),
         (TASK_RISK_INTERPRETATION, "Risk interpretation"),
         (TASK_POLICY_GENERATION, "Policy generation"),
+        (TASK_QUESTIONNAIRE_INTERPRETATION, "Questionnaire interpretation"),
+        (TASK_QUESTIONNAIRE_DRAFTING, "Questionnaire answer drafting"),
     ]
 
     STATUS_PENDING = "pending"
@@ -204,6 +227,59 @@ class AIInvocationRecord(models.Model):
                 "baseline_facts": grounding.baseline_facts,
                 "security_state_facts": grounding.security_state_facts,
                 "open_risk_facts": grounding.open_risk_facts,
+            },
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def hash_questionnaire_interpretation_request(request) -> str:
+        """Canonical SHA-256 hash of an
+        `ai_platform.questionnaire_interpretation_contracts.
+        QuestionnaireInterpretationRequest`'s wire content (M005
+        m005-1-foundation dispatch). Mirrors `hash_grounding`/
+        `hash_policy_grounding` exactly - same rationale (PID §21: "input
+        snapshot hash" - an immutable reference to what was sent, without
+        duplicating the raw payload in the database) - but over this task's
+        own request shape. Includes `question_text`/`source_label` (the
+        untrusted external content actually sent outbound) and
+        `available_keys` (the exact catalogue offered this call), so the
+        hash is a faithful fingerprint of exactly what left the tenant
+        boundary towards the model.
+        """
+        canonical = json.dumps(
+            {
+                "organisation_id": request.organisation_id,
+                "question_text": request.question_text,
+                "source_label": request.source_label,
+                "available_keys": request.available_keys,
+            },
+            sort_keys=True,
+            default=str,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def hash_questionnaire_drafting_request(request) -> str:
+        """Canonical SHA-256 hash of an
+        `ai_platform.questionnaire_drafting_contracts.
+        QuestionnaireDraftingRequest`'s wire content (M005
+        m005-1-foundation dispatch). Mirrors `hash_grounding`/
+        `hash_policy_grounding`/`hash_questionnaire_interpretation_request`
+        exactly - same rationale, over this task's own request shape:
+        `question_text` (untrusted external content), the already-validated
+        `interpretation` (flattened via `dataclasses.asdict` so it hashes
+        as plain data, not an opaque object identity), the fixed
+        application-derived `outcome`, and the bounded `grounding_snapshot`.
+        """
+        canonical = json.dumps(
+            {
+                "organisation_id": request.organisation_id,
+                "question_text": request.question_text,
+                "interpretation": dataclasses.asdict(request.interpretation),
+                "outcome": request.outcome,
+                "grounding_snapshot": request.grounding_snapshot,
             },
             sort_keys=True,
             default=str,
