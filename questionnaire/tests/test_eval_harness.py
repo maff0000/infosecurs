@@ -173,6 +173,32 @@ class TestRunEvalMechanics:
             key.startswith("policy_section:") for key in case["actual_interpretation"]["selected_keys"]
         )
 
+    def test_policy_requires_mfa_case_has_intent_type_grading_switched_off_only(self):
+        """Post-live-eval-run-1 refinement (docs/evidence/
+        M005-LIVE-EVALUATION.md): only intent_type_correct is opted out for
+        this case - interpretation_keys_valid/requirement_scope_correct
+        remain fully graded."""
+        report = run_eval("fake")
+        case = next(
+            c for c in report["cases"] if c["key"] == "policy_requires_mfa_implementation_partial"
+        )
+        assert case["objective_checks"]["intent_type_correct"] is None
+        assert case["objective_checks"]["interpretation_keys_valid"] is True
+        assert case["objective_checks"]["requirement_scope_correct"] is True
+        assert case["objective_checks"]["outcome_exact"] is True
+
+    def test_genuine_not_applicable_case_has_requirement_scope_grading_switched_off_only(self):
+        """Post-live-eval-run-1 refinement (docs/evidence/
+        M005-LIVE-EVALUATION.md): only requirement_scope_correct is opted
+        out for this case - interpretation_keys_valid/intent_type_correct
+        remain fully graded."""
+        report = run_eval("fake")
+        case = next(c for c in report["cases"] if c["key"] == "genuine_not_applicable")
+        assert case["objective_checks"]["requirement_scope_correct"] is None
+        assert case["objective_checks"]["interpretation_keys_valid"] is True
+        assert case["objective_checks"]["intent_type_correct"] is True
+        assert case["objective_checks"]["outcome_exact"] is True
+
     def test_every_case_has_raw_answer_and_human_judgement_properties(self):
         report = run_eval("fake")
         for case in report["cases"]:
@@ -188,7 +214,7 @@ class TestRunEvalMechanics:
 
     def test_report_top_level_fields(self):
         report = run_eval("fake")
-        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v1"
+        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v2"
         assert report["interpretation_prompt_version"] == "questionnaire_interpretation_v1"
         assert report["drafting_prompt_version"] == "questionnaire_drafting_v1"
         assert report["gateway_mode"] == "fake"

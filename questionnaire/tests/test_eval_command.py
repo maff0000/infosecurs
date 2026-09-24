@@ -20,7 +20,7 @@ class TestRunQuestionnaireAiEvalCommandFakeGateway:
         assert report["overall_verdict"] == "green"
         assert report["case_count"] == 14
         assert len(report["cases"]) == 14
-        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v1"
+        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v2"
         assert report["interpretation_prompt_version"] == "questionnaire_interpretation_v1"
         assert report["drafting_prompt_version"] == "questionnaire_drafting_v1"
         assert report["gateway_mode"] == "fake"
