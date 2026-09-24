@@ -8,4 +8,11 @@ urlpatterns = [
     path("", views.questionnaire_list, name="list"),
     path("analyse/", views.questionnaire_analyse, name="analyse"),
     path("responses/<uuid:response_id>/", views.questionnaire_response_detail, name="response_detail"),
+    path("responses/<uuid:response_id>/accept/", views.questionnaire_response_accept, name="response_accept"),
+    path("responses/<uuid:response_id>/edit/", views.questionnaire_response_edit, name="response_edit"),
+    path(
+        "responses/<uuid:response_id>/regenerate/",
+        views.questionnaire_response_regenerate,
+        name="response_regenerate",
+    ),
 ]

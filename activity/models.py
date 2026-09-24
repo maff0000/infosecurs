@@ -136,6 +136,28 @@ class ActivityEvent(models.Model):
     # `policy.services.create_new_draft_from_approved`.
     EVENT_POLICY_NEW_DRAFT_CREATED = "policy_new_draft_created"
 
+    # --- Questionnaire Assurance (M005) -------------------------------
+    # Added by the m005-2-review-history dispatch, per
+    # docs/pids/M005-QUESTIONNAIRE-ASSURANCE.md §24's expected M005 event
+    # list. As with the additions above, PID §24's list is illustrative
+    # ("such as"), not exhaustive - this is the fifth dispatch to extend
+    # `EVENT_TYPE_CHOICES` on that basis. Real emitters:
+    # `questionnaire.views.questionnaire_analyse` (question created),
+    # `questionnaire.services.generate_questionnaire_response` (question
+    # interpreted, response generated - both inside that function, see its
+    # own module docstring for exactly where each fires),
+    # `questionnaire.services.edit_questionnaire_response_text` (edited),
+    # `questionnaire.services.accept_questionnaire_response` (accepted -
+    # for the newly-accepted response - and superseded - for whichever
+    # other response for the same question previously held
+    # status=accepted, if any).
+    EVENT_QUESTION_CREATED = "question_created"
+    EVENT_QUESTION_INTERPRETED = "question_interpreted"
+    EVENT_QUESTIONNAIRE_RESPONSE_GENERATED = "questionnaire_response_generated"
+    EVENT_QUESTIONNAIRE_RESPONSE_EDITED = "questionnaire_response_edited"
+    EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED = "questionnaire_response_accepted"
+    EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED = "questionnaire_response_superseded"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -157,6 +179,12 @@ class ActivityEvent(models.Model):
         (EVENT_POLICY_APPROVED, "Policy approved"),
         (EVENT_POLICY_SUPERSEDED, "Policy superseded"),
         (EVENT_POLICY_NEW_DRAFT_CREATED, "New policy draft created from approved version"),
+        (EVENT_QUESTION_CREATED, "Question created"),
+        (EVENT_QUESTION_INTERPRETED, "Question interpreted"),
+        (EVENT_QUESTIONNAIRE_RESPONSE_GENERATED, "Questionnaire response generated"),
+        (EVENT_QUESTIONNAIRE_RESPONSE_EDITED, "Questionnaire response edited"),
+        (EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED, "Questionnaire response accepted"),
+        (EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED, "Questionnaire response superseded"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -164,7 +192,13 @@ class ActivityEvent(models.Model):
     organisation = models.ForeignKey(
         Organisation, on_delete=models.CASCADE, related_name="activity_events"
     )
-    event_type = models.CharField(max_length=32, choices=EVENT_TYPE_CHOICES)
+    # max_length bumped 32 -> 40 by the m005-2-review-history dispatch:
+    # "questionnaire_response_superseded" (33 chars) is the first
+    # EVENT_TYPE_CHOICES value to exceed the previous 32-char limit -
+    # Django's own system check (fields.E009) catches this at
+    # makemigrations time. 40 leaves headroom for future additions of
+    # similar length without needing another width bump immediately.
+    event_type = models.CharField(max_length=40, choices=EVENT_TYPE_CHOICES)
 
     # Nullable: some events may be system-initiated (PID §12), though
     # nothing in this dispatch's own scope emits one without an actor.
@@ -290,4 +324,19 @@ class ActivityEvent(models.Model):
                 f"New policy draft (version {version_number}) created from "
                 f"approved version {source_version_number}"
             )
+        if self.event_type == self.EVENT_QUESTION_CREATED:
+            return "A questionnaire question was submitted"
+        if self.event_type == self.EVENT_QUESTION_INTERPRETED:
+            intent_type = self.metadata.get("intent_type", "?")
+            return f"Question interpreted as '{intent_type}'"
+        if self.event_type == self.EVENT_QUESTIONNAIRE_RESPONSE_GENERATED:
+            outcome = self.metadata.get("outcome", "?")
+            return f"Questionnaire response drafted (outcome: {outcome})"
+        if self.event_type == self.EVENT_QUESTIONNAIRE_RESPONSE_EDITED:
+            return "Questionnaire response wording edited"
+        if self.event_type == self.EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED:
+            outcome = self.metadata.get("outcome", "?")
+            return f"Questionnaire response accepted (outcome: {outcome})"
+        if self.event_type == self.EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED:
+            return "Questionnaire response superseded by a newer response"
         return self.get_event_type_display()
