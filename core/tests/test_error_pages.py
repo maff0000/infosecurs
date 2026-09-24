@@ -34,11 +34,36 @@ def _assert_no_leakage(content: bytes):
         assert marker not in content, f"unsafe marker leaked into error page: {marker!r}"
 
 
+# Central Architecture review of PR #36 (post-merge-candidate correction):
+# `templates/500.html` originally claimed "no changes were saved" - not a
+# claim this codebase can mechanically guarantee. There is no global
+# request-transaction invariant proving a 500 response means no write was
+# committed; a failure could occur after some state already changed. A
+# customer-facing page must never assert something the system cannot prove,
+# exactly the same "no unsupported claim" discipline this project already
+# applies to policy/questionnaire wording (ADR-0003) - it applies to error
+# pages too. This list is a durable regression guard, not just a one-off
+# assertion on the 500 test: it fires against ANY error page that might
+# reintroduce one of these unproven claims in future.
+_UNSUPPORTED_CLAIM_MARKERS = [
+    b"no changes were saved",
+    b"Nothing you did caused this",
+    b"failed atomically",
+    b"retrying is always safe",
+]
+
+
+def _assert_no_unsupported_claims(content: bytes):
+    for marker in _UNSUPPORTED_CLAIM_MARKERS:
+        assert marker not in content, f"unsupported claim present on error page: {marker!r}"
+
+
 def test_404_renders_safe_customer_facing_page(client):
     response = client.get("/this-path-does-not-exist-anywhere/")
     assert response.status_code == 404
     assert b"Page not found" in response.content
     _assert_no_leakage(response.content)
+    _assert_no_unsupported_claims(response.content)
 
 
 def test_400_renders_safe_customer_facing_page_on_disallowed_host():
@@ -52,6 +77,7 @@ def test_400_renders_safe_customer_facing_page_on_disallowed_host():
     assert response.status_code == 400
     assert b"couldn't process that request" in response.content
     _assert_no_leakage(response.content)
+    _assert_no_unsupported_claims(response.content)
 
 
 def test_403_csrf_failure_renders_safe_customer_facing_page():
@@ -70,6 +96,7 @@ def test_403_csrf_failure_renders_safe_customer_facing_page():
     assert response.status_code == 403
     assert b"session expired" in response.content
     _assert_no_leakage(response.content)
+    _assert_no_unsupported_claims(response.content)
 
 
 @override_settings(ROOT_URLCONF="core.tests._deliberate_500_fixture_urls")
@@ -82,4 +109,10 @@ def test_500_renders_safe_customer_facing_page():
     response = client.get("/__test-only-deliberate-500__/")
     assert response.status_code == 500
     assert b"Something went wrong" in response.content
+    # Neutral, accurate wording only - the page must never claim a write
+    # was rolled back or that retrying is unconditionally safe, since
+    # nothing in this codebase mechanically guarantees either.
+    assert b"Please try again" in response.content
+    assert b"check the relevant page before repeating the action" in response.content
     _assert_no_leakage(response.content)
+    _assert_no_unsupported_claims(response.content)
