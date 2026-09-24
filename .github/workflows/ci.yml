@@ -164,3 +164,6 @@ jobs:
           questionnaire/tests/test_review_workflow.py
           questionnaire/tests/test_activity_events.py
           questionnaire/tests/test_tenant_isolation.py
+          questionnaire/tests/test_eval_golden_corpus.py
+          questionnaire/tests/test_eval_harness.py
+          questionnaire/tests/test_eval_command.py
