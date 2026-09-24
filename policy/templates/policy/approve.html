@@ -45,7 +45,7 @@
             <label for="{{ form.next_review_date.id_for_label }}">Next review date</label>
             {% if form.next_review_date.help_text %}<p class="field__help">{{ form.next_review_date.help_text }}</p>{% endif %}
             {{ form.next_review_date }}
-            {% if form.next_review_date.errors %}<p class="field__error">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
+            {% if form.next_review_date.errors %}<p class="field__error" role="alert">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
         </div>
         <div class="form-actions">
             <a class="button button--secondary" href="{% url 'policy:version_detail' organisation.id version.id %}">Cancel</a>

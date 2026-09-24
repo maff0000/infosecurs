@@ -67,18 +67,18 @@
 {% endif %}
 
 <section class="form-section response-detail__section">
-    <legend>Question</legend>
+    <h2 class="form-section__heading">Question</h2>
     <p>{{ question.question_text }}</p>
     {% if question.source_label %}<p><em>{{ question.source_label }}</em></p>{% endif %}
 </section>
 
 <section class="form-section response-detail__section">
-    <legend>What this is asking</legend>
+    <h2 class="form-section__heading">What this is asking</h2>
     <p>{{ response.interpreted_requirement_summary }}</p>
 </section>
 
 <section class="form-section response-detail__section">
-    <legend>Outcome</legend>
+    <h2 class="form-section__heading">Outcome</h2>
     <p>{{ outcome_presentation.headline }}</p>
     {% for note in outcome_presentation.sub_notes %}
         <p>{{ note }}</p>
@@ -86,7 +86,7 @@
 </section>
 
 <section class="form-section response-detail__section">
-    <legend>Response</legend>
+    <h2 class="form-section__heading">Response</h2>
     <p>{{ response.current_answer_text|linebreaksbr }}</p>
     {% if response.status == "draft" %}
         <div class="form-actions">
@@ -101,7 +101,7 @@
 
 {% if response.review_warnings %}
     <section class="form-section response-detail__section">
-        <legend>What needs attention?</legend>
+        <h2 class="form-section__heading">What needs attention?</h2>
         <ul>
             {% for warning in response.review_warnings %}
                 <li>{{ warning }}</li>
@@ -111,7 +111,7 @@
 {% endif %}
 
 <section class="form-section response-detail__section">
-    <legend>Why this answer?</legend>
+    <h2 class="form-section__heading">Why this answer?</h2>
     {% if grounding_facts %}
         {% for fact in grounding_facts %}
             <div class="fact-card">
@@ -166,7 +166,7 @@
 </section>
 
 <section class="form-section response-detail__section">
-    <legend>Regenerate</legend>
+    <h2 class="form-section__heading">Regenerate</h2>
     <p>If the organisation's security state has changed since this response was drafted, regenerate a fresh attempt. This response stays exactly as it is.</p>
     <form method="post" action="{% url 'questionnaire:response_regenerate' organisation.id response.id %}">
         {% csrf_token %}

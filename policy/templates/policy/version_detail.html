@@ -50,7 +50,7 @@
 
 {% if version.review_warnings %}
     <section class="form-section">
-        <legend>Review warnings</legend>
+        <h2 class="form-section__heading">Review warnings</h2>
         <ul>
             {% for warning in version.review_warnings %}
                 <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
@@ -61,7 +61,7 @@
 
 {% for section in version.sections %}
     <section class="form-section">
-        <legend>{{ section.section_key }}</legend>
+        <h2 class="form-section__heading">{{ section.section_key }}</h2>
         <p>{{ section.content }}</p>
     </section>
 {% endfor %}

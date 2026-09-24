@@ -25,7 +25,7 @@
             <label for="{{ form.current_answer_text.id_for_label }}">Response text</label>
             {{ form.current_answer_text }}
             {% if form.current_answer_text.errors %}
-                <p class="field__error">{{ form.current_answer_text.errors|join:", " }}</p>
+                <p class="field__error" role="alert">{{ form.current_answer_text.errors|join:", " }}</p>
             {% endif %}
         </div>
 

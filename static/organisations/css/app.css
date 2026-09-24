@@ -240,6 +240,17 @@ a:hover { color: var(--color-primary-dark); }
   font-size: 1.05rem;
   padding: 0 var(--space-2);
 }
+/* Non-form informational groupings (M006 PID §9 - semantic headings) use a
+   real heading element (h2/h3, matching each page's own hierarchy) instead
+   of a <legend> outside a <fieldset> - an orphaned <legend> is invalid HTML
+   and is dropped from the accessibility tree's heading structure, so it
+   was invisible to screen-reader heading navigation despite looking like a
+   section title visually. `.form-section__heading` keeps the same look. */
+.form-section__heading {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 var(--space-2) 0;
+}
 .form-section__help {
   color: var(--color-text-muted);
   margin-top: 0;
