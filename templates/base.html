@@ -17,12 +17,9 @@
                     <span class="app-header__context-name">{{ organisation.name }}</span>
                 </span>
             {% endif %}
-            <nav class="app-header__nav" aria-label="Primary">
+            <nav class="app-header__nav" aria-label="Account">
                 {% if user.is_authenticated %}
                     <a href="{% url 'organisations:list' %}">Organisations</a>
-                    {% if organisation %}
-                        <a href="{% url 'organisations:profile' organisation.id %}">Profile</a>
-                    {% endif %}
                     <form method="post" action="{% url 'logout' %}" class="app-header__logout">
                         {% csrf_token %}
                         <span class="app-header__user">{{ user.username }}</span>
@@ -33,6 +30,38 @@
                 {% endif %}
             </nav>
         </div>
+        {% if organisation %}
+            {# Primary organisation-scoped navigation (M006 PID §5). Only shown #}
+            {# once an organisation is in context - matches the existing #}
+            {# {% if organisation %} gate the org-name badge above already uses. #}
+            {# `active_nav` comes from core.context_processors.active_nav; a #}
+            {# small explicit dict, not a configurable navigation framework. #}
+            <nav class="app-header__nav-primary" aria-label="Primary">
+                <div class="app-header__nav-primary-bar">
+                    <a class="app-header__nav-primary-link{% if active_nav == 'overview' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'overview' %}aria-current="page"{% endif %}
+                       href="{% url 'organisations:detail' organisation.id %}">Overview</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'security' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'security' %}aria-current="page"{% endif %}
+                       href="{% url 'security_state:list' organisation.id %}">Security</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'evidence' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'evidence' %}aria-current="page"{% endif %}
+                       href="{% url 'evidence:list' organisation.id %}">Evidence</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'policy' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'policy' %}aria-current="page"{% endif %}
+                       href="{% url 'policy:detail' organisation.id %}">Policy</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'questionnaires' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'questionnaires' %}aria-current="page"{% endif %}
+                       href="{% url 'questionnaire:list' organisation.id %}">Questionnaires</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'activity' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'activity' %}aria-current="page"{% endif %}
+                       href="{% url 'activity:list' organisation.id %}">Activity</a>
+                    <a class="app-header__nav-primary-link{% if active_nav == 'organisation' %} app-header__nav-primary-link--active{% endif %}"
+                       {% if active_nav == 'organisation' %}aria-current="page"{% endif %}
+                       href="{% url 'organisations:organisation_hub' organisation.id %}">Organisation</a>
+                </div>
+            </nav>
+        {% endif %}
     </header>
 
     <main id="main-content" class="app-main">

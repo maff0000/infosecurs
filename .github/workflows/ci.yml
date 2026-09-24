@@ -56,6 +56,7 @@ jobs:
           organisations/tests/test_models.py
           organisations/tests/test_persistence.py
           organisations/tests/test_bootstrap.py
+          organisations/tests/test_overview.py
           security_baseline/tests/test_models.py
           security_baseline/tests/test_services.py
           key_assets/tests/test_models.py
@@ -118,6 +119,8 @@ jobs:
           organisations/tests/test_auth.py
           organisations/tests/test_tenant_isolation.py
           organisations/tests/test_http_ui.py
+          organisations/tests/test_organisation_hub.py
+          organisations/tests/test_navigation.py
           core/tests/
           security_baseline/tests/test_auth.py
           security_baseline/tests/test_http_ui.py

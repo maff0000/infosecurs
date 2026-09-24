@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Organisation — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Organisation</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p class="page-header__subtitle">
+    Profile, governance roles and workplace - who this organisation is, who holds each
+    governance role, and where staff work.
+</p>
+
+<div class="summary-card">
+    <h2>Profile</h2>
+    <p>The security-relevant facts this organisation has confirmed so far.</p>
+    <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">Open profile</a>
+</div>
+
+<div class="summary-card">
+    <h2>Governance roles</h2>
+    <p>See and confirm who is listed as policy authoriser, security responsible person and senior leadership representative.</p>
+    <a class="button button--primary" href="{% url 'governance:roles' organisation.id %}">Open governance roles</a>
+</div>
+
+<div class="summary-card">
+    <h2>Workplace</h2>
+    <p>Describe where staff work - home, office, shared/coworking space, or a mix.</p>
+    <a class="button button--primary" href="{% url 'workplace:list' organisation.id %}">Open workplace</a>
+</div>
+{% endblock %}

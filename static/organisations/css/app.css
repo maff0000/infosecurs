@@ -18,6 +18,9 @@
   --color-error-bg: #fbeaea;
   --color-error-text: #a3251f;
   --color-error-border: #d9534f;
+  --color-primary-tint: #e6eefb;
+  --color-warning-bg: #fdf1d6;
+  --color-warning-text: #8a5a00;
   --focus-ring: 0 0 0 3px rgba(24, 94, 168, 0.35);
   --radius: 6px;
   --space-1: 4px;
@@ -108,6 +111,34 @@ a:hover { color: var(--color-primary-dark); }
   margin-left: auto;
 }
 .app-header__nav a { text-decoration: none; font-weight: 500; }
+
+/* --- Primary organisation-scoped navigation (M006 PID §5) --- */
+.app-header__nav-primary {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.app-header__nav-primary-bar {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.app-header__nav-primary-link {
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+}
+.app-header__nav-primary-link:hover { color: var(--color-text); }
+.app-header__nav-primary-link--active {
+  color: var(--color-primary-dark);
+  background: var(--color-primary-tint);
+}
 .app-header__logout {
   display: inline-flex;
   align-items: center;
