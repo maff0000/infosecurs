@@ -44,7 +44,7 @@
                 </label>
                 {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
                 {{ field }}
-                {% if field.errors %}<p class="field__error">{{ field.errors|join:", " }}</p>{% endif %}
+                {% if field.errors %}<p class="field__error" role="alert">{{ field.errors|join:", " }}</p>{% endif %}
             </div>
         {% endfor %}
         <div class="form-actions">

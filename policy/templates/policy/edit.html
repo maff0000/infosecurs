@@ -27,13 +27,13 @@
         <div class="field {% if form.title.errors %}field--error{% endif %}">
             <label for="{{ form.title.id_for_label }}">Title</label>
             {{ form.title }}
-            {% if form.title.errors %}<p class="field__error">{{ form.title.errors|join:", " }}</p>{% endif %}
+            {% if form.title.errors %}<p class="field__error" role="alert">{{ form.title.errors|join:", " }}</p>{% endif %}
         </div>
 
         <div class="field {% if form.next_review_date.errors %}field--error{% endif %}">
             <label for="{{ form.next_review_date.id_for_label }}">Next review date</label>
             {{ form.next_review_date }}
-            {% if form.next_review_date.errors %}<p class="field__error">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
+            {% if form.next_review_date.errors %}<p class="field__error" role="alert">{{ form.next_review_date.errors|join:", " }}</p>{% endif %}
         </div>
 
         {% for field in form %}
@@ -41,7 +41,7 @@
                 <div class="field {% if field.errors %}field--error{% endif %}">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {{ field }}
-                    {% if field.errors %}<p class="field__error">{{ field.errors|join:", " }}</p>{% endif %}
+                    {% if field.errors %}<p class="field__error" role="alert">{{ field.errors|join:", " }}</p>{% endif %}
                 </div>
             {% endif %}
         {% endfor %}

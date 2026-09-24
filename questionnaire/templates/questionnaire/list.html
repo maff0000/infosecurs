@@ -11,7 +11,7 @@
 </div>
 
 <section class="form-section">
-    <legend>Paste one security questionnaire question</legend>
+    <h2 class="form-section__heading">Paste one security questionnaire question</h2>
     <form method="post" action="{% url 'questionnaire:analyse' organisation.id %}">
         {% csrf_token %}
         <p>
@@ -28,7 +28,7 @@
 
 {% if question_rows %}
     <section class="form-section">
-        <legend>Questions asked so far</legend>
+        <h2 class="form-section__heading">Questions asked so far</h2>
         <ul>
             {% for row in question_rows %}
                 <li>

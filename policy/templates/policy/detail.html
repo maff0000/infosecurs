@@ -27,7 +27,7 @@
 
     {% if version.review_warnings %}
         <section class="form-section">
-            <legend>Review warnings</legend>
+            <h3 class="form-section__heading">Review warnings</h3>
             <ul>
                 {% for warning in version.review_warnings %}
                     <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
@@ -38,14 +38,14 @@
 
     {% for section in version.sections %}
         <section class="form-section">
-            <legend>{{ section.section_key }}</legend>
+            <h3 class="form-section__heading">{{ section.section_key }}</h3>
             <p>{{ section.content }}</p>
         </section>
     {% endfor %}
 
     {% if versions|length > 1 %}
         <section class="form-section">
-            <legend>Version history</legend>
+            <h3 class="form-section__heading">Version history</h3>
             <ul>
                 {% for v in versions %}
                     <li>

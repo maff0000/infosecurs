@@ -121,6 +121,8 @@ jobs:
           organisations/tests/test_http_ui.py
           organisations/tests/test_organisation_hub.py
           organisations/tests/test_navigation.py
+          organisations/tests/test_ai_outage_resilience.py
+          organisations/tests/test_form_labels.py
           core/tests/
           security_baseline/tests/test_auth.py
           security_baseline/tests/test_http_ui.py
