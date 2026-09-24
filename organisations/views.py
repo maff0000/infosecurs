@@ -7,6 +7,7 @@ import governance.services
 
 from organisations.forms import OrganisationCreateForm, OrganisationProfileForm
 from organisations.models import AuditEvent, Organisation, OrganisationMembership, OrganisationProfile
+from organisations.overview import build_overview
 
 
 def get_member_organisation_or_404(user, organisation_id):
@@ -61,13 +62,42 @@ def organisation_create(request):
 
 @login_required
 def organisation_detail(request, organisation_id):
+    """
+    The Overview / journey page (M006 PID §6). This used to render a flat
+    "does X exist yet" card list gated only by a crude `profile_exists`
+    boolean; it now renders `organisations.overview.build_overview`'s
+    derived per-area state - recomputed fresh on every request, never
+    stored - which is the URL/view every "Overview" primary-nav link
+    (templates/base.html) and `core.context_processors.active_nav` point
+    at. The URL name (`organisations:detail`) and this view's name are
+    both left unchanged: only what the page shows has changed.
+    """
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
-    profile_exists = OrganisationProfile.objects.filter(organisation=organisation).exists()
+    overview_areas = build_overview(organisation)
     return render(
         request,
         "organisations/detail.html",
-        {"organisation": organisation, "profile_exists": profile_exists},
+        {"organisation": organisation, "overview_areas": overview_areas},
+    )
+
+
+@login_required
+def organisation_hub(request, organisation_id):
+    """
+    The "Organisation" primary-nav landing page (M006 PID §5): Profile,
+    Governance roles and Workplace used to live as three of the flat card
+    list on `organisations:detail` (now the Overview page, above); they
+    need a single home now that they are no longer there. Deliberately
+    minimal - three links, mirroring the existing `summary-card` style
+    already used across this codebase - not a new CRUD surface of its own.
+    """
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+    return render(
+        request,
+        "organisations/organisation_hub.html",
+        {"organisation": organisation},
     )
 
 

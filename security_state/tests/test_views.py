@@ -36,6 +36,18 @@ class TestSecurityStateListView:
         assert "Compliant" not in content
         assert "Audited" not in content
 
+    def test_links_to_baseline_key_assets_and_risk_register(self, client_a, org_a):
+        """M006 PID §5/§7 cross-link: the list page linked only to the
+        security baseline before this dispatch - it must now also link to
+        key assets and the risk register, so a customer reading Current
+        Security State is never stuck without a way to the controls that
+        feed it."""
+        response = client_a.get(reverse("security_state:list", args=[org_a.id]))
+        content = response.content.decode()
+        assert reverse("security_baseline:baseline", args=[org_a.id]) in content
+        assert reverse("key_assets:list", args=[org_a.id]) in content
+        assert reverse("risk_register:list", args=[org_a.id]) in content
+
 
 @pytest.mark.django_db
 class TestSecurityStateDetailView:

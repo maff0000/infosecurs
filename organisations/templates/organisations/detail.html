@@ -1,122 +1,72 @@
 {% extends "base.html" %}
 
-{% block title %}{{ organisation.name }} — {{ product_name }}{% endblock %}
+{% block title %}Overview — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  /* Same badge-modifier convention security_state/list.html and
+     questionnaire/response_detail.html already use: a shared `.badge`
+     base plus per-page state modifiers, defined inline next to the page
+     that uses them. */
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--not_started { background: var(--color-border); color: var(--color-text); }
+  .badge--in_progress { background: var(--color-primary-tint); color: var(--color-primary-dark); }
+  .badge--needs_attention { background: var(--color-warning-bg); color: var(--color-warning-text); }
+  .badge--ready { background: var(--color-success-bg); color: var(--color-success-text); }
+  .overview-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .overview-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .overview-card__body { flex: 1 1 320px; min-width: 0; }
+  .overview-card__title-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+  .overview-card__title { font-weight: 600; margin: 0; }
+  .overview-card__detail { color: var(--color-text-muted); font-size: 0.9rem; margin: 0; }
+  .overview-card__action { flex: none; }
+</style>
+
 <div class="page-header">
-    <h1>{{ organisation.name }}</h1>
+    <div>
+        <h1>Overview</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
 </div>
 
-<div class="summary-card">
-    <h2>Organisation profile</h2>
-    {% if profile_exists %}
-        <p>The security-relevant profile for this organisation has been started.</p>
-        <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">View / edit profile</a>
-    {% else %}
-        <p>No profile has been completed yet. Start it to establish this organisation's security baseline.</p>
-        <a class="button button--primary" href="{% url 'organisations:profile' organisation.id %}">Start profile</a>
-    {% endif %}
-</div>
+<p class="page-header__subtitle">
+    This page reflects your current state across every area, worked out fresh from what
+    has actually been recorded - it is not a separate score or checklist of its own.
+</p>
 
-<div class="summary-card">
-    <h2>Governance</h2>
-    <p>See and confirm who is listed as policy authoriser, security responsible person and senior leadership representative.</p>
-    <a class="button button--primary" href="{% url 'governance:roles' organisation.id %}">Open governance roles</a>
-</div>
-
-<div class="summary-card">
-    <h2>Workplace</h2>
-    <p>Describe where staff work - home, office, shared/coworking space, or a mix.</p>
-    <a class="button button--primary" href="{% url 'workplace:list' organisation.id %}">Open workplace</a>
-</div>
-
-<div class="summary-card">
-    <h2>Security baseline</h2>
-    {% if profile_exists %}
-        <p>Answer a concise set of security-baseline questions for this organisation.</p>
-        <a class="button button--primary" href="{% url 'security_baseline:baseline' organisation.id %}">Open security baseline</a>
-    {% else %}
-        <p>Complete the organisation profile first to start the security baseline.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Key assets</h2>
-    {% if profile_exists %}
-        <p>Review deterministic starter suggestions and confirm the assets that matter most.</p>
-        <a class="button button--primary" href="{% url 'key_assets:list' organisation.id %}">Open key assets</a>
-    {% else %}
-        <p>Complete the organisation profile first to see starter asset suggestions.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Risk register</h2>
-    {% if profile_exists %}
-        <p>Generate AI-suggested initial risks grounded in your profile, baseline and key assets, then review, edit, confirm or dismiss each one.</p>
-        <a class="button button--primary" href="{% url 'risk_register:list' organisation.id %}">Open risk register</a>
-    {% else %}
-        <p>Complete the organisation profile, security baseline and key assets first to generate an initial risk register.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Security state</h2>
-    {% if profile_exists %}
-        <p>See every baseline control's canonical answer, whether evidence is attached, and its current assurance label.</p>
-        <a class="button button--primary" href="{% url 'security_state:list' organisation.id %}">Open security state</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Information Security Policy</h2>
-    {% if profile_exists %}
-        <p>Generate a concise Information Security Policy grounded in your organisation's actual security state, then review and approve it.</p>
-        <a class="button button--primary" href="{% url 'policy:detail' organisation.id %}">Open policy</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Questionnaire Assurance</h2>
-    {% if profile_exists %}
-        <p>Paste one security questionnaire question and get a grounded, honest draft answer.</p>
-        <a class="button button--primary" href="{% url 'questionnaire:list' organisation.id %}">Open questionnaire assurance</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Evidence</h2>
-    {% if profile_exists %}
-        <p>Upload a file or add an external reference to support, contradict or contextualise a security-baseline answer.</p>
-        <a class="button button--primary" href="{% url 'evidence:list' organisation.id %}">Open evidence</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Remediation actions</h2>
-    {% if profile_exists %}
-        <p>Turn a risk's proposed treatment into a real, tracked action - open, in progress, done or accepted.</p>
-        <a class="button button--primary" href="{% url 'remediation:list' organisation.id %}">Open actions</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
-</div>
-
-<div class="summary-card">
-    <h2>Activity</h2>
-    {% if profile_exists %}
-        <p>A readable timeline of meaningful security-state changes: who changed what, and when.</p>
-        <a class="button button--primary" href="{% url 'activity:list' organisation.id %}">Open activity</a>
-    {% else %}
-        <p>Complete the organisation profile first.</p>
-    {% endif %}
+<div class="overview-grid">
+    {% for area in overview_areas %}
+        <div class="overview-card">
+            <div class="overview-card__body">
+                <div class="overview-card__title-row">
+                    <p class="overview-card__title">{{ area.title }}</p>
+                    <span class="badge badge--{{ area.state }}">{{ area.state_label }}</span>
+                </div>
+                <p class="overview-card__detail">{{ area.detail }}</p>
+            </div>
+            <div class="overview-card__action">
+                <a class="button button--secondary" href="{{ area.next_action_url }}">{{ area.next_action_label }}</a>
+            </div>
+        </div>
+    {% endfor %}
 </div>
 {% endblock %}
