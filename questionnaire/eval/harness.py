@@ -269,14 +269,25 @@ def _run_case(gateway_mode: str, case: dict, actor) -> dict:
         # for visibility.
         "output_contract_valid": True,
         "interpretation_keys_valid": _interpretation_keys_valid(case, actual_selected_keys),
+        # `grade_intent_type`/`grade_requirement_scope` (default True) are
+        # FINER-GRAINED than `grade_interpretation`: post-live-eval-run-1
+        # refinement (docs/evidence/M005-LIVE-EVALUATION.md) found two cases
+        # where the corpus's own author had already flagged a field as
+        # genuinely ambiguous ("your call" in golden_corpus.py's own
+        # comments) and the real model picked the OTHER defensible reading -
+        # not a wrong one. Rather than switching off ALL interpretation
+        # grading for those cases (which would also stop checking
+        # interpretation_keys_valid, still meaningful there), each case
+        # opts out of grading ONLY the specific field its own design
+        # anticipated could reasonably go either way.
         "intent_type_correct": (
             None
-            if not grade_interpretation
+            if not (grade_interpretation and case.get("grade_intent_type", True))
             else response.intent_type == case["expected_interpretation"].intent_type
         ),
         "requirement_scope_correct": (
             None
-            if not grade_interpretation
+            if not (grade_interpretation and case.get("grade_requirement_scope", True))
             else response.requirement_scope == case["expected_interpretation"].requirement_scope
         ),
         # Graded for EVERY case regardless of grade_interpretation - this
