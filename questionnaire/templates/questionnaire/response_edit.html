@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Edit response — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Edit draft response</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'questionnaire:response_detail' organisation.id response.id %}">&larr; Back to response</a>
+            &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<div class="form-card">
+    <p class="form-card__intro">Question: {{ question.question_text }}</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="field {% if form.current_answer_text.errors %}field--error{% endif %}">
+            <label for="{{ form.current_answer_text.id_for_label }}">Response text</label>
+            {{ form.current_answer_text }}
+            {% if form.current_answer_text.errors %}
+                <p class="field__error">{{ form.current_answer_text.errors|join:", " }}</p>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'questionnaire:response_detail' organisation.id response.id %}">Cancel</a>
+            <button type="submit" class="button button--primary">Save changes</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -161,3 +161,6 @@ jobs:
           policy/tests/test_download.py
           policy/tests/test_eval_harness.py
           policy/tests/test_eval_command.py
+          questionnaire/tests/test_review_workflow.py
+          questionnaire/tests/test_activity_events.py
+          questionnaire/tests/test_tenant_isolation.py

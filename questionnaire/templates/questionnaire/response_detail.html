@@ -3,37 +3,104 @@
 {% block title %}Questionnaire response — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge--draft { background: var(--color-border); color: var(--color-text); }
+  .badge--accepted { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--superseded { background: #e6eefb; color: #185ea8; }
+  .badge--outcome-SUPPORTED { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--outcome-CONFIRM { background: #fdf1d6; color: #8a5a00; }
+  .badge--outcome-GAP { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--outcome-NOT_APPLICABLE { background: var(--color-border); color: var(--color-text); }
+  .response-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .response-detail__section { margin-bottom: var(--space-4); }
+  .superseded-note {
+    background: #e6eefb;
+    border: 1px dashed #185ea8;
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    color: var(--color-text);
+    font-size: 0.9rem;
+  }
+  .fact-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    margin-bottom: var(--space-2);
+  }
+  .fact-card__title { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .fact-card__meta { color: var(--color-text-muted); font-size: 0.9rem; margin: 0; }
+  .fact-card__remediation { margin-top: var(--space-2); font-size: 0.9rem; }
+</style>
+
 <div class="page-header">
     <div>
         <h1>Questionnaire response</h1>
-        <p class="page-header__subtitle">{{ organisation.name }}</p>
+        <p class="page-header__subtitle">
+            <a href="{% url 'questionnaire:list' organisation.id %}">&larr; Back to Questionnaire Assurance</a>
+            &middot; {{ organisation.name }}
+        </p>
     </div>
-    <a href="{% url 'questionnaire:list' organisation.id %}">Back to Questionnaire Assurance</a>
 </div>
 
-<section class="form-section">
+<div class="response-detail__status-row">
+    <span class="badge badge--{{ response.status }}">{{ response.get_status_display }}</span>
+    <span class="badge badge--outcome-{{ response.outcome }}">{{ response.get_outcome_display|default:response.outcome }}</span>
+</div>
+
+{% if response.superseded_by_id %}
+    <div class="superseded-note response-detail__section">
+        <strong>Superseded by a newer response.</strong>
+        <a href="{% url 'questionnaire:response_detail' organisation.id response.superseded_by_id %}">View the newer response</a>.
+        This response remains the historical record of what was accepted and why, at the time.
+    </div>
+{% endif %}
+
+<section class="form-section response-detail__section">
     <legend>Question</legend>
     <p>{{ question.question_text }}</p>
     {% if question.source_label %}<p><em>{{ question.source_label }}</em></p>{% endif %}
 </section>
 
-<section class="form-section">
+<section class="form-section response-detail__section">
     <legend>What this is asking</legend>
     <p>{{ response.interpreted_requirement_summary }}</p>
 </section>
 
-<section class="form-section">
+<section class="form-section response-detail__section">
     <legend>Outcome</legend>
-    <p><strong>{{ response.outcome }}</strong> ({{ response.get_status_display }})</p>
+    <p>{{ outcome_presentation.headline }}</p>
+    {% for note in outcome_presentation.sub_notes %}
+        <p>{{ note }}</p>
+    {% endfor %}
 </section>
 
-<section class="form-section">
-    <legend>Draft response</legend>
-    <p>{{ response.current_answer_text }}</p>
+<section class="form-section response-detail__section">
+    <legend>Response</legend>
+    <p>{{ response.current_answer_text|linebreaksbr }}</p>
+    {% if response.status == "draft" %}
+        <div class="form-actions">
+            <a class="button button--secondary" href="{% url 'questionnaire:response_edit' organisation.id response.id %}">Edit</a>
+            <form method="post" action="{% url 'questionnaire:response_accept' organisation.id response.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button button--primary">Accept response</button>
+            </form>
+        </div>
+    {% endif %}
 </section>
 
 {% if response.review_warnings %}
-    <section class="form-section">
+    <section class="form-section response-detail__section">
         <legend>What needs attention?</legend>
         <ul>
             {% for warning in response.review_warnings %}
@@ -43,13 +110,67 @@
     </section>
 {% endif %}
 
-<section class="form-section">
+<section class="form-section response-detail__section">
     <legend>Why this answer?</legend>
-    <p>Canonical facts used:</p>
-    <ul>
-        {% for key in response.selected_keys %}
-            <li>{{ key }}</li>
+    {% if grounding_facts %}
+        {% for fact in grounding_facts %}
+            <div class="fact-card">
+                <p class="fact-card__title">{{ fact.description }}</p>
+                {% if fact.kind == "control" %}
+                    <p class="fact-card__meta">
+                        Current answer: {{ fact.answer|default:"unknown" }}
+                        &middot; {{ fact.assurance_label|default:"Not confirmed" }}
+                        &middot; {{ fact.active_supporting_evidence_count|default:0 }} supporting,
+                        {{ fact.active_contradicting_evidence_count|default:0 }} contradicting,
+                        {{ fact.stale_evidence_count|default:0 }} stale evidence item(s)
+                    </p>
+                    {% if fact.relevant_remediation %}
+                        <div class="fact-card__remediation">
+                            {% for item in fact.relevant_remediation %}
+                                <p class="fact-card__meta">
+                                    Remediation ({{ item.status }}): {{ item.treatment_summary }}
+                                    &middot; Owner: {{ item.owner|default:"not yet assigned" }}
+                                    &middot; Target date: {{ item.target_date|default:"not yet set" }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <p class="fact-card__meta">
+                        <a href="{% url 'security_state:detail' organisation.id fact.control_key %}">View this control in Security State</a>
+                    </p>
+                {% elif fact.kind == "policy_section" %}
+                    <p class="fact-card__meta">
+                        {% if fact.policy_exists %}
+                            Approved policy version {{ fact.approved_version_number }}
+                            {% if fact.section_present %}includes this section.{% else %}does not include this section.{% endif %}
+                        {% else %}
+                            No approved policy exists yet.
+                        {% endif %}
+                    </p>
+                {% elif fact.kind == "org" %}
+                    <p class="fact-card__meta">Recorded value: {{ fact.value|default:"unknown" }}</p>
+                    {% if fact.workplaces %}
+                        <p class="fact-card__meta">
+                            {% for w in fact.workplaces %}{{ w.name }} ({{ w.type }}){% if not forloop.last %}, {% endif %}{% endfor %}
+                        </p>
+                    {% endif %}
+                {% endif %}
+            </div>
         {% endfor %}
-    </ul>
+        {% if has_policy_fact %}
+            <p><a href="{% url 'policy:detail' organisation.id %}">View the approved policy</a></p>
+        {% endif %}
+    {% else %}
+        <p>No canonical facts were used for this response.</p>
+    {% endif %}
+</section>
+
+<section class="form-section response-detail__section">
+    <legend>Regenerate</legend>
+    <p>If the organisation's security state has changed since this response was drafted, regenerate a fresh attempt. This response stays exactly as it is.</p>
+    <form method="post" action="{% url 'questionnaire:response_regenerate' organisation.id response.id %}">
+        {% csrf_token %}
+        <button type="submit" class="button button--secondary">Regenerate</button>
+    </form>
 </section>
 {% endblock %}

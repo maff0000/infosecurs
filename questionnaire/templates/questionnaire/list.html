@@ -26,22 +26,21 @@
     </form>
 </section>
 
-{% if questions %}
+{% if question_rows %}
     <section class="form-section">
         <legend>Questions asked so far</legend>
         <ul>
-            {% for q in questions %}
+            {% for row in question_rows %}
                 <li>
-                    <strong>{{ q.question_text|truncatechars:120 }}</strong>
-                    {% if q.source_label %}&mdash; {{ q.source_label }}{% endif %}
-                    {% with latest=q.responses.first %}
-                        {% if latest %}
-                            &middot;
-                            <a href="{% url 'questionnaire:response_detail' organisation.id latest.id %}">
-                                {{ latest.get_outcome_display|default:latest.outcome }} ({{ latest.get_status_display }})
-                            </a>
-                        {% endif %}
-                    {% endwith %}
+                    <strong>{{ row.question.question_text|truncatechars:120 }}</strong>
+                    {% if row.question.source_label %}&mdash; {{ row.question.source_label }}{% endif %}
+                    {% if row.display_response %}
+                        &middot;
+                        <a href="{% url 'questionnaire:response_detail' organisation.id row.display_response.id %}">
+                            {{ row.display_response.get_outcome_display|default:row.display_response.outcome }}
+                            {% if row.is_accepted %}(current answer){% else %}(draft — not yet accepted){% endif %}
+                        </a>
+                    {% endif %}
                 </li>
             {% endfor %}
         </ul>

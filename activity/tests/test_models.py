@@ -197,3 +197,71 @@ class TestActivityEventModel:
         )
         summary = event.human_summary()
         assert "is_active" in summary
+
+    # --- Questionnaire Assurance event types (M005 -
+    # m005-2-review-history) --------------------------------------------
+
+    def test_human_summary_for_question_created(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTION_CREATED,
+            related_object_type="questionnaire_question",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"has_source_label": True},
+        )
+        assert event.human_summary() == "A questionnaire question was submitted"
+
+    def test_human_summary_for_question_interpreted(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTION_INTERPRETED,
+            related_object_type="questionnaire_question",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={
+                "intent_type": "policy_requirement",
+                "requirement_scope": "all",
+                "selected_keys": ["policy_section:access_and_authentication"],
+                "evidence_explicitly_requested": False,
+            },
+        )
+        assert event.human_summary() == "Question interpreted as 'policy_requirement'"
+
+    def test_human_summary_for_questionnaire_response_generated(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_GENERATED,
+            related_object_type="questionnaire_response",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"outcome": "GAP", "review_warning_count": 1},
+        )
+        assert event.human_summary() == "Questionnaire response drafted (outcome: GAP)"
+
+    def test_human_summary_for_questionnaire_response_edited(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_EDITED,
+            related_object_type="questionnaire_response",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"answer_text_changed": True},
+        )
+        assert event.human_summary() == "Questionnaire response wording edited"
+
+    def test_human_summary_for_questionnaire_response_accepted(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED,
+            related_object_type="questionnaire_response",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"outcome": "SUPPORTED", "question_id": "22222222-2222-2222-2222-222222222222"},
+        )
+        assert event.human_summary() == "Questionnaire response accepted (outcome: SUPPORTED)"
+
+    def test_human_summary_for_questionnaire_response_superseded(self, org_a):
+        event = ActivityEvent.objects.create(
+            organisation=org_a,
+            event_type=ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED,
+            related_object_type="questionnaire_response",
+            related_object_id="11111111-1111-1111-1111-111111111111",
+            metadata={"superseded_by": "22222222-2222-2222-2222-222222222222"},
+        )
+        assert event.human_summary() == "Questionnaire response superseded by a newer response"

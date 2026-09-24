@@ -1,6 +1,11 @@
 """
 Minimal end-to-end questionnaire-assurance generation pipeline (M005 PID §4,
-§22 - m005-1-foundation dispatch).
+§22 - m005-1-foundation dispatch), plus the review/accept/regenerate
+lifecycle functions the m005-2-review-history dispatch adds below
+(`accept_questionnaire_response`, `edit_questionnaire_response_text` - see
+their own docstrings; `questionnaire.views.questionnaire_response_regenerate`
+reuses `generate_questionnaire_response` itself for regeneration, no
+separate service function needed for that path).
 
 `generate_questionnaire_response` is the single entrypoint the view layer
 calls, wiring together every piece this dispatch built:
@@ -61,6 +66,10 @@ import hashlib
 import json
 
 from django.db import transaction
+from django.utils import timezone
+
+from activity.models import ActivityEvent
+from activity.services import record_event
 
 from ai_platform.gateway import LiteLLMGateway, QuestionnaireDraftingGateway, QuestionnaireInterpretationGateway
 from ai_platform.prompts.questionnaire_drafting_v1 import PROMPT_VERSION as DRAFTING_PROMPT_VERSION
@@ -111,7 +120,7 @@ def _persist_response(
     if draft.customer_review_note:
         review_warnings.append(draft.customer_review_note)
 
-    return QuestionnaireResponse.objects.create(
+    new_response = QuestionnaireResponse.objects.create(
         organisation=organisation,
         question=question,
         status=QuestionnaireResponse.STATUS_DRAFT,
@@ -132,6 +141,19 @@ def _persist_response(
         drafting_invocation_record=drafting_record,
         created_by=actor,
     )
+    # Emitted inside this same atomic block as the create (PID §24) - this
+    # codebase's established "emit inside the same transaction as the state
+    # change" discipline (see e.g. policy.views.policy_edit's
+    # EVENT_POLICY_DRAFT_EDITED emission inside its own atomic block).
+    record_event(
+        organisation,
+        ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_GENERATED,
+        actor=actor,
+        related_object_type="questionnaire_response",
+        related_object_id=str(new_response.id),
+        metadata={"outcome": outcome, "review_warning_count": len(review_warnings)},
+    )
+    return new_response
 
 
 def generate_questionnaire_response(
@@ -177,6 +199,24 @@ def generate_questionnaire_response(
     interpretation, interpretation_record = interpret_questionnaire_question(
         interpretation_gateway, interpretation_request, INTERPRETATION_PROMPT_VERSION
     )
+    # Plain create, NOT wrapped in `_persist_response`'s atomic block below -
+    # interpretation may succeed even if drafting subsequently fails (PID
+    # §22's "interpretation succeeded" is independently true regardless of
+    # what happens next), so this event must not be rolled back by a later
+    # drafting failure.
+    record_event(
+        organisation,
+        ActivityEvent.EVENT_QUESTION_INTERPRETED,
+        actor=actor,
+        related_object_type="questionnaire_question",
+        related_object_id=str(question.id),
+        metadata={
+            "intent_type": interpretation.intent_type,
+            "requirement_scope": interpretation.requirement_scope,
+            "selected_keys": list(interpretation.selected_keys),
+            "evidence_explicitly_requested": interpretation.evidence_explicitly_requested,
+        },
+    )
 
     grounding_snapshot = build_questionnaire_grounding_snapshot(
         organisation, interpretation.selected_keys
@@ -208,4 +248,111 @@ def generate_questionnaire_response(
     )
 
 
-__all__ = ["generate_questionnaire_response"]
+def accept_questionnaire_response(response: QuestionnaireResponse, *, actor) -> QuestionnaireResponse:
+    """
+    PID §17/§18: accept `response` (must currently be `status=draft` - the
+    view is responsible for that check and the friendly redirect; this
+    function trusts its caller, matching `policy.services.
+    approve_policy_directly`'s own "caller already checked eligibility"
+    discipline for a sibling lifecycle transition).
+
+    Supersedes whichever OTHER response for the SAME question currently
+    holds `status=accepted`, if any - there should be at most one such
+    response given this function is the only path to `accepted`, but the
+    lookup below uses `.first()` defensively, not `.get()`.
+    """
+    with transaction.atomic():
+        previous_accepted = (
+            QuestionnaireResponse.objects.filter(
+                question=response.question, status=QuestionnaireResponse.STATUS_ACCEPTED
+            )
+            .exclude(pk=response.pk)
+            .first()
+        )
+
+        response.status = QuestionnaireResponse.STATUS_ACCEPTED
+        response.accepted_by = actor
+        response.accepted_at = timezone.now()
+        # Fine under the model's immutability guard: status/accepted_by/
+        # accepted_at are not in PROTECTED_WHILE_DRAFT_FIELDS, and the row
+        # being transitioned is still persisted as `draft` at the moment
+        # this specific save runs.
+        response.save(update_fields=["status", "accepted_by", "accepted_at"])
+
+        record_event(
+            response.organisation,
+            ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED,
+            actor=actor,
+            related_object_type="questionnaire_response",
+            related_object_id=str(response.id),
+            metadata={"outcome": response.outcome, "question_id": str(response.question_id)},
+        )
+
+        if previous_accepted is not None:
+            previous_accepted.status = QuestionnaireResponse.STATUS_SUPERSEDED
+            previous_accepted.superseded_by = response
+            # Again fine under the guard - only status/superseded_by
+            # change, not any PROTECTED_WHILE_DRAFT_FIELDS entry, so the
+            # OLD response's answer text/outcome/grounding/selected_keys
+            # are byte-identical before and after this save (proven
+            # explicitly in questionnaire/tests/test_review_workflow.py,
+            # not just "no exception raised").
+            previous_accepted.save(update_fields=["status", "superseded_by"])
+            record_event(
+                response.organisation,
+                ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED,
+                actor=actor,
+                related_object_type="questionnaire_response",
+                related_object_id=str(previous_accepted.id),
+                metadata={"superseded_by": str(response.id)},
+            )
+
+    return response
+
+
+def edit_questionnaire_response_text(
+    response: QuestionnaireResponse, *, new_text: str, actor
+) -> QuestionnaireResponse:
+    """
+    PID §17: the Account Holder may edit wording (`current_answer_text`
+    ONLY - never `outcome`, `selected_keys` or `grounding_snapshot`; this
+    function does not accept or touch those under any circumstance, and
+    does not derive them from `new_text` in any way). Trusts the caller
+    that `response.status == STATUS_DRAFT` (the view's job to check/
+    redirect first, matching `policy.views.policy_edit`'s exact pattern).
+
+    If `new_text == response.current_answer_text` (no real change): does
+    nothing, fires no event, returns `response` unchanged - mirrors
+    `policy_edit`'s "only if changed" discipline exactly (see
+    `policy/views.py::policy_edit`'s
+    `if changed_sections or title_changed or next_review_date_changed:`
+    branch).
+    """
+    if new_text == response.current_answer_text:
+        return response
+
+    with transaction.atomic():
+        response.current_answer_text = new_text
+        response.save(update_fields=["current_answer_text", "updated_at"])
+        # Deliberately does NOT put the old/new text into metadata (PID
+        # §12/§24, `activity.models.ActivityEvent.EVENT_POLICY_DRAFT_EDITED`
+        # precedent: only a structural changed-or-not boolean, never the
+        # text content itself - "never duplicate large text where
+        # canonical rows already hold it").
+        record_event(
+            response.organisation,
+            ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_EDITED,
+            actor=actor,
+            related_object_type="questionnaire_response",
+            related_object_id=str(response.id),
+            metadata={"answer_text_changed": True},
+        )
+
+    return response
+
+
+__all__ = [
+    "generate_questionnaire_response",
+    "accept_questionnaire_response",
+    "edit_questionnaire_response_text",
+]
