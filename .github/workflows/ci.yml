@@ -77,6 +77,11 @@ jobs:
           policy/tests/test_services.py
           policy/tests/test_pdf_rendering.py
           policy/tests/test_forms.py
+          questionnaire/tests/test_catalogue.py
+          questionnaire/tests/test_grounding.py
+          questionnaire/tests/test_models.py
+          questionnaire/tests/test_outcome.py
+          questionnaire/tests/test_services.py
 
   integration:
     name: ci/integration
