@@ -199,6 +199,43 @@ class TestRunEvalMechanics:
         assert case["objective_checks"]["intent_type_correct"] is True
         assert case["objective_checks"]["outcome_exact"] is True
 
+    def test_certification_question_case_has_requirement_scope_grading_switched_off_only(self):
+        """M006 Round 7 correction (PR #42 §A): the live harness returned
+        RED on both Round 7 runs solely because
+        certification_question's requirement_scope_correct == false -
+        requirement_scope is genuinely irrelevant to this plain
+        certification question (`_org_certification_signal_and_warning`
+        does not branch on scope at all). Only requirement_scope_correct
+        is opted out here - interpretation_keys_valid/intent_type_correct/
+        outcome_exact remain fully graded for this case, same shape as
+        `genuine_not_applicable`'s own opt-out immediately above."""
+        report = run_eval("fake")
+        case = next(c for c in report["cases"] if c["key"] == "certification_question")
+        assert case["objective_checks"]["requirement_scope_correct"] is None
+        assert case["objective_checks"]["interpretation_keys_valid"] is True
+        assert case["objective_checks"]["intent_type_correct"] is True
+        assert case["objective_checks"]["outcome_exact"] is True
+
+    def test_requirement_scope_opt_out_does_not_leak_to_other_cases(self):
+        """Regression guard (M006 Round 7 correction): certification_question
+        and genuine_not_applicable opting requirement_scope_correct out
+        must not make that opt-out global. Every OTHER case that does not
+        itself set grade_requirement_scope=False must still have
+        requirement_scope_correct fully gated (True/False, never None)."""
+        report = run_eval("fake")
+        opted_out_keys = {"certification_question", "genuine_not_applicable"}
+        for case in report["cases"]:
+            if case["key"] in opted_out_keys:
+                continue
+            if case["key"] == "ambiguous_compound_question":
+                # grade_interpretation=False already switches this off for
+                # an unrelated reason - not part of this regression guard.
+                continue
+            assert case["objective_checks"]["requirement_scope_correct"] in (True, False), (
+                f"case {case['key']!r} unexpectedly has requirement_scope_correct grading "
+                "switched off"
+            )
+
     def test_every_case_has_raw_answer_and_human_judgement_properties(self):
         report = run_eval("fake")
         for case in report["cases"]:
@@ -214,7 +251,7 @@ class TestRunEvalMechanics:
 
     def test_report_top_level_fields(self):
         report = run_eval("fake")
-        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v2"
+        assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v3"
         assert report["interpretation_prompt_version"] == "questionnaire_interpretation_v1"
         assert report["drafting_prompt_version"] == "questionnaire_drafting_v1"
         assert report["gateway_mode"] == "fake"

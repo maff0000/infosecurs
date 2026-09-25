@@ -27,6 +27,7 @@ from ai_platform.prompts import (
     risk_generation_v2,
     risk_generation_v3,
     risk_interpretation_v1,
+    risk_interpretation_v2,
 )
 
 _PROMPT_MODULES_BY_VERSION = {
@@ -58,6 +59,7 @@ def build_messages_for_version(prompt_version: str) -> Optional[Callable]:
 # docstring above for why this is not merged into the generation dict. ----
 _INTERPRETATION_PROMPT_MODULES_BY_VERSION = {
     risk_interpretation_v1.PROMPT_VERSION: risk_interpretation_v1,
+    risk_interpretation_v2.PROMPT_VERSION: risk_interpretation_v2,
 }
 
 KNOWN_INTERPRETATION_PROMPT_VERSIONS = tuple(_INTERPRETATION_PROMPT_MODULES_BY_VERSION)

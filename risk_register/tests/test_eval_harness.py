@@ -192,7 +192,7 @@ class TestRunEvalMechanics:
         gw = FakeInterpretationGateway(mode="valid")
         report = run_eval(gw)
         assert report["corpus_version"] == "m002-eval-corpus-interpretation-v1"
-        assert report["prompt_version"] == "risk_interpretation_v1"
+        assert report["prompt_version"] == "risk_interpretation_v2"
         assert "generated_at" in report
         assert report["configured_model_alias"] == "trinity-core"
 

@@ -71,7 +71,7 @@ import re
 
 from ai_platform.gateway import DEFAULT_MODEL_ALIAS
 from ai_platform.interpretation_orchestration import InterpretationFailed
-from ai_platform.prompts.risk_interpretation_v1 import PROMPT_VERSION
+from ai_platform.prompts.risk_interpretation_v2 import PROMPT_VERSION
 
 from risk_register.eval.golden_corpus import CORPUS_VERSION, GOLDEN_CORPUS, ensure_case_organisation
 from risk_register.interpretation_service import _select_candidate_risks, interpret_draft_risks
