@@ -1,0 +1,91 @@
+# Release-artifact proof stack (M006 PID §15, Round 6 dispatch).
+#
+# Deliberately a STANDALONE compose file - never used as
+# `docker compose -f docker-compose.yml -f docker-compose.release.yml`.
+# Compose's own multi-file merge rules merge `volumes:` entries by mount
+# TARGET rather than replacing the service's list wholesale, so an override
+# file that simply omits `.:/app` would not reliably remove
+# docker-compose.yml's `.:/app` dev source bind - the merged result could
+# still carry it. A standalone file with an explicit, complete `web.volumes`
+# (evidence volume only - no `.:/app` anywhere in this file, ever) removes
+# that ambiguity: what you read here IS what runs, checkable directly with
+# `docker inspect` (PID §E "no-source-bind proof" - the running container's
+# actual mounts, not an inference from YAML).
+#
+# `web.image` names an already-built, exact-SHA-tagged image - this file
+# never builds one itself (no `build:` key), so Compose can never silently
+# rebuild it from a possibly-dirty working tree. Build it first with:
+#
+#   RELEASE_SHA=$(git rev-parse HEAD)
+#   docker build \
+#     --build-arg GIT_SHA=$RELEASE_SHA \
+#     --build-arg BUILD_DATE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+#     -t infosecurs-release:$RELEASE_SHA .
+#
+# then run this stack with a distinct project name/ports and a throwaway
+# `.env.release` (DJANGO_ENV=production, synthetic secrets - see
+# docs/runbooks/BETA-OPERATIONS.md "Release artifact" for the full
+# operator sequence), always with `--env-file .env.release` so Compose's
+# own `${...}` interpolation in *this* file also reads that file, not
+# whatever `.env` the normal dev stack uses:
+#
+#   RELEASE_IMAGE=infosecurs-release:$RELEASE_SHA \
+#     docker compose -p <project> --env-file .env.release \
+#     -f docker-compose.release.yml up -d
+#
+# Named volumes below are deliberately distinct from docker-compose.yml's
+# (infosecurs_release_* vs infosecurs_*) so this stack always starts from
+# genuinely fresh state under its own `-p` project name and never collides
+# with, or accidentally reuses, the dev stack's or any other stack's volumes
+# on this shared host.
+services:
+  db:
+    image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - infosecurs_release_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+
+  web:
+    image: ${RELEASE_IMAGE:?RELEASE_IMAGE must be set to the exact-SHA-tagged release image, e.g. infosecurs-release:<git-sha> - see the file header comment above}
+    # Static assets must be collected deterministically on every container
+    # start - never dependent on whatever staticfiles happen to already
+    # exist on the host (PID §G) - then migrate, then serve. No source bind
+    # anywhere in this file (see header comment): /app is entirely
+    # image-contained.
+    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - .env.release
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      EVIDENCE_STORAGE_ROOT: /data/evidence
+    volumes:
+      - infosecurs_release_evidence_data:/data/evidence
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8000}:8000"
+      # Reserved, normally idle, for the bounded single-hop TLS test
+      # topology used for the real-browser smoke against this exact
+      # DJANGO_ENV=production stack - see scripts/release_tls_smoke_wrap.py
+      # and docs/evidence/M006-RELEASE.md for why this exists (PID §15/§F -
+      # SECURE_SSL_REDIRECT stays fully enabled; a plain-HTTP browser
+      # request to this port alone gets a real 301 to an https:// URL that
+      # nothing serves, exactly like production would, unless the wrapper
+      # process below is deliberately started for the smoke window).
+      - "127.0.0.1:${WEB_TLS_HOST_PORT:-8443}:8443"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  infosecurs_release_postgres_data:
+  infosecurs_release_evidence_data:

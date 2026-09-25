@@ -73,6 +73,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static assets directly (M006 Round 6, PID §15/§C -
+    # DEBUG=False static-file gap deferred from Round 2). Must sit
+    # immediately after SecurityMiddleware, before anything else, per
+    # WhiteNoise's own documented placement requirement. See the
+    # WHITENOISE_*/STORAGES settings below for the full mechanism.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -239,9 +245,70 @@ USE_TZ = True
 # ---------------------------------------------------------------------------
 # Static files
 # ---------------------------------------------------------------------------
+# M006 Round 6 (PID §15/§C): plain `manage.py runserver` only auto-serves
+# STATICFILES_DIRS content when DEBUG=True (or with the explicitly
+# discouraged `--insecure` flag). Under DJANGO_ENV=production (DEBUG=False),
+# that left every static asset (including the one product stylesheet,
+# static/organisations/css/app.css, and Django admin's own bundled static
+# files) unreachable - a real, reproduced gap, not theoretical. WhiteNoise
+# closes it without a new web-server/reverse-proxy architecture (PID §15
+# explicitly rules that out) and without weakening DEBUG/SECURE_SSL_REDIRECT.
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The `{% static %}` template tag resolves a URL via
+# STORAGES["staticfiles"]["BACKEND"].url() - independently of
+# WHITENOISE_USE_FINDERS below, which only affects WhiteNoiseMiddleware's
+# own request-time file lookup, never URL generation. The manifest backend
+# (production) raises ValueError("Missing staticfiles manifest entry...")
+# for any asset until a real `collectstatic` has populated STATIC_ROOT -
+# genuinely reproduced during this round's own test run: every template
+# extending templates/base.html (i.e. almost the whole product) failed
+# under DJANGO_ENV=test, which is DEBUG=False (`DEBUG = DJANGO_ENV ==
+# "development"` above) exactly like production, but - correctly - never
+# runs collectstatic (neither CI nor this dev/test Docker stack does; only
+# docker-compose.release.yml's `web.command` does, deliberately, for the
+# real release artifact - PID §G). So the storage BACKEND itself, not just
+# WHITENOISE_USE_FINDERS, must stay conditional on DJANGO_ENV, not DEBUG.
+STORAGES = {
+    # Unchanged from Django's own default - present explicitly only because
+    # setting STORAGES at all requires every key to be spelled out.
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            # Compressed + cache-busted (content-hashed filenames) static
+            # storage - WhiteNoise's documented production recommendation.
+            # Requires `collectstatic` to have actually run against the
+            # real STATICFILES_DIRS content before this backend can serve
+            # anything - see docker-compose.release.yml's `web.command` for
+            # where that happens deterministically on every container start
+            # (PID §G - never dependent on whatever happens to already
+            # exist on the host).
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if DJANGO_ENV == "production"
+            # development/test: plain, unhashed URLs resolvable directly
+            # from STATICFILES_DIRS via the finders (WHITENOISE_USE_FINDERS
+            # below) - no collectstatic required, matching how development
+            # already worked before this round (Django's own
+            # django.contrib.staticfiles auto-serve under DEBUG=True) and
+            # extending the same no-collectstatic-needed behaviour to
+            # DJANGO_ENV=test (also DEBUG=False, but never collectstatic'd).
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
+    },
+}
+
+# Serve directly from STATICFILES_DIRS via Django's static-file finders
+# (no collectstatic required) whenever not the real production/release
+# artifact - WhiteNoise's own documented convenience for exactly this,
+# paired with the conditional STORAGES backend above. Autorefresh (picking
+# up an edited file without a restart) only matters for interactive local
+# development.
+WHITENOISE_USE_FINDERS = DJANGO_ENV != "production"
+WHITENOISE_AUTOREFRESH = DJANGO_ENV == "development"
 
 # ---------------------------------------------------------------------------
 # Logging - never log sensitive values (PID.md §9.8)

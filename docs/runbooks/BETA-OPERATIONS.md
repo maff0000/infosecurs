@@ -197,3 +197,121 @@ Always restores into a **fresh, disposable** Compose project — never the
 source/live stack. See `docs/runbooks/BACKUP-RESTORE.md` (landed in M006
 Round 5, PID §14) for the full operator runbook, the operator safety note,
 and what "verified" means.
+
+## Release artifact
+
+**PID:** `docs/pids/M006-CUSTOMER-ZERO-BETA-HARDENING.md` §15/§16 (landed
+M006 Round 6). Builds an immutable Beta image bound to an exact Git SHA and
+runs it **without** the normal dev source bind — see
+`docs/evidence/M006-RELEASE.md` for the full real-command proof (SHA/image
+identity, no-source-bind, DEBUG=False static-asset serving, fresh
+Customer-Zero reproducibility, browser smoke, security scan, secret-not-
+baked-in proof) from the M006 Round 6 dispatch.
+
+### 1. Build the SHA-bound image
+
+From a **clean checkout** of the exact commit you intend to release (a dirty
+working tree — uncommitted changes, untracked files — must not silently
+enter the artifact):
+
+```bash
+RELEASE_SHA=$(git rev-parse HEAD)
+docker build \
+  --build-arg GIT_SHA=$RELEASE_SHA \
+  --build-arg BUILD_DATE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  -t infosecurs-release:$RELEASE_SHA .
+```
+
+Confirm identity mechanically — never trust a prose note:
+
+```bash
+docker inspect infosecurs-release:$RELEASE_SHA --format '{{json .Config.Labels}}'
+# {"org.opencontainers.image.revision":"<RELEASE_SHA>", "org.opencontainers.image.created":"...", ...}
+```
+
+The image is never pushed to a registry as part of this proof (PID §15 "do
+not add … registry infrastructure merely for this gate") — its durable
+identity is this OCI label plus its local, content-addressable Image ID
+(`docker inspect --format '{{.Id}}'`), not a registry digest.
+
+### 2. Run the release stack
+
+`docker-compose.release.yml` is a **standalone** file (see its header
+comment for why it is never merged as an override with `docker-compose.yml`
+— Compose's own multi-file `volumes:` merge-by-target behaviour would not
+reliably drop the dev stack's `.:/app` bind). Copy `.env.example` to a
+throwaway `.env.release`, set `DJANGO_ENV=production`, a freshly generated
+synthetic `DJANGO_SECRET_KEY`, and synthetic Postgres/Customer-Zero values
+— never real secrets — then, with a project name and ports distinct from
+anything else running on the host:
+
+```bash
+RELEASE_IMAGE=infosecurs-release:$RELEASE_SHA \
+  docker compose -p <project> --env-file .env.release \
+  -f docker-compose.release.yml up -d
+```
+
+(`--env-file .env.release` matters for **both** Compose's own `${...}`
+interpolation in the YAML and as the default `env_file` source — not only
+`.env.release`'s explicit `env_file:` entry on `web`.) `web`'s command runs
+`collectstatic --noinput && migrate --noinput` before serving, against
+fresh named volumes (`infosecurs_release_postgres_data` /
+`infosecurs_release_evidence_data` under your `-p` project) — this doubles
+as the PID §16 fresh Customer-Zero reproducibility proof:
+
+```bash
+docker compose -p <project> --env-file .env.release \
+  -f docker-compose.release.yml exec web python manage.py create_customer_zero
+```
+
+Safe to run again — see `organisations/tests/test_bootstrap.py::test_create_customer_zero_is_idempotent`
+and `docs/evidence/M006-RELEASE.md` for the live rerun proof (no duplicate
+user/organisation/membership rows).
+
+### 3. Verify no source bind
+
+```bash
+docker inspect <project>-web-1 --format '{{json .Mounts}}'
+```
+
+Must show only the `infosecurs_release_evidence_data` volume at
+`/data/evidence` — **no** entry for `/app`. Inspecting `docker-compose.release.yml`
+alone is not sufficient proof; always inspect the actual running container.
+
+### 4. Real-browser smoke under genuine `DJANGO_ENV=production`
+
+`config/settings.py`'s `SECURE_SSL_REDIRECT=True` is genuinely active under
+this stack, so a plain-HTTP browser request gets a real `301` to an
+`https://` URL nothing serves directly (same finding as
+`docs/evidence/M006-ROUND4-PRODCONFIG-HEALTH.md` §3, reproduced again here
+against the release image). `scripts/release_tls_smoke_wrap.py` (a real
+file inside the image — no bind mount needed) provides a bounded,
+single-hop TLS test topology — Django's own WSGI app terminates a real
+self-signed TLS connection directly in-process, so `SECURE_SSL_REDIRECT`
+never needs to fire and no product source is touched. See that script's
+module docstring for the full mechanism/rationale and
+`docs/evidence/M006-RELEASE.md` for the exact commands and a real Playwright
+run against `https://127.0.0.1:<WEB_TLS_HOST_PORT>/`.
+
+### 5. Security scan bound to the release image
+
+```bash
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:0.70.0 image --severity CRITICAL,HIGH --ignore-unfixed \
+  --exit-code 1 infosecurs-release:$RELEASE_SHA
+```
+
+Same tool/version/flags as `.github/workflows/security.yml`'s
+`security/container` check, run explicitly against this exact release image
+ID rather than trusting CI's own `infosecurs:ci` build (a different image).
+
+### 6. Clean up
+
+```bash
+docker compose -p <project> --env-file .env.release -f docker-compose.release.yml down -v
+docker image rm infosecurs-release:$RELEASE_SHA
+rm .env.release
+```
+
+Never do this to `infosecurs-relocation` or any other stack you don't own —
+`docker compose ls` shows every project on this shared host.
