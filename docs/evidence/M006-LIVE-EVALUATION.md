@@ -931,3 +931,44 @@ in the worktree shows only the intended source changes (§A/§B code + tests
 + this addendum) plus the 6 new `r7-correction-*` raw evidence files —
 nothing else. Confirmed no `m006r7corr*` containers/volumes/networks
 remain on dell-debian post-teardown.
+
+---
+
+# FURTHER ADDENDUM — release artifact rebuilt at the new product SHA,
+2026-09-25 (Central Architecture correction §E, separate later dispatch)
+
+**Produced by:** Engineer dispatch (FORGE), 2026-09-25, on dell-debian,
+worktree `/srv/eng-worktrees/m006-round7-release-rebuild`, branch
+`wo/M006-round7-release-rebuild`, based on
+`main @ 0ee503e203556e9be7df72d60b29bb387db677ec` (the exact merge commit
+of the correction PR described in the ADDENDUM above, PR #43).
+
+**Scope of this note only:** this dispatch did not re-run, re-derive, or
+change any AI-evaluation result. The ADDENDUM above (§A-§D) already is the
+live AI re-proof of `risk_interpretation_v2` and the questionnaire-corpus-v3
+fix, run against a plain dev-mode stack (project `m006r7corr`) built from
+this identical, already-merged corrected source — that work is not repeated
+here, per Central Architecture's own instruction not to "unnecessarily
+repeat unrelated Round 6 engineering."
+
+**What this note adds:** the *release artifact* (the Docker image Beta
+actually ships) has now been rebuilt from a genuinely clean checkout at this
+same merged SHA, so it too contains `risk_interpretation_v2` and the
+questionnaire-corpus-v3 fix — previously it did not (the release image
+accepted after Round 6's own correction,
+`infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`, predates PR
+#43 entirely). The new accepted release image is
+`infosecurs-release:0ee503e203556e9be7df72d60b29bb387db677ec`
+(Image ID `sha256:cc756853c4e216ea48d5ce313fc1f01da2f84c20cbe93f91a602285d8d1d5f33`).
+
+Full release-artifact-specific proof (image identity/OCI revision,
+no-source-bind, DEBUG=False, health, static assets, real browser smoke,
+secret-not-baked-in, external read-only LiteLLM credential mount, Trinity
+gateway route + one bounded live connectivity check, Trivy 0 CRITICAL/HIGH)
+is in `docs/evidence/M006-RELEASE.md` §0b — that section, not this one, is
+the authoritative record of the rebuild. This note exists only to point the
+two documents at each other and to state plainly: the live AI-behavioural
+re-proof above (this document, §A-§D) and the release-artifact rebuild
+(`M006-RELEASE.md` §0b) together are what close Central Architecture's
+correction in full — the former proves the corrected product behaves
+correctly, the latter proves the shippable image actually contains it.

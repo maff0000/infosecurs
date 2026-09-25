@@ -1,0 +1,49 @@
+{
+  "results": {
+    "step0_title": "Log in — Infosecurs",
+    "step0_url": "https://127.0.0.1:19961/accounts/login/",
+    "step0_css_loaded": "https://127.0.0.1:19961/static/organisations/css/app.b253b06e4a6c.css",
+    "step0_body_has_styling": true,
+    "step1_url_after_login": "https://127.0.0.1:19961/organisations/",
+    "step1_title": "Organisations — Infosecurs",
+    "step2_has_org_link": true,
+    "step3_url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/",
+    "step3_title": "Overview — Infosecurs Limited — Infosecurs",
+    "step3_nav_present": true,
+    "nav": {
+      "security": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/security-state/",
+        "title": "Security state — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      },
+      "evidence": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/evidence/",
+        "title": "Evidence — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      },
+      "policy": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/policy/",
+        "title": "Information Security Policy — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      },
+      "questionnaires": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/questionnaire/",
+        "title": "Questionnaire Assurance — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      },
+      "activity": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/activity/",
+        "title": "Activity — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      },
+      "organisation": {
+        "url": "https://127.0.0.1:19961/organisations/1587acc0-a672-47db-a595-ea0f3beb9189/hub/",
+        "title": "Organisation — Infosecurs Limited — Infosecurs",
+        "status_ok": true
+      }
+    }
+  },
+  "consoleMessages": [],
+  "pageErrors": [],
+  "failedRequests": []
+}
