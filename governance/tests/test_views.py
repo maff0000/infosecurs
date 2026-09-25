@@ -174,6 +174,70 @@ class TestRoleAssignmentsView:
         assert response.status_code == 200
         assert b"marked inactive" in response.content
 
+    # --- M006-AUDIT-0001 F1: the "you are currently listed..." banner must
+    # reflect genuine current assignment state, not an unconditional claim
+    # (the Auditor's finding: it said this even when every role fieldset
+    # below correctly said "Not yet assigned"). ------------------------------
+    def test_banner_lists_all_three_roles_when_genuinely_assigned_all_three(
+        self, client_a, org_a, user_a, member_a
+    ):
+        ensure_account_holder_person(org_a, user_a)  # defaults all three to the account holder
+        response = client_a.get(reverse("governance:roles", args=[org_a.id]))
+        content = response.content.decode()
+        assert "you are currently listed as" in content.lower()
+        assert "policy authoriser" in content.lower()
+        assert "security responsible person" in content.lower()
+        assert "senior leadership representative" in content.lower()
+
+    def test_banner_says_not_listed_when_no_governance_person_exists_for_the_user(
+        self, client_a, org_a, user_a, member_a
+    ):
+        # Defensive edge case, same class ensure_account_holder_person's own
+        # docstring and role_assignments' own docstring already document: a
+        # synthetic/test organisation reached without going through
+        # ensure_account_holder_person at all - no OrganisationPerson, no
+        # role assignments, so the banner must not claim any role for this
+        # user (it also must not error).
+        response = client_a.get(reverse("governance:roles", args=[org_a.id]))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "you are not currently listed" in content.lower()
+        # And every role fieldset below genuinely says "Not yet assigned" -
+        # the banner and the fieldsets must never contradict each other.
+        assert content.count("Not yet assigned.") == 3
+
+    def test_banner_only_lists_roles_actually_assigned_to_the_signed_in_user(
+        self, client_a, org_a, user_a, member_a
+    ):
+        account_holder = ensure_account_holder_person(org_a, user_a)
+        other_person = OrganisationPerson.objects.create(organisation=org_a, full_name="Jane Smith")
+        from governance.services import assign_role
+
+        # Reassign one of the three roles away from the signed-in user.
+        assign_role(
+            organisation=org_a,
+            role=GovernanceRoleAssignment.ROLE_POLICY_AUTHORISER,
+            person=other_person,
+            assigned_by=user_a,
+        )
+
+        response = client_a.get(reverse("governance:roles", args=[org_a.id]))
+        content = response.content.decode()
+        lowered = content.lower()
+        assert "you are currently listed as" in lowered
+        # Still-held roles are named...
+        assert "security responsible person" in lowered
+        assert "senior leadership representative" in lowered
+        # ...but the reassigned-away role is not claimed for this user in
+        # the banner's own comma-joined list (it still appears once, lower
+        # in the page, inside that role's own "Currently assigned to Jane
+        # Smith" fieldset text - this checks the banner sentence itself).
+        banner_start = lowered.index("you are currently listed as")
+        banner_sentence_end = lowered.index(".", banner_start)
+        banner_sentence = lowered[banner_start:banner_sentence_end]
+        assert "policy authoriser" not in banner_sentence
+        assert account_holder.id != other_person.id
+
 
 @pytest.mark.django_db
 class TestEditMyDetailsView:

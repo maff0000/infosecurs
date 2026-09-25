@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+import governance.services
 from config.env import require_env
 from organisations.models import Organisation, OrganisationMembership
 
@@ -63,5 +64,16 @@ class Command(BaseCommand):
             )
             if membership_created:
                 self.stdout.write(self.style.SUCCESS("Linked Customer Zero user to organisation."))
+
+            # M006-AUDIT-0001 F1: called unconditionally, on every bootstrap
+            # invocation - not only when the membership was newly created.
+            # `ensure_account_holder_person` is already idempotent (see its
+            # docstring), so this is always safe, and calling it every time
+            # also repairs a pre-fix Customer Zero organisation (one bootstrapped
+            # before this fix existed, with a membership but no linked
+            # OrganisationPerson/governance roles) the next time this command is
+            # rerun. Mirrors the same call site's existing use in
+            # organisations.views.organisation_create.
+            governance.services.ensure_account_holder_person(organisation, user)
 
         self.stdout.write(self.style.SUCCESS("Customer Zero bootstrap complete."))

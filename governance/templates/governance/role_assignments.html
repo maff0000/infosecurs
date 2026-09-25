@@ -11,8 +11,17 @@
 </div>
 
 <p class="page-header__subtitle">
-    You are currently listed as the policy authoriser, security contact and senior leadership
-    representative. If that is not correct for any role, reassign it to another named person below.
+    {% if my_role_labels %}
+        You are currently listed as the {{ my_role_labels|join:", "|lower }}.
+        {% if my_role_labels|length < 3 %}
+            The remaining role(s) below are held by someone else, or not yet assigned - see each
+            fieldset below for its current status.
+        {% endif %}
+        If that is not correct for any role, reassign it to another named person below.
+    {% else %}
+        You are not currently listed as the assignee for any governance role below. Assign each
+        role - to yourself or another named person - using the forms below.
+    {% endif %}
 </p>
 
 <p><a href="{% url 'governance:edit_my_details' organisation.id %}">Edit your details</a></p>

@@ -134,6 +134,7 @@ jobs:
           risk_register/tests/test_grounding.py
           risk_register/tests/test_services.py
           risk_register/tests/test_http_ui.py
+          risk_register/tests/test_narrow_viewport_regression.py
           risk_register/tests/test_tenant_isolation.py
           risk_register/tests/test_eval_harness.py
           risk_register/tests/test_eval_command.py

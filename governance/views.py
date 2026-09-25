@@ -110,10 +110,28 @@ def role_assignments(request, organisation_id):
             }
         )
 
+    # M006-AUDIT-0001 F1: the "you are currently listed as..." banner must
+    # reflect genuine current assignment state, derived from the same
+    # `assignments_by_role` source of truth the three role fieldsets above
+    # already use - not a second, parallel representation. A role only
+    # counts as "mine" if it is assigned to the OrganisationPerson linked to
+    # request.user (there may be none, e.g. a synthetic test organisation
+    # created without going through `ensure_account_holder_person`).
+    my_person = OrganisationPerson.objects.filter(
+        organisation=organisation, user=request.user
+    ).first()
+    my_role_labels = [
+        role_label
+        for role_key, role_label in GovernanceRoleAssignment.ROLE_CHOICES
+        if my_person is not None
+        and assignments_by_role.get(role_key) is not None
+        and assignments_by_role[role_key].person_id == my_person.id
+    ]
+
     return render(
         request,
         "governance/role_assignments.html",
-        {"organisation": organisation, "rows": rows},
+        {"organisation": organisation, "rows": rows, "my_role_labels": my_role_labels},
     )
 
 

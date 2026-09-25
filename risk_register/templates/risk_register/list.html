@@ -26,6 +26,17 @@
     gap: var(--space-2);
     flex-wrap: wrap;
   }
+  /* M006-AUDIT-0001 F2: the title link's text is customer-controlled (it
+     includes the linked asset's name) and, unlike ordinary prose, can be a
+     single long unbreakable run with no natural break points - a long
+     asset name pushed this flex item past its automatic min-content width,
+     widening the card and, with it, the whole page, past the viewport at
+     narrow widths. Scoped to this one element only, not applied globally:
+     `min-width: 0` lets the link shrink below that automatic minimum
+     inside the wrapping flex row, and `overflow-wrap: anywhere` lets the
+     text itself break at any character once it no longer fits, instead of
+     visually overflowing its box. */
+  .risk-card__title a { min-width: 0; overflow-wrap: anywhere; }
   .risk-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
   .risk-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .badge {
