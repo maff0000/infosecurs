@@ -41,15 +41,42 @@ Tenant-safety discipline (mirrors `risk_register.scenario_engine` and
 `risk_register.grounding`'s proven approach - PID §16, "the last item is
 critical", extended here to the interpretation task's own outbound
 payload): every DB read below is either a reverse one-to-one traversal
-FROM the exact `organisation` object passed in
-(`organisation.baseline_assessment`), or an explicit
+FROM the exact `organisation` object passed in, or an explicit
 `.filter(organisation=organisation, ...)` at the ORM call site (`Risk`) -
-never fetched unscoped and filtered afterwards. `KeyAsset.description` and
-`BaselineAnswer.note` values reached via `risk.key_asset` / the canonical
-baseline are only ever read for a `Risk` that itself already passed the
-`organisation=organisation` filter above, so there is no path by which a
-different organisation's free text could end up in one of this
-organisation's `InterpretationCandidate.notes`.
+never fetched unscoped and filtered afterwards.
+
+== M006-AUDIT-0001 finding F3: no organisation-authored free text on the
+wire, at all ==
+A fresh, independent, real-browser PID §18 acceptance audit reproduced
+the fabricated-fact-adoption failure `risk_interpretation_v2` (M006 Round
+7's own correction) was built to close: the model repeated a hostile
+`KeyAsset.description`/`BaselineAnswer.note`'s planted "already ISO 27001
+certified / MFA fully implemented" claim as established fact, despite
+`v2`'s explicit instruction not to. Central Architecture's ruling:
+prompt-only controls have failed twice against this class - the fix is
+data minimisation at the source, not more prompt wording. As a result,
+`_build_candidate` below (the sole production caller of
+`InterpretationCandidate`) no longer reads or sends ANY of the three raw
+organisation-authored free-text surfaces the audit named:
+
+- `KeyAsset.description` - previously read here and appended to
+  `notes`; no longer read at all;
+- `BaselineAnswer.note` - previously read here (via
+  `_canonical_baseline_notes`, now deleted) and appended to `notes`; no
+  longer read at all;
+- `KeyAsset.name` - previously reached the model indirectly via
+  `risk.title` (`risk_register.scenario_engine._build_title` embeds it);
+  `_candidate_title` below builds a model-only title from
+  methodology-owned data instead (the scenario's own `threat_event` plus
+  the asset's canonical `category` enum value), never from `risk.title`.
+
+`notes` is therefore always `[]` on this module's outbound
+`InterpretationCandidate`s. The persisted/displayed `Risk.title` - what a
+human sees on the risk-register page - is completely unchanged: it is
+still `risk.title`, still built by `_build_title`, still embeds
+`key_asset.name`. Only what is sent to the AI wire payload changed. See
+`risk_interpretation_v3`'s own module docstring for the corresponding
+prompt-side correction.
 """
 from __future__ import annotations
 
@@ -59,28 +86,10 @@ from ai_platform.interpretation_contracts import (
     InterpretationCandidate,
 )
 from ai_platform.interpretation_orchestration import interpret_candidates
-from ai_platform.prompts.risk_interpretation_v2 import PROMPT_VERSION
+from ai_platform.prompts.risk_interpretation_v3 import PROMPT_VERSION
+from key_assets.models import CATEGORY_CHOICES
 from risk_register.methodology import CATALOGUE_BY_ID
 from risk_register.models import Risk
-from security_baseline.models import BaselineAssessment
-
-
-def _canonical_baseline_notes(organisation) -> dict:
-    """This organisation's canonical `BaselineAnswer.note` values, keyed by
-    `question_key` - `{}` if no assessment exists, and a control key with a
-    blank note is simply absent from the returned dict (there is nothing
-    useful to add to a candidate's `notes` for it).
-
-    Mirrors `risk_register.scenario_engine._canonical_control_answers`'s
-    exact tenant-scoping pattern (a reverse OneToOneField traversal from
-    this exact `organisation` object) - reused rather than reimplemented
-    differently, since that module already gets this specific read right.
-    """
-    try:
-        assessment = organisation.baseline_assessment
-    except BaselineAssessment.DoesNotExist:
-        return {}
-    return {answer.question_key: answer.note for answer in assessment.answers.all() if answer.note}
 
 
 def _select_candidate_risks(organisation) -> list:
@@ -120,27 +129,48 @@ def _select_candidate_risks(organisation) -> list:
     ]
 
 
-def _build_candidate(index: int, risk: Risk, notes_by_control_key: dict) -> InterpretationCandidate:
+_CATEGORY_LABELS_BY_VALUE = dict(CATEGORY_CHOICES)
+
+
+def _candidate_title(scenario, key_asset) -> str:
+    """Model-facing candidate title, built ENTIRELY from methodology/
+    application-owned data - the scenario's own `threat_event` plus the
+    asset's canonical `category` enum value (a controlled vocabulary,
+    `key_assets.models.CATEGORY_CHOICES` - the same choices set
+    `KeyAsset.category`'s field definition uses - not organisation-authored
+    free text) - never `key_asset.name` (M006-AUDIT-0001 F3).
+
+    Deliberately NOT `risk.title` / `risk_register.scenario_engine.
+    _build_title`'s output, which correctly, and unchangedly, embeds
+    `key_asset.name` for the PERSISTED/DISPLAYED `Risk.title` a human sees
+    on the risk-register page (a UI/business-domain concern this
+    correction does not touch - `_build_title` itself is untouched). This
+    is a separate, model-only construction used only for the outbound AI
+    wire payload, mirroring `_build_title`'s "<threat_event> - <asset
+    descriptor>" shape with a non-identifying descriptor in place of the
+    customer's own asset name.
+    """
+    threat_event = scenario.threat_event.rstrip(".")
+    category_label = _CATEGORY_LABELS_BY_VALUE.get(key_asset.category, key_asset.category)
+    return f"{threat_event} - {category_label}"
+
+
+def _build_candidate(index: int, risk: Risk) -> InterpretationCandidate:
     """One `InterpretationCandidate` for `risk`, assigned `index` for this
-    one call only. `notes` collects the organisation's own free text that
-    is actually relevant to this specific candidate - the asset's own
-    description, plus the canonical baseline note (if any) for each of the
-    catalogue scenario's `control_keys` - exactly the PID §12 examples
-    ("baseline notes; asset descriptions"), never a database identifier.
+    one call only.
+
+    `notes` is always `[]` and `title` is always `_candidate_title`'s
+    model-only construction - M006-AUDIT-0001 F3: the live production path
+    must never send `KeyAsset.description`, `BaselineAnswer.note`, or
+    `KeyAsset.name` (the three raw organisation-authored free-text
+    surfaces the audit named) to the model, in any form. See this module's
+    own docstring for the full history and reasoning.
     """
     scenario = CATALOGUE_BY_ID[risk.scenario_id]
 
-    notes: list = []
-    if risk.key_asset.description:
-        notes.append(risk.key_asset.description)
-    for control_key in scenario.control_keys:
-        note = notes_by_control_key.get(control_key)
-        if note:
-            notes.append(note)
-
     return InterpretationCandidate(
         index=index,
-        title=risk.title,
+        title=_candidate_title(scenario, risk.key_asset),
         exposure=risk.exposure,
         threat_event=risk.threat_event or risk.threat,
         vulnerability=risk.vulnerability,
@@ -148,7 +178,7 @@ def _build_candidate(index: int, risk: Risk, notes_by_control_key: dict) -> Inte
         current_impact=risk.impact,
         current_likelihood=risk.likelihood,
         asset_category=risk.key_asset.category,
-        notes=notes,
+        notes=[],
     )
 
 
@@ -172,9 +202,8 @@ def interpret_draft_risks(organisation, gateway: RiskInterpretationGateway = Non
     if not candidate_risks:
         return []
 
-    notes_by_control_key = _canonical_baseline_notes(organisation)
     candidates = [
-        _build_candidate(index, risk, notes_by_control_key)
+        _build_candidate(index, risk)
         for index, risk in enumerate(candidate_risks, start=1)
     ]
     risk_by_index = {index: risk for index, risk in enumerate(candidate_risks, start=1)}

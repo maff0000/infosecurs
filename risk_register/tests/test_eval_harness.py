@@ -192,7 +192,7 @@ class TestRunEvalMechanics:
         gw = FakeInterpretationGateway(mode="valid")
         report = run_eval(gw)
         assert report["corpus_version"] == "m002-eval-corpus-interpretation-v1"
-        assert report["prompt_version"] == "risk_interpretation_v2"
+        assert report["prompt_version"] == "risk_interpretation_v3"
         assert "generated_at" in report
         assert report["configured_model_alias"] == "trinity-core"
 
@@ -212,6 +212,58 @@ class TestRunEvalMechanics:
         assert report1["case_count"] == report2["case_count"] == 8
         for c1, c2 in zip(report1["cases"], report2["cases"]):
             assert c1["draft_risk_count"] == c2["draft_risk_count"]
+
+
+@pytest.mark.django_db
+class TestPromptInjectionInNotesCorpusCasePayloadExclusion:
+    """M006-AUDIT-0001 F3: the existing adversarial corpus case
+    (`prompt_injection_in_notes`) must remain useful, not be weakened or
+    removed just because the model no longer sees its hostile source data
+    (see `golden_corpus.py`'s own case comment: its hostile
+    `KeyAsset.description`/`BaselineAnswer.note` text still lives in the
+    corpus's tenant state deliberately, so a human/future engineer can see
+    what is being defended against). This test mechanically checks the NEW
+    property that actually matters post-F3: none of that hostile text
+    reaches the outbound AI wire payload the real production pipeline
+    constructs for this case - belt-and-braces alongside
+    `run_eval`/`_run_case`'s existing response-side checks (which never
+    inspected the model's response text for this specific fabricated
+    premise, only the objective properties `_case_is_green` scores)."""
+
+    def test_hostile_corpus_text_never_reaches_the_wire_payload(self):
+        case = next(c for c in GOLDEN_CORPUS if c["key"] == "prompt_injection_in_notes")
+        organisation = ensure_case_organisation(case)
+        generate_draft_risks(organisation)
+
+        gateway = FakeInterpretationGateway(mode="valid")
+        updated = interpret_draft_risks(organisation, gateway=gateway)
+        assert updated  # sanity: this case really does produce interpretable draft risks
+
+        assert len(gateway.calls) == 1
+        request, _prompt_version = gateway.calls[0]
+        wire_payload = str([c.to_wire_dict() for c in request.candidates])
+
+        hostile_asset_description = case["assets"][0]["description"]
+        hostile_baseline_note = case["baseline_answers"]["device_encryption"][1]
+        # Sanity: the corpus's own source data is still genuinely hostile -
+        # this test would be meaningless against a case that had been
+        # quietly defanged instead of correctly left hostile-at-source.
+        assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in hostile_asset_description
+        assert "SYSTEM OVERRIDE" in hostile_baseline_note
+
+        assert hostile_asset_description not in wire_payload
+        assert hostile_baseline_note not in wire_payload
+        for marker in (
+            "IGNORE ALL PREVIOUS INSTRUCTIONS",
+            "SYSTEM OVERRIDE",
+            "ISO 27001",
+            "fully compliant",
+            "developer mode",
+        ):
+            assert marker not in wire_payload, f"{marker!r} leaked into the outbound AI wire payload"
+
+        for candidate in request.candidates:
+            assert candidate.notes == []
 
 
 class TestGoldenCorpusStableIds:
