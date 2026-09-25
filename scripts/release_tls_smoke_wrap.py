@@ -117,6 +117,12 @@ def main():
         handler_class=WSGIRequestHandler,
     )
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    # CodeQL py/insecure-protocol: PROTOCOL_TLS_SERVER alone permits
+    # negotiating down to TLSv1/TLSv1.1 (CWE-327). This wrapper exists to
+    # prove production-equivalent TLS behaviour for the release-image
+    # smoke (see module docstring) - it should refuse anything a real
+    # deployment would, not merely "some TLS".
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(certfile=certfile, keyfile=keyfile)
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
 
