@@ -64,16 +64,22 @@ def test_generate_policy_rejects_a_generation_prompt_version_it_does_not_share_a
         gateway.generate_policy(_grounding(), "risk_generation_v1")
 
 
-def test_build_policy_messages_for_version_resolves_v1_and_rejects_unknown():
+def test_build_policy_messages_for_version_resolves_v1_and_v2_and_rejects_unknown():
+    """G1 (M006-AUDIT-0002) added `policy_generation_v2` to the registry -
+    exact precedent: `test_interpretation_gateway.py`'s own
+    `test_build_interpretation_messages_for_version_resolves_v1_and_v2_and_v3_and_rejects_unknown`
+    for the sibling risk-interpretation registry."""
     from ai_platform.prompts import (
         KNOWN_POLICY_PROMPT_VERSIONS,
         build_policy_messages_for_version,
     )
     from ai_platform.prompts.policy_generation_v1 import build_messages as v1_build_messages
+    from ai_platform.prompts.policy_generation_v2 import build_messages as v2_build_messages
 
     assert build_policy_messages_for_version("policy_generation_v1") is v1_build_messages
+    assert build_policy_messages_for_version("policy_generation_v2") is v2_build_messages
     assert build_policy_messages_for_version("not_a_real_version") is None
-    assert set(KNOWN_POLICY_PROMPT_VERSIONS) == {"policy_generation_v1"}
+    assert set(KNOWN_POLICY_PROMPT_VERSIONS) == {"policy_generation_v1", "policy_generation_v2"}
 
 
 # --- OpenAI-envelope parsing (policy-generation task) -------------------------

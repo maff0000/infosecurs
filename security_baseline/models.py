@@ -16,7 +16,13 @@ ANSWER_UNKNOWN = "unknown"
 ANSWER_NOT_APPLICABLE = "not_applicable"
 
 ANSWER_CHOICES = [
-    (ANSWER_UNKNOWN, "Not confirmed"),
+    # Display wording only - Central Architecture baseline-UX correction
+    # (M006-AUDIT-0002 correction #1/#11): the stored value is still
+    # "unknown", completely unchanged; only the customer-facing label
+    # changed, from "Not confirmed" to "Not sure". Persistence semantics,
+    # the tri-state discipline described above, and every other choice's
+    # value/label are untouched.
+    (ANSWER_UNKNOWN, "Not sure"),
     (ANSWER_YES, "Yes"),
     (ANSWER_PARTIAL, "Partially"),
     (ANSWER_NO, "No"),

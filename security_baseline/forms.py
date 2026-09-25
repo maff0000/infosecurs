@@ -1,4 +1,6 @@
 from django import forms
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_BY_KEY
 from security_baseline.models import ANSWER_CHOICES, ANSWER_UNKNOWN
@@ -10,6 +12,60 @@ def answer_field_name(question_key):
 
 def note_field_name(question_key):
     return f"note__{question_key}"
+
+
+class BaselineAnswerSelect(forms.Select):
+    """
+    Renders the real `ANSWER_CHOICES` exactly as an ordinary <select>, plus
+    one extra, visibly **disabled** "Other - coming later" option appended
+    to the end of the same control (Central Architecture baseline-UX
+    correction, M006-AUDIT-0002 correction #1/#11).
+
+    This option is deliberately NOT a member of `ANSWER_CHOICES` and is
+    never added to this field's `choices` - it exists in the rendered HTML
+    only. It carries the real HTML `disabled` attribute (so a real browser
+    will not let a user select or submit it - disabled <option>s are
+    excluded from form submission by the HTML spec itself) plus
+    `aria-disabled="true"` for assistive-tech redundancy, since this
+    codebase has no existing disabled-control-in-a-select convention to
+    match. Even if a request somehow bypassed the browser and POSTed this
+    option's value directly, `forms.ChoiceField.validate()` would still
+    reject it as an invalid choice, because it is not a member of
+    `self.choices` - there is no path, browser or otherwise, by which this
+    option's value can become a stored `BaselineAnswer.answer`.
+
+    Deliberately local to this one widget/field, not a change to
+    `forms.Select` globally - every other <select> in this codebase is
+    unaffected.
+
+    No hidden text field, no backend "other" state, no schema change: this
+    is exactly the low-risk, display-only portion of the structured-first
+    baseline-UX decision authorised for this dispatch. The future
+    "customer prose -> AI proposes mapping -> customer confirms" flow this
+    option gestures at is explicitly NOT implemented here.
+    """
+
+    OTHER_VALUE = "other_coming_later"
+    OTHER_LABEL = "Other - coming later"
+
+    def render(self, name, value, attrs=None, renderer=None):
+        html = super().render(name, value, attrs=attrs, renderer=renderer)
+        extra_option = format_html(
+            '<option value="{}" disabled aria-disabled="true">{}</option>',
+            self.OTHER_VALUE,
+            self.OTHER_LABEL,
+        )
+        # The extra option is appended just before the closing </select> tag
+        # so it renders as a genuine sixth item in the same dropdown/control
+        # group as the five real options, not a separate, oddly-placed
+        # element. `str(html)`/`str(extra_option)` discard the SafeString
+        # markers on the two already-escaped pieces before splicing them
+        # together with plain str.replace() (SafeString does not override
+        # .replace(), so calling it directly would silently degrade back to
+        # an unmarked str and get re-escaped by the template engine) -
+        # `mark_safe` on the combined result is what actually re-marks the
+        # final, already-safe HTML as trusted for output.
+        return mark_safe(str(html).replace("</select>", str(extra_option) + "</select>"))
 
 
 class BaselineAssessmentForm(forms.Form):
@@ -49,7 +105,7 @@ class BaselineAssessmentForm(forms.Form):
                 choices=ANSWER_CHOICES,
                 initial=ANSWER_UNKNOWN,
                 label=item["question"],
-                widget=forms.Select(attrs={"class": "select"}),
+                widget=BaselineAnswerSelect(attrs={"class": "select"}),
             )
             self.fields[note_field_name(key)] = forms.CharField(
                 required=False,

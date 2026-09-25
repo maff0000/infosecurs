@@ -2,7 +2,7 @@ import pytest
 from django.urls import reverse
 
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_VERSION
-from security_baseline.forms import answer_field_name, note_field_name
+from security_baseline.forms import BaselineAnswerSelect, answer_field_name, note_field_name
 from security_baseline.models import ANSWER_UNKNOWN, ANSWER_YES, BaselineAnswer, BaselineAssessment
 
 
@@ -105,3 +105,85 @@ class TestSecurityBaselineHttpUi:
         data = _all_unknown_post()  # every note field already blank
         response = client_a.post(reverse("security_baseline:baseline", args=[org_a.id]), data)
         assert response.status_code == 302
+
+    # ------------------------------------------------------------------
+    # Baseline-UX correction (Central Architecture, M006-AUDIT-0002
+    # correction #1/#11): "unknown" now displays as "Not sure" (display
+    # wording only - the stored value is still "unknown"), and a sixth,
+    # genuinely disabled "Other - coming later" option is visible in the
+    # same control group. No hidden text field, no backend "other" state.
+    # ------------------------------------------------------------------
+
+    def test_unknown_answer_displays_as_not_sure_not_the_old_label(self, client_a, org_a):
+        response = client_a.get(reverse("security_baseline:baseline", args=[org_a.id]))
+        content = response.content.decode()
+        assert "Not sure" in content
+        # The old label must not still be present anywhere in the answer
+        # choice UI - a stray leftover would mean the change was only
+        # half-applied.
+        assert "Not confirmed" not in content
+
+    def test_stored_answer_value_for_unknown_is_unchanged(self, client_a, org_a):
+        """Display wording changed; the persisted value must not have."""
+        data = _all_unknown_post()
+        client_a.post(reverse("security_baseline:baseline", args=[org_a.id]), data)
+        assessment = BaselineAssessment.objects.get(organisation=org_a)
+        assert set(assessment.answers.values_list("answer", flat=True)) == {ANSWER_UNKNOWN}
+        assert ANSWER_UNKNOWN == "unknown"
+
+    def test_other_coming_later_option_visibly_present_and_disabled(self, client_a, org_a):
+        response = client_a.get(reverse("security_baseline:baseline", args=[org_a.id]))
+        content = response.content.decode()
+        assert BaselineAnswerSelect.OTHER_LABEL in content
+        # It must appear as a genuinely disabled <option>, not merely as
+        # incidental page text - a real, addressable HTML disabled
+        # attribute plus the redundant ARIA signal for assistive tech.
+        expected_option = (
+            f'<option value="{BaselineAnswerSelect.OTHER_VALUE}" disabled '
+            f'aria-disabled="true">{BaselineAnswerSelect.OTHER_LABEL}</option>'
+        )
+        assert expected_option in content
+        # One appearance per rendered answer <select> in the full
+        # catalogue form - every question got the same widget, not just
+        # one.
+        assert content.count(expected_option) == len(CATALOGUE)
+        # No hidden free-text field accompanying it anywhere in the form.
+        assert "other_coming_later_text" not in content
+        assert "other_text" not in content
+
+    def test_other_coming_later_is_not_a_real_choice_and_cannot_be_submitted(
+        self, client_a, org_a
+    ):
+        """
+        Mechanical proof the disabled option is genuinely non-functional:
+        even a request that bypasses the browser's own disabled-option
+        submission block and POSTs the option's raw value directly is
+        rejected by ordinary ChoiceField validation, exactly like any
+        other unsupported value (see
+        test_unsupported_answer_value_rejected_and_not_saved above) -
+        because the option was never added to the field's real `choices`.
+        """
+        data = _all_unknown_post()
+        data[answer_field_name("mfa_user_accounts")] = BaselineAnswerSelect.OTHER_VALUE
+
+        response = client_a.post(reverse("security_baseline:baseline", args=[org_a.id]), data)
+        assert response.status_code == 200  # re-renders the form, no redirect
+        assert not BaselineAssessment.objects.filter(organisation=org_a).exists()
+
+    def test_normal_submission_with_only_real_options_still_works(self, client_a, org_a):
+        """
+        No regression to ordinary baseline submission from adding the
+        disabled option - submitting only the five real answer values
+        still saves exactly as before.
+        """
+        data = _all_unknown_post()
+        data[answer_field_name("mfa_user_accounts")] = "yes"
+        data[answer_field_name("backups")] = "partial"
+
+        response = client_a.post(reverse("security_baseline:baseline", args=[org_a.id]), data)
+        assert response.status_code == 302
+
+        assessment = BaselineAssessment.objects.get(organisation=org_a)
+        assert assessment.answers.count() == len(CATALOGUE)
+        assert assessment.answers.get(question_key="mfa_user_accounts").answer == "yes"
+        assert assessment.answers.get(question_key="backups").answer == "partial"

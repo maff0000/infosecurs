@@ -208,6 +208,8 @@ a:hover { color: var(--color-primary-dark); }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -218,6 +220,20 @@ a:hover { color: var(--color-primary-dark); }
 .card-list__link:hover { border-color: var(--color-primary); }
 .card-list__title { font-weight: 600; }
 .card-list__meta { color: var(--color-text-muted); font-size: 0.85rem; }
+/* M006-AUDIT-0002 G2 bounded audit: same defect class/fix as
+   risk_register/templates/risk_register/list.html's `.risk-card__title a`
+   (M006-AUDIT-0001 F2) - `.card-list__title` (organisations/templates/
+   organisations/list.html) holds the customer-controlled organisation
+   name as a flex item with no wrap opportunity; `.card-list__link` itself
+   also had no `flex-wrap: wrap`, so a long/unbroken name pushed the whole
+   row past the viewport, not just the title. `.card-list` is a shared
+   component class (used only by the organisations list today, but a
+   genuinely shared rule, not page-scoped CSS), so this fix - unlike the
+   others in this audit, which are local to one page's own <style> block -
+   lives here in the shared stylesheet. Confirmed present by the same
+   real-browser measurement method before these rules were added. Scoped
+   to this one component only, not applied globally. */
+.card-list__title { min-width: 0; overflow-wrap: anywhere; }
 
 .empty-state {
   background: var(--color-surface);

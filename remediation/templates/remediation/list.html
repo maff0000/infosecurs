@@ -27,6 +27,15 @@
     flex-wrap: wrap;
   }
   .action-card__title a { color: inherit; text-decoration: none; }
+  /* M006-AUDIT-0002 G2 bounded audit: same defect class/fix as
+     risk_register/templates/risk_register/list.html's `.risk-card__title
+     a` (M006-AUDIT-0001 F2) - the remediation action title link's text is
+     customer-controlled (drawn from the action's own title, often carried
+     over from a customer-controlled risk/asset title) and can be a single
+     long unbreakable run. Confirmed present here by the same real-browser
+     measurement method before this rule was added. Scoped to this one
+     element only. */
+  .action-card__title a { min-width: 0; overflow-wrap: anywhere; }
   .action-card__title a:hover { text-decoration: underline; }
   .action-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
   .action-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }

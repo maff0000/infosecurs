@@ -239,7 +239,7 @@ class TestRunEvalMechanics:
         gw = FakePolicyGateway(mode="valid")
         report = run_eval(gw)
         assert report["corpus_version"] == "m004-policy-eval-corpus-v1"
-        assert report["prompt_version"] == "policy_generation_v1"
+        assert report["prompt_version"] == "policy_generation_v2"
         assert "generated_at" in report
         assert report["configured_model_alias"] == "trinity-core"
 

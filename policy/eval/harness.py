@@ -72,7 +72,7 @@ import re
 from ai_platform.gateway import DEFAULT_MODEL_ALIAS
 from ai_platform.policy_contracts import MAX_TOTAL_CONTENT_CHARS
 from ai_platform.policy_orchestration import PolicyGenerationFailed
-from ai_platform.prompts.policy_generation_v1 import PROMPT_VERSION
+from ai_platform.prompts.policy_generation_v2 import PROMPT_VERSION
 
 from policy.eval.golden_corpus import (
     CORPUS_VERSION,
@@ -140,7 +140,7 @@ def _no_identifier_leak(title: str, sections: list, review_warnings: list) -> bo
     """Regex-scan `policy_title`, every section's `content`, and every
     review warning's `subject`/`detail` for a UUID-shaped substring. The
     model is never given a database identifier to copy (PID §12, §13,
-    `ai_platform.prompts.policy_generation_v1`'s own "never reproduce a
+    `ai_platform.prompts.policy_generation_v2`'s own "never reproduce a
     database identifier" instruction) - same defect class
     `risk_register.eval.harness._no_identifier_leak` already guards
     against for the interpretation task.
