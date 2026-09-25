@@ -21,6 +21,7 @@ from typing import Callable, Optional
 
 from ai_platform.prompts import (
     policy_generation_v1,
+    policy_generation_v2,
     questionnaire_drafting_v1,
     questionnaire_interpretation_v1,
     risk_generation_v1,
@@ -81,6 +82,7 @@ def build_interpretation_messages_for_version(prompt_version: str) -> Optional[C
 # a different argument type from either other task's. -----------------------
 _POLICY_PROMPT_MODULES_BY_VERSION = {
     policy_generation_v1.PROMPT_VERSION: policy_generation_v1,
+    policy_generation_v2.PROMPT_VERSION: policy_generation_v2,
 }
 
 KNOWN_POLICY_PROMPT_VERSIONS = tuple(_POLICY_PROMPT_MODULES_BY_VERSION)

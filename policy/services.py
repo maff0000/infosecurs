@@ -8,8 +8,12 @@ the second AI task.
 `generate_policy_draft` is the single entrypoint the view calls. It:
 
 1. builds this organisation's `PolicyGroundingPayload`
-   (`policy.grounding.build_policy_grounding_payload`);
-2. calls `ai_platform.policy_orchestration.generate_policy` (one call, at
+   (`policy.grounding.build_policy_grounding_payload`) - as of the G1
+   correction (M006-AUDIT-0002), a bounded structured projection of
+   canonical tenant state, not the organisation's own narrative - see that
+   module's docstring;
+2. calls `ai_platform.policy_orchestration.generate_policy` against
+   `ai_platform.prompts.policy_generation_v2.PROMPT_VERSION` (one call, at
    most one bounded retry for a retryable failure only - the same
    discipline `ai_platform.orchestration.generate_risks` /
    `ai_platform.interpretation_orchestration.interpret_candidates` already
@@ -18,7 +22,16 @@ the second AI task.
    `PolicyDocument`, and creates a NEW `PolicyVersion`
    (`status=draft`, `generation_source=ai`, ...) - never mutates an
    existing version, so this function alone can never violate the
-   immutability guarantee `policy.models.PolicyVersion.save()` enforces;
+   immutability guarantee `policy.models.PolicyVersion.save()` enforces.
+   The persisted `review_warnings` are the AI's own `result.
+   review_warnings` MERGED with a deterministic, application-owned set
+   derived from the same canonical `security_state_facts` this call's
+   grounding payload already computed (G1 correction §7 - see
+   `_deterministic_review_warnings`/`_merge_review_warnings` below) - a
+   material unknown/gap is therefore never silently unflagged purely
+   because the model itself failed to mention it, which is exactly the gap
+   M006-AUDIT-0002's G1 finding exploited (zero review-warning flag
+   alongside the fabricated ISO 27001/MFA claim);
 4. emits exactly one `policy_draft_generated` `ActivityEvent` (PID §22),
    in the same transaction as the `PolicyDocument`/`PolicyVersion` writes,
    mirroring `workplace.services.create_workplace`'s single-writer-plus-
@@ -53,10 +66,12 @@ from django.utils import timezone
 from activity.models import ActivityEvent
 from activity.services import record_event
 from ai_platform.gateway import LiteLLMGateway, PolicyGenerationGateway
-from ai_platform.policy_contracts import PolicyGenerationResult
+from ai_platform.policy_contracts import PolicyGenerationResult, PolicyReviewWarning
 from ai_platform.policy_orchestration import generate_policy
-from ai_platform.prompts.policy_generation_v1 import PROMPT_VERSION
+from ai_platform.prompts.policy_generation_v2 import PROMPT_VERSION
 from governance.models import GovernanceRoleAssignment
+from security_baseline.models import ANSWER_NO, ANSWER_PARTIAL, ANSWER_UNKNOWN
+from security_state.services import LABEL_EVIDENCE_CONFLICT, LABEL_EVIDENCE_STALE
 
 from policy.models import PolicyDocument, PolicyVersion
 from policy.grounding import build_policy_grounding_payload
@@ -112,9 +127,103 @@ def _next_version_number(document: PolicyDocument) -> int:
     return (latest.version_number + 1) if latest is not None else 1
 
 
+# G1 correction §7 (M006-AUDIT-0002): controls whose canonical state is not
+# a confirmed "yes" get a deterministic, application-owned review warning -
+# never left to depend solely on the model choosing to mention them. Not a
+# second/parallel truth system: this reads the exact same
+# `security_state_facts` projection `policy.grounding.
+# build_policy_grounding_payload` already computed for the AI call itself -
+# see that module's docstring for how `assurance_label`/`answer` are
+# derived.
+_WARNING_TRIGGER_ANSWERS = frozenset({ANSWER_UNKNOWN, ANSWER_PARTIAL, ANSWER_NO})
+_WARNING_TRIGGER_ASSURANCE_LABELS = frozenset({LABEL_EVIDENCE_CONFLICT, LABEL_EVIDENCE_STALE})
+
+
+def _deterministic_review_warnings(security_state_facts: dict) -> list:
+    """One `PolicyReviewWarning` per control whose canonical `answer` is
+    `unknown`/`partial`/`no`, OR whose `assurance_label` shows an evidence
+    conflict/staleness (a materially untrustworthy "yes", even though the
+    raw answer itself is confirmed) - deterministic, from already-canonical
+    state, never re-deriving control truth itself (G1 correction §7: "Do
+    not create a second control-truth system - this is a projection of
+    existing canonical state").
+
+    A `not_applicable`/confirmed-`yes`-with-no-conflict control never gets
+    one here: `not_applicable` is a genuine customer assessment, not a gap,
+    and a clean confirmed `yes` needs no review flag."""
+    warnings = []
+    for control_key, entry in security_state_facts.items():
+        answer = entry.get("answer")
+        assurance_label = entry.get("assurance_label")
+        if answer not in _WARNING_TRIGGER_ANSWERS and assurance_label not in _WARNING_TRIGGER_ASSURANCE_LABELS:
+            continue
+        warnings.append(
+            PolicyReviewWarning(
+                subject=f"{entry.get('area')} - {control_key}",
+                detail=(
+                    f"Canonical current state: {entry.get('answer_label')} "
+                    f"({assurance_label}). This control's implementation is not "
+                    "fully confirmed - review before approving this policy."
+                ),
+            )
+        )
+    return warnings
+
+
+def _merge_review_warnings(ai_warnings: list, security_state_facts: dict) -> list:
+    """AI-supplied `review_warnings` (list[PolicyReviewWarning]) MERGED
+    with the deterministic minimum `_deterministic_review_warnings` above
+    computes, so a material unknown/gap is never silently unflagged purely
+    because the model didn't mention it (G1 correction §7) - while avoiding
+    an obviously duplicate/redundant warning for the same control.
+
+    De-duplication approach (deliberately narrow and conservative, biased
+    towards keeping a warning rather than dropping one that might matter -
+    corrected after a live run of this exact mechanism, against the
+    `several_unknown_baseline_controls` golden-corpus case, caught its own
+    first version being too loose: matching against the AI's full warning
+    DETAIL prose let one control's incidental phrasing - "...privileged
+    access is not currently protected by MFA..." in the AI's
+    `mfa_privileged_accounts` warning - falsely swallow the DIFFERENT,
+    genuinely-uncovered `privileged_access_separation` control's own
+    deterministic warning, purely because that control's `area` label
+    ("Privileged access") happened to be a substring of that unrelated
+    sentence. Exactly the "silently unflagged" failure class G1 exists to
+    prevent - so this now matches ONLY against each AI warning's own short
+    `subject` line, never its longer free-form `detail` prose. The
+    `control_key` match is the one exception that still uses the AI's
+    combined subject+detail text: an underscored slug like
+    `device_encryption` is not the kind of phrase natural prose produces
+    coincidentally, so it is safe to match wherever the AI wrote it. So: a
+    deterministic warning for `control_key`/`area` is skipped only if
+    that exact `control_key` appears anywhere in the AI's own combined
+    warning text, OR `area` appears in some individual AI warning's own
+    `subject` (never its `detail`). This still under-merges in some cases
+    (an AI subject phrased very differently from the area label) but can
+    no longer over-merge across two different controls whose area labels
+    happen to share a common English phrase inside free-running prose."""
+    deterministic = _deterministic_review_warnings(security_state_facts)
+    ai_combined_text = " ".join(f"{w.subject} {w.detail}" for w in ai_warnings).lower()
+    ai_subjects = [w.subject.lower() for w in ai_warnings]
+
+    merged = list(ai_warnings)
+    for warning in deterministic:
+        area, _, control_key = warning.subject.partition(" - ")
+        already_covered = control_key.lower() in ai_combined_text or any(
+            area.lower() in subject for subject in ai_subjects
+        )
+        if already_covered:
+            continue
+        merged.append(warning)
+    return merged
+
+
 @transaction.atomic
-def _persist_draft(organisation, result: PolicyGenerationResult, record, *, actor) -> PolicyVersion:
+def _persist_draft(
+    organisation, result: PolicyGenerationResult, record, grounding, *, actor
+) -> PolicyVersion:
     document, _ = PolicyDocument.objects.get_or_create(organisation=organisation)
+    review_warnings = _merge_review_warnings(result.review_warnings, grounding.security_state_facts)
     version = PolicyVersion.objects.create(
         document=document,
         organisation=organisation,
@@ -122,7 +231,7 @@ def _persist_draft(organisation, result: PolicyGenerationResult, record, *, acto
         status=PolicyVersion.STATUS_DRAFT,
         title=result.policy_title,
         sections=[dataclasses.asdict(section) for section in result.sections],
-        review_warnings=[dataclasses.asdict(warning) for warning in result.review_warnings],
+        review_warnings=[dataclasses.asdict(warning) for warning in review_warnings],
         generation_source=PolicyVersion.GENERATION_SOURCE_AI,
         prompt_version=result.prompt_version,
         ai_invocation_record=record,
@@ -161,7 +270,7 @@ def generate_policy_draft(
 
     result, record = generate_policy(gateway, grounding, PROMPT_VERSION)
 
-    return _persist_draft(organisation, result, record, actor=actor)
+    return _persist_draft(organisation, result, record, grounding, actor=actor)
 
 
 @transaction.atomic

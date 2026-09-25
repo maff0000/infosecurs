@@ -26,6 +26,21 @@
     gap: var(--space-2);
     flex-wrap: wrap;
   }
+  /* M006-AUDIT-0002 G2: same defect class as M006-AUDIT-0001 F2's
+     `.risk-card__title a` fix (risk_register/templates/risk_register/
+     list.html) - the asset name is customer-controlled and, unlike
+     ordinary prose, can be a single long unbreakable run with no natural
+     break points. Here the name renders as plain text (not a link), so
+     unlike the risk-register case there is no child element to target -
+     `.asset-card__title-text` below is a wrapping <span> added around
+     `{{ asset.name }}` specifically so this rule has a real, addressable
+     flex-item element to apply to (an anonymous flex item generated for a
+     bare text node cannot be targeted by CSS). Scoped to this one element
+     only, not applied globally - same two properties as the F2 fix:
+     `min-width: 0` lets it shrink below its automatic minimum inside the
+     wrapping flex row, and `overflow-wrap: anywhere` lets the text itself
+     break at any character once it no longer fits. */
+  .asset-card__title-text { min-width: 0; overflow-wrap: anywhere; }
   .asset-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
   .asset-card__description { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
   .asset-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
@@ -73,7 +88,7 @@
                 <div class="asset-card">
                     <div class="asset-card__body">
                         <p class="asset-card__title">
-                            {{ asset.name }}
+                            <span class="asset-card__title-text">{{ asset.name }}</span>
                             <span class="badge badge--suggested">Suggested</span>
                         </p>
                         <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
@@ -107,7 +122,7 @@
                 <div class="asset-card">
                     <div class="asset-card__body">
                         <p class="asset-card__title">
-                            {{ asset.name }}
+                            <span class="asset-card__title-text">{{ asset.name }}</span>
                             <span class="badge badge--confirmed">Confirmed</span>
                         </p>
                         <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>
@@ -134,7 +149,7 @@
                 <div class="asset-card asset-card--dismissed">
                     <div class="asset-card__body">
                         <p class="asset-card__title">
-                            {{ asset.name }}
+                            <span class="asset-card__title-text">{{ asset.name }}</span>
                             <span class="badge badge--dismissed">Dismissed</span>
                         </p>
                         <p class="asset-card__meta">{{ asset.get_category_display }} &middot; {{ asset.get_criticality_display }} criticality</p>

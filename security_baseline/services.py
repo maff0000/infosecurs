@@ -72,7 +72,7 @@ def save_baseline_answers(
       `initial[...] = existing.answer if existing else ANSWER_UNKNOWN`).
       This matters in practice: without it, the *first* full-catalogue
       save of a brand-new assessment - where most questions are simply
-      being submitted at their pre-filled "Not confirmed" default -
+      being submitted at their pre-filled "Not sure" default -
       would otherwise emit a spurious `control_answer_changed` event for
       every single catalogue question, not just the ones the customer
       actually set. Treating "no row yet" as the same UNKNOWN state the

@@ -22,7 +22,7 @@ class TestRunPolicyAiEvalCommandFakeGateway:
         assert report["case_count"] == 8
         assert len(report["cases"]) == 8
         assert report["corpus_version"] == "m004-policy-eval-corpus-v1"
-        assert report["prompt_version"] == "policy_generation_v1"
+        assert report["prompt_version"] == "policy_generation_v2"
 
     def test_writes_report_to_output_file_when_requested(self, tmp_path):
         out = io.StringIO()

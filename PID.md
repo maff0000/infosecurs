@@ -215,6 +215,43 @@ concern; no new LiteLLM deployment or project-specific alias is required.
 
 M001 does not require live AI inference.
 
+### 10.1 Structured-first customer input doctrine (Central Architecture correction, M006-AUDIT-0002 finding G1)
+
+A fresh independent Auditor proved that hostile prose planted in an
+ordinary customer-editable field (a security-baseline answer's note) was
+adopted by the policy-generation AI surface into an approved, downloadable
+policy PDF - a fabricated ISO 27001 certification claim and an `unknown`
+MFA control asserted as "implemented across all staff accounts", with zero
+review-warning flag. This is the same failure class - prompt-only defences
+against hostile customer prose failing on an injected-fact pattern - that
+M006-AUDIT-0001 finding F3 already proved against the risk-interpretation
+surface. Central Architecture's ruling, recorded here as governing
+doctrine:
+
+> Structured first. Prose by exception. AI clarifies. Customer confirms.
+> Application owns truth.
+
+> No consequential AI receives raw customer prose unless that specific
+> field/use is explicitly justified and threat-modelled.
+
+> AI may propose a structured answer; only explicit customer confirmation
+> establishes canonical state.
+
+This is a GOVERNING DIRECTION, applied surface-by-surface as each AI task
+is built or corrected - it does not claim all customer-authored prose has
+been eliminated from the entire product. As of the G1 correction, the
+policy-generation surface (`policy.grounding.build_policy_grounding_payload`
+/ `ai_platform.prompts.policy_generation_v2`) sends the model a bounded
+structured projection of canonical tenant state only - no organisation
+description, no workplace name/location label, no governance person's
+name/job title, no baseline answer note, no risk title - mirroring the
+data-minimisation correction `risk_interpretation_v3` already established
+for the risk-interpretation surface (M006-AUDIT-0001 F3). Any future AI
+task in this product must be designed to this same doctrine from the
+outset: prefer a structured/controlled-value projection over raw customer
+prose, and treat sending free text to a consequential AI call as the
+exception requiring explicit justification, not the default.
+
 ---
 
 ## 11. Repository and GitHub doctrine

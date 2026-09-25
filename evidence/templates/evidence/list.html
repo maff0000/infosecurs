@@ -26,6 +26,13 @@
     gap: var(--space-2);
     flex-wrap: wrap;
   }
+  /* M006-AUDIT-0002 G2 bounded audit: same defect class/fix as
+     risk_register/templates/risk_register/list.html's `.risk-card__title
+     a` (M006-AUDIT-0001 F2) - the evidence title link's text is
+     customer-controlled and can be a single long unbreakable run.
+     Confirmed present here by the same real-browser measurement method
+     before this rule was added. Scoped to this one element only. */
+  .evidence-card__title a { min-width: 0; overflow-wrap: anywhere; }
   .evidence-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
   .evidence-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .badge {
