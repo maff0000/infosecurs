@@ -12,3 +12,14 @@ django-allauth[socialaccount]==65.19.4
 # WeasyPrint), keeping this within the build-reproducibility discipline in
 # docs/delivery/BUILD-REPRODUCIBILITY.md. See policy/pdf.py.
 reportlab==5.0.1
+# Serves collected static assets directly from the application process
+# under DEBUG=False (M006 Round 6, PID §15/§C - the DEBUG=False
+# static-file gap Round 2 identified and deliberately deferred). Chosen
+# over a new production web-server/reverse-proxy architecture (explicitly
+# out of scope, PID §15) or `runserver --insecure` (Django's own docs
+# call this "grossly inefficient and probably insecure" for anything
+# beyond local throwaway use): pure WSGI middleware, works unmodified
+# with the existing `manage.py runserver` command, no new deployment
+# topology. See config/settings.py's WHITENOISE_* block and
+# docs/evidence/M006-RELEASE.md for the full reasoning.
+whitenoise==6.11.0

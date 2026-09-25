@@ -1,3 +1,11 @@
+# Normal local development stack - `web` binds the working tree at `.:/app`
+# and runs the plain dev server, on purpose (fast edit/reload loop).
+#
+# This is NOT the release-artifact proof. For an immutable, SHA-bound image
+# with no source bind (M006 PID §15), see the separate, standalone
+# docker-compose.release.yml and docs/runbooks/BETA-OPERATIONS.md's
+# "Release artifact" section - deliberately not merged with this file (see
+# docker-compose.release.yml's header comment for why).
 services:
   db:
     # Pinned by explicit version + immutable digest, kept identical to CI

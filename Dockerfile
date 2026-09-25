@@ -6,6 +6,21 @@
 # uncontrolled upgrade baked into every build.
 FROM python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
+# Container/source identity (M006 Round 6, PID §15/§K). Standard OCI labels,
+# not a bespoke metadata service - "what Git SHA produced this running
+# image?" is answered mechanically via `docker inspect`, never a trusted
+# prose note. Both default to "unknown" so a build that doesn't pass them
+# (e.g. CI's plain `docker build -t infosecurs:ci .` in
+# .github/workflows/security.yml - unchanged by this round) still succeeds
+# identically to before; only a deliberate release build
+# (docs/runbooks/BETA-OPERATIONS.md "Release artifact") supplies real values.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE_UTC=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE_UTC}" \
+      org.opencontainers.image.source="https://github.com/maff0000/infosecurs" \
+      org.opencontainers.image.title="infosecurs"
+
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

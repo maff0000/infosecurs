@@ -11,3 +11,19 @@ htmlcov
 staticfiles
 docs
 *.md
+# Compose files are host-side tooling only - never needed inside the image
+# (M006 Round 6, PID §15/§D). This specifically closes a real gap found
+# during this round: an untracked, machine-local docker-compose.override.yml
+# (LiteLLM secret-*path* bind fragment - not a secret value itself, but
+# still local machine config that must not enter the release artifact) was
+# NOT previously excluded here, so a build from a working tree that had one
+# present would silently copy it into the image via `COPY . .`. Broadened
+# to every docker-compose*.yml (covers docker-compose.yml and
+# docker-compose.release.yml too - neither has any runtime purpose inside
+# the image) rather than naming only the one file that happened to exist
+# locally at audit time.
+docker-compose.yml
+docker-compose.override.yml
+docker-compose.*.yml
+# Backup archives / restore output - large, binary, never part of the app.
+backups/
