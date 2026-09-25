@@ -76,7 +76,7 @@ from security_baseline.catalogue import CATALOGUE_VERSION as BASELINE_CATALOGUE_
 from security_baseline.models import BaselineAnswer, BaselineAssessment
 from workplace.models import Workplace
 
-CORPUS_VERSION = "m005-questionnaire-eval-corpus-v2"
+CORPUS_VERSION = "m005-questionnaire-eval-corpus-v3"
 
 # Fixed, arbitrary namespace UUID - only used to derive deterministic,
 # well-formed ids below via uuid5(namespace, name). Its own value carries no
@@ -576,6 +576,18 @@ GOLDEN_CORPUS = [
         "required_keys": ["org:certification_cyber_essentials"],
         "allowed_keys": ["org:certification_cyber_essentials"],
         "expected_evidence_explicitly_requested": False,
+        # Central Architecture correction (M006 Round 7 correction, PR
+        # #42 §A): the live questionnaire harness returned RED on both
+        # Round 7 runs solely because requirement_scope_correct == false.
+        # requirement_scope is genuinely irrelevant to this plain
+        # certification question - `_org_certification_signal_and_warning`
+        # (questionnaire/outcome.py) does not branch on scope at all, see
+        # this case's own `expected_interpretation` comment above. Same
+        # class of corpus over-specification already corrected for
+        # `genuine_not_applicable` below and in M005 PR #30. Only this one
+        # field is opted out - interpretation_keys_valid/intent_type_correct/
+        # outcome_exact all remain fully graded for this case.
+        "grade_requirement_scope": False,
     },
     {
         "key": "genuine_not_applicable",

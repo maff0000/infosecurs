@@ -59,7 +59,7 @@ from ai_platform.interpretation_contracts import (
     InterpretationCandidate,
 )
 from ai_platform.interpretation_orchestration import interpret_candidates
-from ai_platform.prompts.risk_interpretation_v1 import PROMPT_VERSION
+from ai_platform.prompts.risk_interpretation_v2 import PROMPT_VERSION
 from risk_register.methodology import CATALOGUE_BY_ID
 from risk_register.models import Risk
 from security_baseline.models import BaselineAssessment

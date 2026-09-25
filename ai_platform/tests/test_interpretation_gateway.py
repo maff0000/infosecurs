@@ -68,16 +68,21 @@ def test_interpret_rejects_a_generation_prompt_version_it_does_not_share_a_regis
         gateway.interpret(interpretation_request, "risk_generation_v1")
 
 
-def test_build_interpretation_messages_for_version_resolves_v1_and_rejects_unknown():
+def test_build_interpretation_messages_for_version_resolves_v1_and_v2_and_rejects_unknown():
     from ai_platform.prompts import (
         KNOWN_INTERPRETATION_PROMPT_VERSIONS,
         build_interpretation_messages_for_version,
     )
     from ai_platform.prompts.risk_interpretation_v1 import build_messages as v1_build_messages
+    from ai_platform.prompts.risk_interpretation_v2 import build_messages as v2_build_messages
 
     assert build_interpretation_messages_for_version("risk_interpretation_v1") is v1_build_messages
+    assert build_interpretation_messages_for_version("risk_interpretation_v2") is v2_build_messages
     assert build_interpretation_messages_for_version("not_a_real_version") is None
-    assert set(KNOWN_INTERPRETATION_PROMPT_VERSIONS) == {"risk_interpretation_v1"}
+    assert set(KNOWN_INTERPRETATION_PROMPT_VERSIONS) == {
+        "risk_interpretation_v1",
+        "risk_interpretation_v2",
+    }
 
 
 # --- OpenAI-envelope parsing (interpretation task) ---------------------------
