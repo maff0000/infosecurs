@@ -1,20 +1,29 @@
 # M006 Round 6 — Release Artifact + Fresh Customer-Zero Reproducibility
 
-**Status:** GREEN, 2026-09-25. **Corrected 2026-09-25 (twice) — see §0 and
-§0b.** §0's correction fixed release-image *identity* (image now genuinely
-matches its recorded source SHA). §0b's later correction rebuilds the
-artifact again because *product source itself* changed (the Round 7
-`risk_interpretation_v2` + questionnaire-corpus-v3 fix, PR #43) — the §0
-image no longer contains the accepted product behaviour.
-Two earlier images are now SUPERSEDED / NOT THE ACCEPTED BETA ARTIFACT:
+**Status:** GREEN, 2026-09-25. **Corrected 2026-09-25 (three times) — see
+§0, §0b, and §0c.** §0's correction fixed release-image *identity* (image
+now genuinely matches its recorded source SHA). §0b's later correction
+rebuilds the artifact again because *product source itself* changed (the
+Round 7 `risk_interpretation_v2` + questionnaire-corpus-v3 fix, PR #43) —
+the §0 image no longer contains the accepted product behaviour. §0c's
+later correction rebuilds the artifact a third time because *product
+source itself* changed again — PR #46 fixed all three findings (F1/F2/F3)
+a fresh independent Beta Auditor (`docs/evidence/M006-AUDIT-0001.md`) found
+against the §0b image, most importantly F3 (the risk-interpretation AI
+path now uses a new `risk_interpretation_v3` prompt that sends no
+organisation-authored free text to the model at all).
+Three earlier images are now SUPERSEDED / NOT THE ACCEPTED BETA ARTIFACT:
 `infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b` (superseded by
-§0, wrong identity) and
-`infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226` (superseded by
-§0b, right identity but stale product source — no `risk_interpretation_v2`).
+§0, wrong identity), `infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`
+(superseded by §0b, right identity but stale product source — no
+`risk_interpretation_v2`), and
+`infosecurs-release:0ee503e203556e9be7df72d60b29bb387db677ec` (superseded
+by §0c, right identity but stale product source — predates the PR #46
+F1/F2/F3 audit-finding fixes).
 **The currently accepted artifact is**
-`infosecurs-release:0ee503e203556e9be7df72d60b29bb387db677ec`
-(Image ID `sha256:cc756853c4e216ea48d5ce313fc1f01da2f84c20cbe93f91a602285d8d1d5f33`)
-— see §0b for full proof.
+`infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31`
+(Image ID `sha256:e4504c3864275d550bf2ec8e855b540d3fc679a67d2fbc5346b59543180283c6`)
+— see §0c for full proof.
 **PID:** `docs/pids/M006-CUSTOMER-ZERO-BETA-HARDENING.md` §15 (Release
 artifact), §16 (Fresh Customer-Zero reproducibility). Central Architecture's
 detailed Round 6 scoping document (reproduced in the dispatch prompt) is the
@@ -470,6 +479,489 @@ instructions.
   Trivy 0 CRITICAL/HIGH result. This rebuild is a pure identity/product-SHA
   move, not a re-engineering of the release-artifact mechanism Round 6
   already built and Round 6's own correction already validated.
+
+---
+
+## 0c. CORRECTION — release artifact rebuilt at new product SHA (PR #46 audit-fix findings), 2026-09-25
+
+**This is a separate, later correction from §0b above, for the same class
+of reason.** §0b fixed a release *product-source-move* (the Round 7
+`risk_interpretation_v2` fix). This correction exists because **product
+source changed again**: `main @ 115d2f5e74bee8a294c814fdf3d1f7f10c156c31`
+(PR #46, `[M006] Fix Auditor findings F1, F2, F3 (M006-AUDIT-0001)`) merged
+the fix for all three MEDIUM findings a fresh, independent Beta Auditor
+(`docs/evidence/M006-AUDIT-0001.md`, based on `main @
+55481f6d62d2fafee173c988af40352a429daeba`, itself a docs-only ancestor of
+the §0b-accepted `0ee503e2...` product source) found against the
+§0b-accepted image:
+
+- **F1** (governance-role self-assignment unreachable for a
+  `create_customer_zero`-bootstrapped org) — `create_customer_zero` now
+  unconditionally calls `governance.services.ensure_account_holder_person`
+  on every invocation, plus a `governance/views.py` +
+  `role_assignments.html` banner-text fix.
+- **F2** (horizontal overflow on the Risk register page at 375px viewport)
+  — `risk_register/templates/risk_register/list.html` now wraps long
+  asset-derived titles.
+- **F3** (risk-interpretation AI rationale still stating a fabricated
+  ISO27001/MFA claim as "The fact that…") — a genuinely new,
+  architecturally different `ai_platform/prompts/risk_interpretation_v3.py`
+  prompt is now wired into `risk_register/interpretation_service.py`; per
+  the dispatch briefing, the v3 path no longer sends any
+  organisation-authored free text (e.g. the asset description/notes) to
+  the model at all, closing the injection-adoption failure class at its
+  root rather than continuing to instruct the model to disregard it.
+
+The §0b-accepted image, `infosecurs-release:0ee503e203556e9be7df72d60b29bb387db677ec`,
+does **not** contain any of these three fixes — it predates PR #46
+entirely — so it is now superseded as the Beta release candidate, per the
+same "the release artifact must move with the product SHA" doctrine §0b
+itself was built under: merge first, take the exact merged `main` SHA as
+the new accepted product SHA, build a genuinely clean checkout at that SHA,
+and re-prove the release artifact in full.
+
+**Dispatch:** Engineer (FORGE), 2026-09-25, dell-debian, worktree
+`/srv/eng-worktrees/m006-audit-fix-release`, branch
+`wo/M006-audit-fix-release`, based on
+`main @ 115d2f5e74bee8a294c814fdf3d1f7f10c156c31`.
+
+### Preflight
+
+```text
+$ git rev-parse HEAD
+115d2f5e74bee8a294c814fdf3d1f7f10c156c31
+$ git status --porcelain
+(empty)
+```
+
+### Build
+
+```bash
+RELEASE_SHA=115d2f5e74bee8a294c814fdf3d1f7f10c156c31
+docker build --no-cache \
+  --build-arg GIT_SHA=$RELEASE_SHA \
+  --build-arg BUILD_DATE_UTC=2026-09-25T14:14:43Z \
+  -t infosecurs-release:$RELEASE_SHA .
+```
+
+`--no-cache` — every layer genuinely re-executed against this exact
+checkout. Build succeeded; `pip install --require-hashes` succeeded
+unchanged — PR #46's diff (16 files: `.github/workflows/ci.yml`,
+`ai_platform/prompts/{__init__.py,risk_interpretation_v3.py}`,
+`governance/{templates/governance/role_assignments.html,views.py,tests/test_views.py}`,
+`organisations/management/commands/create_customer_zero.py`,
+`organisations/tests/test_bootstrap.py`, `risk_register/{eval/harness.py,
+interpretation_service.py, templates/risk_register/list.html,
+tests/*.py}`) touched no `requirements*.txt`/`.in` file, so the resolved
+package set and every hash are identical to the §0b build (`whitenoise-6.11.0`
+present as before).
+
+**Identity, mechanically proven:**
+
+```text
+$ docker inspect infosecurs-release:$RELEASE_SHA --format '{{.Id}}'
+sha256:e4504c3864275d550bf2ec8e855b540d3fc679a67d2fbc5346b59543180283c6
+
+$ docker inspect infosecurs-release:$RELEASE_SHA --format '{{json .Config.Labels}}'
+{"org.opencontainers.image.created":"2026-09-25T14:14:43Z",
+ "org.opencontainers.image.revision":"115d2f5e74bee8a294c814fdf3d1f7f10c156c31",
+ "org.opencontainers.image.source":"https://github.com/maff0000/infosecurs",
+ "org.opencontainers.image.title":"infosecurs"}
+```
+
+`org.opencontainers.image.revision` reads exactly
+`115d2f5e74bee8a294c814fdf3d1f7f10c156c31` — the true, exact merged source
+commit.
+
+- **Accepted image tag:** `infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31`
+- **Accepted Image ID:** `sha256:e4504c3864275d550bf2ec8e855b540d3fc679a67d2fbc5346b59543180283c6`
+- **Superseded (do not use):** `infosecurs-release:0ee503e203556e9be7df72d60b29bb387db677ec`
+  / `sha256:cc756853c4e216ea48d5ce313fc1f01da2f84c20cbe93f91a602285d8d1d5f33`
+  (§0b, right identity, stale product source — predates PR #46's F1/F2/F3
+  fixes), `infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226` /
+  `sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa`
+  (§0, right identity, stale product source), and
+  `infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b` /
+  `sha256:9eab6c24a4d89b62299f205bdd5b799a9d7d102d1e8ccda6c83f19d75095db60`
+  (§0, wrong identity).
+- **Base image digest:** unchanged —
+  `python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9`.
+- **Dependency lock identity:** unchanged from §0b's accepted build — PR
+  #46's own diff (above) added AI-prompt/governance/risk-register
+  source+test files only, no `requirements*.txt`/`.in` change.
+
+### Fresh, no-source-bind release stack
+
+Distinct project name/ports from every prior round's own stacks
+(`m006r6release`/`m006r6corr`/`m006pl6c`/`m006r7aieval`/`m006r7corr`/
+`m006pl7rel`/`m006audit0001`/`m006plf3`/`m006plcombined` and everything
+else on `docker compose ls` — checked first, confirmed unused; `ss -ltnp`
+also checked for the chosen port range, confirmed unused): project
+`m006afrel`, `WEB_HOST_PORT=19880`, `WEB_TLS_HOST_PORT=19881`,
+`POSTGRES_HOST_PORT=19882`. Throwaway `.env.release` (`DJANGO_ENV=production`,
+freshly generated synthetic `DJANGO_SECRET_KEY`/`POSTGRES_PASSWORD`/
+`CUSTOMER_ZERO_PASSWORD` — generated directly on dell-debian, never printed,
+never committed, deleted at teardown) plus a small, throwaway
+`docker-compose.release.secret.yml` override (same pattern §0b's own
+dispatch used) adding only the read-only LiteLLM credential bind-mount:
+
+```bash
+RELEASE_IMAGE=infosecurs-release:$RELEASE_SHA \
+  docker compose -p m006afrel --env-file .env.release \
+  -f docker-compose.release.yml -f docker-compose.release.secret.yml up -d
+```
+
+Fresh named volumes (`m006afrel_infosecurs_release_postgres_data`,
+`m006afrel_infosecurs_release_evidence_data`) — genuinely from-zero. All 60
+migrations across every app applied cleanly on first start
+(`contenttypes`/`auth`/`account`/`organisations`/`activity`/`admin`/
+`ai_platform`/`evidence`/`governance`/`key_assets`/`policy`/
+`questionnaire`/`risk_register`/`remediation`/`security_baseline`/
+`sessions`/`sites`/`socialaccount`/`workplace` — all `OK`). `collectstatic`:
+`133 static files copied to '/app/staticfiles', 399 post-processed` —
+identical count to every prior round (stylesheet unchanged by PR #46).
+
+**No-source-bind proof — the running container's actual mounts:**
+
+```text
+$ docker inspect m006afrel-web-1 --format '{{json .Mounts}}'
+[
+  {"Type":"bind","Source":"/srv/secrets/infosecurs/litellm_gateway_key",
+   "Destination":"/run/secrets/litellm_gateway_key","Mode":"ro","RW":false,
+   "Propagation":"rprivate"},
+  {"Type":"volume","Name":"m006afrel_infosecurs_release_evidence_data",
+   "Source":"/var/lib/docker/volumes/m006afrel_infosecurs_release_evidence_data/_data",
+   "Destination":"/data/evidence","Mode":"rw","RW":true,"Propagation":""}
+]
+```
+
+No `/app` entry — `/app` is entirely image-contained. Spot-check:
+
+```text
+$ docker exec m006afrel-web-1 md5sum /app/manage.py
+b08184ee2c96f20da8d96e963a29cab9  /app/manage.py
+$ md5sum manage.py   # host working tree, same commit
+b08184ee2c96f20da8d96e963a29cab9  manage.py
+```
+
+**Image identity of the actual running container:**
+
+```text
+$ docker inspect m006afrel-web-1 --format '{{.Image}}'
+sha256:e4504c3864275d550bf2ec8e855b540d3fc679a67d2fbc5346b59543180283c6
+$ docker inspect m006afrel-web-1 --format '{{.Config.Image}}'
+infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31
+$ docker inspect m006afrel-web-1 --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+115d2f5e74bee8a294c814fdf3d1f7f10c156c31
+```
+
+**DJANGO_ENV/DEBUG, directly from the running settings object:**
+
+```text
+$ docker exec m006afrel-web-1 python -c \
+    "import django,os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); \
+     django.setup(); from django.conf import settings; \
+     print('DJANGO_ENV=',settings.DJANGO_ENV); print('DEBUG=',settings.DEBUG)"
+DJANGO_ENV= production
+DEBUG= False
+```
+
+**Plain-HTTP redirect behaviour under genuine production settings:**
+
+```text
+$ curl -s -D - -o /dev/null http://127.0.0.1:19880/healthz/
+HTTP/1.1 301 Moved Permanently
+Location: https://127.0.0.1:19880/healthz/
+```
+
+`SECURE_SSL_REDIRECT=True` genuinely active — same finding class every
+prior round has reproduced.
+
+### Static assets — re-proven over real HTTPS (TLS smoke wrapper)
+
+Same bounded, single-hop TLS test topology as every prior round
+(`scripts/release_tls_smoke_wrap.py`, unmodified, reused exactly):
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 1 -nodes \
+  -subj '/CN=127.0.0.1' -addext 'subjectAltName=IP:127.0.0.1,DNS:localhost'
+docker cp cert.pem m006afrel-web-1:/tmp/smoke-cert.pem
+docker cp key.pem  m006afrel-web-1:/tmp/smoke-key.pem
+docker exec -d -e SMOKE_TLS_CERTFILE=/tmp/smoke-cert.pem -e SMOKE_TLS_KEYFILE=/tmp/smoke-key.pem \
+  m006afrel-web-1 python scripts/release_tls_smoke_wrap.py
+```
+
+```text
+$ curl -sk -D - -o /dev/null https://127.0.0.1:19881/healthz/
+HTTP/1.0 200 OK
+Content-Type: application/json
+
+$ docker exec m006afrel-web-1 sh -c 'cat /app/staticfiles/staticfiles.json' | \
+    python3 -c "import json,sys; d=json.load(sys.stdin); print(d['paths']['organisations/css/app.css'])"
+organisations/css/app.b253b06e4a6c.css
+
+$ curl -sk -D - -o /dev/null https://127.0.0.1:19881/static/organisations/css/app.b253b06e4a6c.css
+HTTP/1.0 200 OK
+Content-Type: text/css; charset="utf-8"
+Cache-Control: max-age=315360000, public, immutable
+Content-Length: 10141
+```
+
+Same content-hashed filename and byte length as every prior round —
+confirming PR #46 did not touch the stylesheet, and WhiteNoise/static-file
+behaviour is unaffected by this rebuild.
+
+### Fresh Customer-Zero reproducibility (PID §16), re-proven against this image — including the F1 governance-fix proof
+
+```text
+$ docker compose -p m006afrel --env-file .env.release \
+    -f docker-compose.release.yml -f docker-compose.release.secret.yml \
+    exec web python manage.py create_customer_zero
+Created Customer Zero user 'customerzero'.
+Created Customer Zero organisation 'Infosecurs Limited'.
+Linked Customer Zero user to organisation.
+Customer Zero bootstrap complete.
+
+$ docker compose -p m006afrel --env-file .env.release \
+    -f docker-compose.release.yml -f docker-compose.release.secret.yml \
+    exec web python manage.py create_customer_zero   # rerun
+Customer Zero user 'customerzero' already exists; leaving as-is.
+Customer Zero organisation 'Infosecurs Limited' already exists; leaving as-is.
+Customer Zero bootstrap complete.
+```
+
+Direct DB proof of no duplication after the rerun (`manage.py shell`,
+querying the real ORM, not trusting stdout):
+
+```text
+>>> User.objects.filter(username="customerzero").count()
+1
+>>> Organisation.objects.filter(name="Infosecurs Limited").count()
+1
+>>> OrganisationMembership.objects.count()
+1
+```
+
+**F1 governance-fix proof — new for this round.** PR #46 made
+`create_customer_zero` call `governance.services.ensure_account_holder_person`
+unconditionally (`organisations/management/commands/create_customer_zero.py`
+diff). Queried directly via the real ORM against this exact fresh-bootstrapped
+image (not the command's own stdout):
+
+```text
+$ docker compose -p m006afrel ... exec web python manage.py shell -c "
+from organisations.models import Organisation, OrganisationMembership
+from django.contrib.auth import get_user_model
+from governance.models import OrganisationPerson, GovernanceRoleAssignment
+User = get_user_model()
+org = Organisation.objects.get(name='Infosecurs Limited')
+user = User.objects.get(username='customerzero')
+person = OrganisationPerson.objects.filter(organisation=org, user=user).first()
+print('OrganisationPerson linked:', person is not None, person.id if person else None)
+roles = GovernanceRoleAssignment.objects.filter(organisation=org).values_list('role', 'person_id')
+print('Role assignments:', list(roles))
+print('All 3 roles point to same person:', person is not None and all(pid == person.id for _, pid in roles) and len(roles) == 3)
+"
+OrganisationPerson linked: True 08a710c5-d55b-4f25-b301-1715c4e75f56
+Role assignments: [('policy_authoriser', UUID('08a710c5-d55b-4f25-b301-1715c4e75f56')),
+                    ('security_responsible', UUID('08a710c5-d55b-4f25-b301-1715c4e75f56')),
+                    ('senior_leadership', UUID('08a710c5-d55b-4f25-b301-1715c4e75f56'))]
+All 3 roles point to same person: True
+```
+
+A fresh Customer-Zero bootstrap against this image now genuinely creates a
+linked `OrganisationPerson` and defaults all three governance roles
+(`policy_authoriser`, `security_responsible`, `senior_leadership`) to that
+same person, in one step — the exact gap M006-AUDIT-0001's Finding F1
+identified (the person dropdown on `/governance/roles/` was previously
+empty for a `create_customer_zero`-bootstrapped org). No duplication after
+the idempotent rerun (re-queried, same single `OrganisationPerson` row,
+same three role rows).
+
+### Real-browser smoke against the release image
+
+Disposable `playwright@1.55.0` + Chromium (already cached on dell-debian
+from prior rounds' installs; `npx playwright install chromium` refreshed
+the binary for this Playwright version — build v1187). Script:
+`docs/evidence/M006-RELEASE-auditfix-smoke-script.js` (same logic as prior
+rounds' own smoke scripts, only the base URL adjusted to this round's own
+port, `https://127.0.0.1:19881`). Full raw result:
+`docs/evidence/M006-RELEASE-auditfix-smoke-result.json`. Screenshots:
+`docs/evidence/M006-RELEASE-auditfix-screens/00-login.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/01-login-expanded.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/02-post-login.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/03-overview.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-security.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-evidence.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-policy.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-questionnaires.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-activity.png`,
+`docs/evidence/M006-RELEASE-auditfix-screens/04-organisation.png`.
+
+Sequence driven via real product navigation (never a crafted URL): load
+`/accounts/login/` unauthenticated (title "Log in — Infosecurs", CSS
+`<link>` resolves to the real content-hashed filename
+`organisations/css/app.b253b06e4a6c.css`) → expanded "Use a local
+development account instead" → local-account login as Customer Zero →
+landed on `/organisations/` → clicked into "Infosecurs Limited" →
+Overview page (`/organisations/<id>/`) with primary nav present → clicked
+through every primary nav destination — Security
+(`/organisations/<id>/security-state/`), Evidence (`/evidence/`), Policy
+(`/policy/`), Questionnaires (`/questionnaire/`), Activity (`/activity/`),
+Organisation (`/organisations/`) — each a real `waitForNavigation`.
+
+**Result:** zero console messages, zero page errors, zero failed/4xx/5xx
+requests across the entire sequence (`consoleMessages: []`, `pageErrors:
+[]`, `failedRequests: []` in the raw result JSON) — identical clean result
+to every prior round's run, confirming this rebuild changed only
+release-artifact identity/product-source (plus the F1/F2/F3 fixes
+themselves, none of which are browser-observable defects — F2 is a
+narrow-viewport-only layout fix and F3 is AI-wording, neither exercised at
+the 1280×900 viewport this smoke used), never introduced any new
+browser-observable defect.
+
+### Secret-not-baked-in proof
+
+```text
+$ docker save infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31 -o image.tar
+$ tar -xf image.tar -C extract/
+$ find extract/ -name '*.tar' -exec tar -tf {} \; | \
+    grep -iE 'litellm_gateway_key|AI_GATEWAY_API_KEY|docker-compose|\.env$|\.env\.release|\.env\.dev'
+(grep exit code 1 — no matches found across all layers)
+
+$ docker run --rm infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31 sh -c \
+    'find / -xdev -iname "*litellm*" 2>/dev/null'
+(no output)
+
+$ docker run --rm infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31 \
+    grep -iE 'litellm|AI_GATEWAY_API_KEY_FILE=' /app/.env.example
+# Read LAZILY by ai_platform.gateway.LiteLLMGateway, only when a risk
+# Base URL of the existing, already-governed Trinity LiteLLM-compatible
+AI_GATEWAY_API_KEY_FILE=
+```
+
+`.env.example` inside the image contains only comments/placeholders,
+byte-identical in substance to every prior round. No secret reaches the
+image at any layer.
+
+### External read-only LiteLLM secret + gateway wiring — confirmed, plus one bounded live connectivity check
+
+The real credential lives only at
+`/srv/secrets/infosecurs/litellm_gateway_key` on dell-debian (root-only, 59
+bytes). Bind-mounted read-only into the release container at
+`/run/secrets/litellm_gateway_key` via the throwaway
+`docker-compose.release.secret.yml` override (not committed, deleted at
+teardown) — see mounts proof above (`"Mode":"ro","RW":false`). Its value
+was never read, echoed, printed, or logged by this dispatch — only its byte
+length:
+
+```text
+$ docker exec m006afrel-web-1 wc -c /run/secrets/litellm_gateway_key
+59 /run/secrets/litellm_gateway_key
+```
+
+matching the host file exactly (`wc -c /srv/secrets/infosecurs/litellm_gateway_key`
+→ `59`). Container environment confirms the wiring:
+
+```text
+$ docker exec m006afrel-web-1 sh -c 'env | grep -i AI_GATEWAY'
+AI_GATEWAY_API_KEY_FILE=/run/secrets/litellm_gateway_key
+AI_GATEWAY_BASE_URL=http://192.168.246.202:4000
+```
+
+Route is Trinity's local-ai-gateway (`192.168.246.202:4000`) — never
+dell-debian's `proteus-litellm`.
+
+**Judgement call — one bounded live connectivity check performed, full
+eval harnesses deliberately NOT re-run**, matching every prior round's own
+judgement call and this dispatch's own explicit instruction: F1/F2/F3's
+own behavioural correctness (including F3's `risk_interpretation_v3`
+architectural change) was already independently verified by
+M006-AUDIT-0001's own fresh audit and by PR #46's own integration against
+this identical, already-merged product source — re-running
+`run_ai_eval`/`run_policy_ai_eval`/`run_questionnaire_ai_eval` here would
+be genuinely redundant. What *was* judged worth proving — because it
+exercises this specific release image's own runtime wiring, not merely the
+product source — is that a real network call from inside the release
+container, using the mounted credential, actually reaches Trinity's
+gateway and resolves the `trinity-core` alias:
+
+```text
+$ docker exec m006afrel-web-1 python3 -c "
+import requests
+key = open('/run/secrets/litellm_gateway_key').read().strip()
+r = requests.get('http://192.168.246.202:4000/v1/models',
+                  headers={'Authorization': f'Bearer {key}'}, timeout=10)
+print('HTTP_STATUS=', r.status_code)
+models = [m.get('id') for m in r.json().get('data', [])]
+print('trinity-core in models:', 'trinity-core' in models)
+"
+HTTP_STATUS= 200
+trinity-core in models: True
+```
+
+HTTP 200 (not 401/403 — the credential authenticates), `trinity-core`
+present in the resolved model list. This is a single, bounded connectivity
+call — not a risk/policy/questionnaire generation, not the eval harness —
+and never printed, logged, or persisted the credential's actual value.
+
+### Security scan bound to the exact release image
+
+```text
+$ docker inspect infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31 --format '{{.Id}}'
+sha256:e4504c3864275d550bf2ec8e855b540d3fc679a67d2fbc5346b59543180283c6
+
+$ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 \
+    image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --format table \
+    infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31
+...
+Report Summary — every scanned target (debian 13.7 OS packages +
+usr/local/lib/python3.12/site-packages/*.dist-info/METADATA for every
+installed package, including whitenoise-6.11.0.dist-info/METADATA): 0
+vulnerabilities.
+$ echo EXIT=$?
+EXIT=0
+```
+
+Same tool/version/flags as `.github/workflows/security.yml`'s
+`security/container` job, run explicitly against this exact new release
+Image ID. Zero CRITICAL/HIGH findings.
+
+### Cleanup
+
+```bash
+docker compose -p m006afrel --env-file .env.release \
+  -f docker-compose.release.yml -f docker-compose.release.secret.yml down -v
+rm -f .env.release docker-compose.release.secret.yml
+rm -rf /tmp/m006afrel-tls /tmp/m006afrel-pw /tmp/m006afrel-image-check /tmp/m006afrel-screens
+```
+
+Never touched `infosecurs-relocation` or any other stack on this shared
+host at any point (`docker compose ls` checked before and after). The
+accepted image (`infosecurs-release:115d2f5e74bee8a294c814fdf3d1f7f10c156c31`)
+is kept locally on dell-debian pending PL review, per this dispatch's
+instructions.
+
+### Summary — what changed and what didn't
+
+- **Changed:** release-artifact identity — new tag/Image ID bound to the
+  new, genuinely merged product SHA (`115d2f5e...`), which contains the
+  F1 (`create_customer_zero` governance-role fix), F2 (risk-register
+  narrow-viewport wrap fix), and F3 (`risk_interpretation_v3`,
+  no-organisation-text-to-model architectural fix) audit-finding
+  corrections from PR #46.
+- **Unchanged, re-proven identical:** static-file content hash/byte
+  length, DEBUG=False/production redirect behaviour, no-source-bind
+  topology, Customer-Zero bootstrap/idempotency behaviour, browser-smoke
+  result (zero console/page/failed-request findings), secret-not-baked-in
+  result, Trivy 0 CRITICAL/HIGH result. This rebuild is a pure
+  identity/product-SHA move plus the three targeted audit-finding fixes,
+  not a re-engineering of the release-artifact mechanism Round 6 already
+  built and every prior correction already validated.
+- **New in this round's own proof:** direct ORM confirmation that F1's
+  governance-role fix is genuinely baked into the image (linked
+  `OrganisationPerson` + all three governance roles present after a fresh
+  Customer-Zero bootstrap, not merely present in source).
 
 ---
 

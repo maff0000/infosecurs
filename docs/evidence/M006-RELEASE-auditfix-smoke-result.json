@@ -1,0 +1,73 @@
+{
+  "consoleMessages": [],
+  "pageErrors": [],
+  "failedRequests": [],
+  "steps": [
+    {
+      "step": "login-page-title",
+      "title": "Log in — Infosecurs"
+    },
+    {
+      "step": "login-css-link",
+      "href": "/static/organisations/css/app.b253b06e4a6c.css"
+    },
+    {
+      "step": "post-login-url",
+      "url": "https://127.0.0.1:19881/organisations/"
+    },
+    {
+      "step": "overview-url",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/"
+    },
+    {
+      "step": "nav-Security",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/security-state/"
+    },
+    {
+      "step": "nav-Evidence",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/evidence/"
+    },
+    {
+      "step": "nav-Policy",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/policy/"
+    },
+    {
+      "step": "nav-Questionnaires",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/questionnaire/"
+    },
+    {
+      "step": "nav-Activity",
+      "url": "https://127.0.0.1:19881/organisations/43779898-f201-4dce-be99-8ec068969aa9/activity/"
+    },
+    {
+      "step": "nav-Organisation",
+      "url": "https://127.0.0.1:19881/organisations/"
+    }
+  ],
+  "navFound": [
+    {
+      "label": "Security",
+      "present": true
+    },
+    {
+      "label": "Evidence",
+      "present": true
+    },
+    {
+      "label": "Policy",
+      "present": true
+    },
+    {
+      "label": "Questionnaires",
+      "present": true
+    },
+    {
+      "label": "Activity",
+      "present": true
+    },
+    {
+      "label": "Organisation",
+      "present": true
+    }
+  ]
+}
