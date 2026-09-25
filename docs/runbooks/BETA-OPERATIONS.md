@@ -179,10 +179,21 @@ evidence already proves the mechanism live and working.
 
 ## Backup
 
-See `docs/runbooks/BACKUP-RESTORE.md`, landed in M006 Round 5 (PID §14).
-Not built or documented here — a separate, later round's job.
+```bash
+scripts/backup.sh [OUTPUT_DIR]
+```
+
+See `docs/runbooks/BACKUP-RESTORE.md` (landed in M006 Round 5, PID §14) for
+the full operator runbook — what it does, credential handling, and output
+shape.
 
 ## Restore
 
-See `docs/runbooks/BACKUP-RESTORE.md`, landed in M006 Round 5 (PID §14).
-Not built or documented here — a separate, later round's job.
+```bash
+scripts/restore.sh BACKUP_DIR PROJECT_NAME [ENV_FILE]
+```
+
+Always restores into a **fresh, disposable** Compose project — never the
+source/live stack. See `docs/runbooks/BACKUP-RESTORE.md` (landed in M006
+Round 5, PID §14) for the full operator runbook, the operator safety note,
+and what "verified" means.
