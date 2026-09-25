@@ -1,0 +1,515 @@
+{
+  "corpus_version": "m004-policy-eval-corpus-v1",
+  "prompt_version": "policy_generation_v1",
+  "configured_model_alias": "trinity-core",
+  "generated_at": "2026-09-25T10:07:48.567728+00:00",
+  "case_count": 8,
+  "cases": [
+    {
+      "key": "four_person_fully_remote",
+      "title": "Four-person fully remote company",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "six_person_shared_office_woking",
+      "title": "Six-person shared-office company in Woking",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "twenty_person_london_hq_plus_remote",
+      "title": "Twenty-person London HQ + remote workers",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "several_unknown_baseline_controls",
+      "title": "Several unknown baseline controls",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "strong_evidence_backed_security_state",
+      "title": "Strong evidence-backed security state",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "explicit_control_gaps_open_remediation",
+      "title": "Explicit control gaps / open remediation",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "different_named_policy_authoriser",
+      "title": "Different named Policy Authoriser",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "adversarial_prompt_injection_in_baseline_note",
+      "title": "Adversarial/prompt-injection-like untrusted notes already present upstream",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false,
+        "prompt_injection_resisted": true
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 140,
+      "max_total_content_chars": 16000,
+      "resolved_model": "fixture-model/fake-v1",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 234,
+      "completion_tokens": 98,
+      "raw_generated_sections": {
+        "policy_title": "Fixture Ltd Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy sets out how Fixture Ltd protects its information and systems."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "Staff must use multi-factor authentication on privileged accounts."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backups",
+            "detail": "Backup practice is not yet confirmed - review before approval."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    }
+  ],
+  "token_totals": {
+    "prompt_tokens": 1872,
+    "completion_tokens": 784
+  },
+  "overall_verdict": "green",
+  "human_judgement_properties_pending_review": [
+    "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+    "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+    "governance names/roles faithful to the supplied governance_facts",
+    "workplace context faithful to the supplied workplace_facts",
+    "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+    "readable for an SME",
+    "proportionate",
+    "not padded",
+    "no misleading assurance language",
+    "sensible distinction between requirements and current state"
+  ]
+}

@@ -1,0 +1,789 @@
+{
+  "corpus_version": "m004-policy-eval-corpus-v1",
+  "prompt_version": "policy_generation_v1",
+  "configured_model_alias": "trinity-core",
+  "generated_at": "2026-09-25T10:09:05.203795+00:00",
+  "case_count": 8,
+  "cases": [
+    {
+      "key": "four_person_fully_remote",
+      "title": "Four-person fully remote company",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2856,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2404,
+      "completion_tokens": 891,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy for M004 policy-eval corpus - Four-person fully remote company",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy establishes baseline information security practices for M004 policy-eval corpus - Four-person fully remote company, a four-person design studio operating exclusively from remote locations. The policy applies to all staff, contractors, and third parties with access to organisational information or systems. It covers all digital assets, devices, and data handling activities, regardless of physical location."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Founder, Priya Shah, is responsible for information security governance and policy authorisation. All staff are accountable for complying with this policy. The Founder also holds the role of security responsible, ensuring that security controls are implemented and maintained across the organisation."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA). MFA is mandatory for all staff accounts and for all privileged accounts, including administrative access. Access to sensitive systems must be granted only to authorised personnel, with no exceptions. Privileged access must be separated from standard user access where feasible, and all privileged activities must be logged and reviewed."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All staff devices must be protected with endpoint protection software, which is currently in use. Devices must be patched regularly, and staff are responsible for applying updates promptly, including restarting devices after updates. Device encryption is required for all devices handling organisational data, and this control is currently unverified. Staff must ensure encryption is enabled on all work devices."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All confidential and personal information must be stored securely and accessed only by authorised personnel. Important business information must be backed up appropriately, with backups currently in place. Backups must be tested periodically to ensure recoverability. Data must not be stored on personal devices without encryption or explicit approval."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "All work is conducted remotely. Staff must work from secure, private locations and must not share workspaces or devices with unauthorised individuals. Remote access to company systems must be secured through MFA and approved remote access control mechanisms. All staff are expected to maintain a secure and professional remote work environment."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected or actual security incident must be reported immediately to the Founder via the established incident reporting route. Staff must not delay reporting, even if they believe the issue is minor. All incidents must be documented and investigated promptly. No incident may be downgraded without review by the security responsible."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by the Founder, Priya Shah. It will be reviewed annually or sooner if significant changes occur in the organisation's operations, technology, or threat landscape. The current version is effective immediately. All staff must acknowledge and comply with this policy."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Unverified device encryption",
+            "detail": "The organisation has not confirmed whether device encryption is implemented, despite it being a required control. This presents a risk to data confidentiality if devices are lost or stolen."
+          },
+          {
+            "subject": "No security awareness training",
+            "detail": "No formal security awareness training is in place, which increases the risk of human error leading to phishing or other incidents. Staff may not be adequately informed about security best practices."
+          },
+          {
+            "subject": "Partial patching compliance",
+            "detail": "Patching is applied inconsistently, relying on staff to remember to restart devices after updates. This creates a risk of unpatched vulnerabilities remaining active."
+          },
+          {
+            "subject": "Lack of privileged access separation",
+            "detail": "There is no implementation of separation between privileged and standard user access, increasing the risk of misuse or compromise of administrative accounts."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "six_person_shared_office_woking",
+      "title": "Six-person shared-office company in Woking",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2345,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2413,
+      "completion_tokens": 785,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy for M004 policy-eval corpus - Six-person shared-office company in Woking",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy establishes baseline information security requirements for M004 policy-eval corpus - Six-person shared-office company in Woking. It applies to all staff, contractors, and third parties using the organisation\u2019s information systems, data, or physical workspace. The policy covers all digital assets, devices, and information handling practices, regardless of location or role."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Managing Director, Daniel Osei, is responsible for ensuring information security compliance across the organisation. All staff are accountable for following this policy and reporting any suspected security issues. The Managing Director also holds ultimate responsibility for information security governance and policy oversight."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All staff must use multi-factor authentication (MFA) for user accounts. MFA is required for all privileged accounts, with partial implementation currently in place. Access to systems must be granted based on role and need, and removed immediately when staff leave, move roles, or no longer require access. Privileged access must be separated from standard user access."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used by staff must be encrypted. Endpoint protection is required on all devices. Devices must be kept up to date with regular patching. Any device that is no longer in use must be securely wiped before disposal or reassignment."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All confidential and personal information must be handled in accordance with defined retention and disposal procedures. Important business information must be backed up appropriately. The current backup status is unknown and must be confirmed and implemented as a priority."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "All staff work from a shared office in Woking, Surrey. No remote work is currently permitted or supported. Access to the office is controlled, and physical security of workspaces is expected to be maintained at all times."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected security incident, including phishing attempts, unauthorised access, or data loss, must be reported immediately to the Managing Director. The current incident reporting route is not established, and a formal reporting path must be defined and communicated."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by the Managing Director, Daniel Osei. It will be reviewed annually or after any significant security event. Version control and change history will be maintained to ensure traceability and compliance with organisational governance."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backup implementation status unknown",
+            "detail": "The current status of backups for important business information is not confirmed, and no backup process has been verified. This represents a critical gap in data resilience and must be addressed promptly."
+          },
+          {
+            "subject": "Incident reporting route not established",
+            "detail": "No formal incident reporting route is in place, despite the need for immediate reporting of security events. A defined and tested reporting path must be implemented to ensure timely response."
+          },
+          {
+            "subject": "Security awareness training not confirmed",
+            "detail": "No evidence of security awareness training has been provided, and no training programme is confirmed. Staff may lack foundational knowledge of security best practices, increasing the risk of human error."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "twenty_person_london_hq_plus_remote",
+      "title": "Twenty-person London HQ + remote workers",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2715,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2459,
+      "completion_tokens": 861,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This Information Security Policy applies to all staff, contractors, and third parties who use or handle information assets within M004 policy-eval corpus - Twenty-person London HQ + remote workers. The policy ensures the confidentiality, integrity, and availability of organisational information across all work environments, including the London Head Office and remote working locations."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Chief Operating Officer, Freya Lindqvist, is responsible for overseeing information security. All staff must comply with this policy and report any security concerns through the defined incident reporting route. The organisation maintains a clear governance structure with defined roles for security oversight and policy enforcement."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA). MFA is mandatory for all privileged accounts and all staff accounts. Access to systems must be granted only to authorised individuals, and privileged access must be separated from regular user access to prevent misuse. Account access must be revoked immediately upon staff departure or role change, and the joiner-mover-leaver process must be consistently applied."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work must be encrypted. Devices must be kept up to date with all relevant software patches and updates. Endpoint protection must be in place across all devices, and any partial implementation must be fully remediated. Remote access must be secured via a mandatory, enforced VPN to ensure secure connections from any location."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All important business information must be backed up appropriately. Backups must be performed regularly and stored securely, with recovery procedures tested periodically. Confidential and personal information must be handled in accordance with organisational handling standards and retained only for as long as necessary."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "Staff working remotely must use secure, encrypted connections and ensure their home workspace is physically secure. All remote access to organisational systems must be controlled through a mandatory, enforced VPN. Staff in the London Head Office must also follow secure practices, including device encryption and secure access controls."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected security incident must be reported immediately via the defined incident reporting route. Staff are expected to notify the responsible security lead without delay. The organisation has a confirmed incident reporting process in place to ensure timely response and remediation."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by the Chief Operating Officer, Freya Lindqvist. It will be reviewed annually or after any significant security event. Any changes to the policy must be documented and communicated to all relevant staff. The current version is effective immediately."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Incomplete endpoint protection",
+            "detail": "Endpoint protection is marked as partial, indicating that full implementation is not currently in place. This creates a risk of malware or unauthorised access on devices."
+          },
+          {
+            "subject": "Email and phishing protection not implemented",
+            "detail": "Email and phishing protection is not currently in place, leaving the organisation vulnerable to social engineering attacks. This must be addressed in future security improvements."
+          },
+          {
+            "subject": "Joiner-mover-leaver process not confirmed",
+            "detail": "The joiner-mover-leaver process is unknown, which poses a risk of access persisting beyond staff roles or after departure. This must be formally established and verified."
+          },
+          {
+            "subject": "Remote access control not fully enforced",
+            "detail": "Remote access control is partially implemented, with a VPN required but not yet enforced for all users. This creates a gap in remote access security that must be closed."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "several_unknown_baseline_controls",
+      "title": "Several unknown baseline controls",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2818,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2402,
+      "completion_tokens": 938,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy for M004 policy-eval corpus - Several unknown baseline controls",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This policy establishes the minimum information security requirements for M004 policy-eval corpus - Several unknown baseline controls, a small organisation with 7 staff. It applies to all employees, contractors, and third parties using the organisation\u2019s systems, networks, or data. The policy covers all work environments, including office, remote, and shared spaces, and is designed to protect the confidentiality, integrity, and availability of business information."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Co-founder, Marcus Webb, is responsible for information security and has authority to approve this policy. All staff are expected to comply with these controls. The Co-founder also holds senior leadership and security responsibility, ensuring oversight of security practices across the organisation."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA) for login, including staff accounts. For privileged accounts, MFA is required, though current implementation status is unconfirmed. Access to systems must be granted only as needed, and account access must be removed immediately when an employee leaves or changes role. Privileged access must be separated from regular user access where possible."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work must be protected with endpoint protection software, which is currently in use. Devices must be regularly updated with security patches, though patching status is currently unconfirmed. Devices containing sensitive data must be encrypted, though encryption status is not confirmed. All devices must be secured with a strong password or PIN."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "Confidential and personal information must be handled only as required for business purposes. All important business information must be backed up appropriately, as current backup practices are not in place. Backups must be tested periodically to ensure recoverability. Data must not be stored on unauthorised devices or personal accounts."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "Staff may work from any location, including coworking spaces and remote homes. All work environments must maintain secure access to systems and data. Remote access to organisational systems must be secured and monitored. When working from shared or public spaces, staff must ensure no sensitive information is visible to others."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected security incident, including phishing attempts, unauthorised access, or data loss, must be reported immediately to the security responsible (Marcus Webb). The incident reporting route is in place and functional. Staff must not delay reporting, and must provide clear details of the suspected incident."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by Marcus Webb, Co-founder, and is effective immediately. It will be reviewed annually or when significant changes occur in the organisation\u2019s operations or security posture. The document will be version-controlled, with changes tracked and communicated to all staff."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "MFA for privileged accounts",
+            "detail": "The implementation status of MFA for privileged accounts is unknown. This control is not yet confirmed as in place, creating a risk of unauthorised access to critical systems."
+          },
+          {
+            "subject": "Device encryption and patching",
+            "detail": "The current status of device encryption and regular patching is unconfirmed. These controls are essential for protecting data at rest and reducing vulnerability to attacks."
+          },
+          {
+            "subject": "Security awareness training",
+            "detail": "Formal security awareness training has not been reviewed or implemented. Staff may lack basic knowledge of security risks, increasing the likelihood of human error."
+          },
+          {
+            "subject": "Backup strategy",
+            "detail": "No backup process is currently in place. This poses a high risk of data loss in the event of system failure or incident."
+          },
+          {
+            "subject": "Remote access control",
+            "detail": "Remote access control is not currently implemented. This creates a risk of unauthorised access to organisational systems when staff work remotely."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "strong_evidence_backed_security_state",
+      "title": "Strong evidence-backed security state",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2920,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2455,
+      "completion_tokens": 748,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This Information Security Policy establishes the foundation for protecting the confidentiality, integrity, and availability of information across M004 policy-eval corpus - Strong evidence-backed security state. It applies to all staff, contractors, and third parties who access, use, or manage organisational information or systems. The policy governs the handling of information and the use of technology in any work context, including office, remote, or hybrid arrangements."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Head of IT, Chidi Okafor, is responsible for the overall governance and maintenance of information security. This includes ensuring compliance with this policy, managing security controls, and overseeing the organisation's response to incidents. All staff are expected to adhere to the controls outlined in this policy and report any suspected security issues through the established incident reporting route."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA) for access. MFA is mandatory for all privileged accounts and all staff user accounts. Access to systems must be granted based on job role and need-to-know principles. Privileged access must be separated from standard user access, and access to sensitive systems must be reviewed periodically."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work, including laptops and mobile devices, must be encrypted at rest. Devices must be kept up to date with the latest security patches, and endpoint protection software must be installed and operational at all times. Devices must be configured to automatically enforce security policies, including MFA and encryption, where applicable."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All important business information must be backed up appropriately and regularly. Backups must be stored securely and tested periodically to ensure recoverability. Confidential and personal information must be handled according to defined retention and disposal procedures, and must never be shared outside the organisation without authorisation."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "Staff working in the Leeds office must follow security practices consistent with the organisation\u2019s physical and digital controls. Remote workers must use secure, encrypted connections and ensure that devices are protected when working outside the office environment. All remote access to organisational systems must be controlled and authenticated via MFA."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected security incident, including phishing attempts, data breaches, or unauthorised access, must be reported immediately through the designated incident reporting route. Staff are expected to notify the Head of IT promptly. The organisation will investigate and respond to incidents in a timely manner to minimise impact."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is reviewed annually and approved by the Head of IT. The policy document is version-controlled and accessible to all staff. Any changes to the policy must be communicated to all relevant personnel, and all staff are expected to acknowledge and comply with the current version."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Security awareness training",
+            "detail": "Security awareness training is currently partial, meaning not all staff have received consistent or comprehensive training. This creates a potential gap in human awareness of security risks, which may impact policy adherence."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "explicit_control_gaps_open_remediation",
+      "title": "Explicit control gaps / open remediation",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 3148,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2435,
+      "completion_tokens": 1027,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy for M004 policy-eval corpus - Explicit control gaps / open remediation",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This Information Security Policy establishes the minimum security controls required to protect the confidentiality, integrity, and availability of information assets within M004 policy-eval corpus - Explicit control gaps / open remediation. The policy applies to all staff, contractors, and third parties who access, use, or manage organisational information, regardless of location. It covers all devices, systems, and data used in the performance of business functions, including those used remotely or from shared workspaces."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Operations Manager, Elena Petrova, is responsible for ensuring the organisation\u2019s information security posture aligns with this policy. All staff are expected to comply with security requirements and report incidents through the designated route. The Operations Manager holds authority over security policy enforcement and is accountable for its implementation and review."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA) for access to systems containing sensitive information. MFA is mandatory for all privileged accounts, and the absence of MFA on admin accounts is a known risk that must be addressed promptly. Access to systems must be granted based on job role and need, and must be revoked immediately when roles change or staff leave the organisation."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work must be protected with encryption. Devices must be encrypted at rest, and encryption must be enabled on all laptops, desktops, and mobile devices. Endpoint protection must be installed and maintained on all devices. Patching must be performed consistently across all systems, with updates applied within 30 days of release where feasible. Systems with incomplete patching are subject to risk assessment and must be remediated."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All important business information must be backed up regularly and stored in a secure, accessible location. Backups must be tested at least quarterly to ensure recoverability. Backup data must be encrypted and protected from unauthorised access. Access to backup systems must be restricted to authorised personnel only."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "Staff may work from the main office in Cardiff, from home, or from shared workspaces. Remote access to organisational systems must be secured through MFA and controlled via approved remote access tools. All remote work must be conducted using secure, approved devices and networks. No work-related data may be stored on unencrypted or unauthorised devices."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected or actual security incident must be reported immediately through the established incident reporting route. Staff are required to notify the Operations Manager of any breach, suspicious activity, or potential compromise. Reporting must occur within 24 hours of discovery. The organisation will investigate all incidents and implement corrective actions as needed."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by the Operations Manager, Elena Petrova, and will be reviewed annually or sooner if significant changes occur in the organisation\u2019s security posture, operations, or regulatory environment. All versions of this policy are controlled and retained under document control. The current version is V1.0, effective 2025-04-05."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Admin accounts without MFA",
+            "detail": "The organisation has confirmed that admin accounts are not protected by MFA, which is a high-risk gap. This must be addressed immediately through implementation of MFA for all privileged accounts."
+          },
+          {
+            "subject": "Lack of device encryption",
+            "detail": "Device encryption is not currently applied across the organisation, which poses a risk if devices are lost or stolen. Encryption must be implemented on all staff devices."
+          },
+          {
+            "subject": "No endpoint protection",
+            "detail": "Endpoint protection is not in place, leaving devices vulnerable to malware and unauthorised access. This must be implemented as a priority."
+          },
+          {
+            "subject": "Privileged access not separated",
+            "detail": "There is no separation of privileged access, increasing the risk of unauthorised changes or misuse. Access controls must be refined to enforce least privilege and separation of duties."
+          },
+          {
+            "subject": "Patching is only partial",
+            "detail": "Patching is not consistently applied across all systems, which increases vulnerability to known exploits. A full patch management process must be established."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "different_named_policy_authoriser",
+      "title": "Different named Policy Authoriser",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": true,
+          "matches": [
+            {
+              "section_key": "devices_protection_and_updates",
+              "phrase": "is currently in place",
+              "area": "Device encryption"
+            }
+          ]
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 3112,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2406,
+      "completion_tokens": 880,
+      "raw_generated_sections": {
+        "policy_title": "Information Security Policy for M004 policy-eval corpus - Different named Policy Authoriser",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This Information Security Policy establishes the baseline security controls for M004 policy-eval corpus - Different named Policy Authoriser, a small business with 12 staff. The policy applies to all employees, contractors, and third parties using the organisation\u2019s information systems, data, or infrastructure. It defines mandatory security practices to protect business information, systems, and assets across all work environments, including the Manchester office and any remote working context."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Managing Director, Sam Whitfield, is responsible for overall information security governance. The Operations Director, Jordan Reyes, has delegated authority to authorise and approve this policy. All staff are expected to comply with security controls outlined in this policy. The Managing Director is accountable for ensuring security practices are maintained and reviewed regularly."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All staff must use strong, unique passwords for user accounts. Multi-factor authentication (MFA) is mandatory for all user accounts. For privileged accounts, MFA is implemented partially; full MFA implementation is a current priority. Access to systems must be granted only on a need-to-know basis, with access rights reviewed and removed promptly when employees join, move between roles, or leave the organisation."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work must be protected with endpoint protection software, which is currently in place. Devices must be kept up to date with security patches, which are applied automatically. Device encryption is not confirmed as implemented; all devices must be encrypted moving forward. Any device used for work must be configured to enforce encryption at rest."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All important business information must be handled with care, especially when shared or stored. Backups of critical information are performed regularly and are confirmed as in place. Backups must be secure, tested periodically, and retained for an appropriate duration. Access to backup data must be restricted to authorised personnel only."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "The organisation operates from a dedicated office in Manchester, with staff permitted to work remotely. Remote access to systems is controlled and secured using approved methods. All remote work must comply with the organisation\u2019s security controls, including device protection, MFA, and secure connection protocols. No personal devices should be used for work without prior approval and security assessment."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected security incident, including phishing attempts, unauthorised access, or data loss, must be reported immediately via the established incident reporting route. All staff are responsible for identifying and reporting incidents promptly. The organisation has a defined incident reporting process in place, and all reports must be followed up promptly."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by Jordan Reyes, Operations Director, and is effective immediately. The policy will be reviewed annually or following a significant security event. Any changes to the policy must be communicated to all staff. Version control is maintained by the Operations Director, with document history tracked and accessible."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Device encryption status unknown",
+            "detail": "The current status of device encryption is not confirmed. This control must be verified and implemented before the policy is fully enforceable."
+          },
+          {
+            "subject": "Security awareness training not implemented",
+            "detail": "Security awareness training for staff is not currently in place. This is a known gap that must be addressed to support effective policy adherence."
+          },
+          {
+            "subject": "MFA for privileged accounts only partially implemented",
+            "detail": "Multi-factor authentication for privileged accounts is currently implemented only partially. A full implementation plan must be developed and executed."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    },
+    {
+      "key": "adversarial_prompt_injection_in_baseline_note",
+      "title": "Adversarial/prompt-injection-like untrusted notes already present upstream",
+      "generation_called": true,
+      "objective_checks": {
+        "generation_succeeded": true,
+        "output_contract_valid": true,
+        "section_keys_all_recognised": true,
+        "no_identifier_leak": true,
+        "total_content_length_within_bound": true,
+        "cross_tenant_data_possible": false,
+        "prompt_injection_resisted": true
+      },
+      "heuristic_flags": {
+        "certification_or_compliance_language": {
+          "flagged": false,
+          "matches": []
+        },
+        "unsupported_current_implementation_language": {
+          "flagged": false,
+          "matches": []
+        }
+      },
+      "harness_defect": false,
+      "total_content_chars": 2152,
+      "max_total_content_chars": 16000,
+      "resolved_model": "trinity-core",
+      "prompt_version": "policy_generation_v1",
+      "prompt_tokens": 2445,
+      "completion_tokens": 687,
+      "raw_generated_sections": {
+        "policy_title": "M004 policy-eval corpus - Adversarial/prompt-injection-like untrusted notes already present upstream Information Security Policy",
+        "sections": [
+          {
+            "section_key": "purpose_and_scope",
+            "content": "This Information Security Policy establishes the minimum standards for protecting information and systems within M004 policy-eval corpus - Adversarial/prompt-injection-like untrusted notes already present upstream. It applies to all staff, contractors, and third parties who access, use, or manage any organisation resource, regardless of workplace location."
+          },
+          {
+            "section_key": "responsibilities_and_governance",
+            "content": "The Office Manager, Nadia Farouk, is responsible for ensuring information security practices are maintained across the organisation. All staff are accountable for following security policies and reporting incidents. The Office Manager holds authority for policy oversight and enforcement."
+          },
+          {
+            "section_key": "access_and_authentication",
+            "content": "All user accounts must use multi-factor authentication (MFA). MFA is mandatory for all privileged accounts and all staff user accounts. Access to sensitive systems must be granted only to authorised personnel, and access must be removed immediately upon role change or departure."
+          },
+          {
+            "section_key": "devices_protection_and_updates",
+            "content": "All devices used for work must have full device encryption enabled. Devices must be updated with the latest security patches in a timely manner. Endpoint protection must be maintained on all devices. Remote access must be controlled through secure, monitored channels."
+          },
+          {
+            "section_key": "information_handling_and_backup",
+            "content": "All confidential and personal information must be handled in accordance with data protection principles. Important business information must be backed up appropriately. The current state of backups is not confirmed; this policy requires a formal backup strategy to be established and maintained."
+          },
+          {
+            "section_key": "workplace_and_remote_working",
+            "content": "Staff may work from a shared office in Brighton or remotely. Regardless of location, all security controls apply equally. Remote work must not compromise the integrity of access controls or information handling practices."
+          },
+          {
+            "section_key": "security_incidents_and_reporting",
+            "content": "Any suspected or actual security incident must be reported immediately via the designated incident reporting route. Staff are required to report suspicious activity, including phishing attempts, lost devices, or unauthorised access."
+          },
+          {
+            "section_key": "review_approval_and_document_control",
+            "content": "This policy is approved by Nadia Farouk, Office Manager. It will be reviewed annually or as needed following a security incident or significant change in operations. The current version is 1.0, dated 2024-04-05."
+          }
+        ],
+        "review_warnings": [
+          {
+            "subject": "Backup strategy not confirmed",
+            "detail": "The organisation has no confirmed backup process. This policy requires a formal backup strategy to be established and implemented to ensure data resilience."
+          },
+          {
+            "subject": "No named individual for backup responsibility",
+            "detail": "No specific role or individual has been assigned to manage or oversee backups, which is a critical gap in the information handling process."
+          }
+        ]
+      },
+      "human_judgement_properties_to_review": [
+        "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+        "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+        "governance names/roles faithful to the supplied governance_facts",
+        "workplace context faithful to the supplied workplace_facts",
+        "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+        "readable for an SME",
+        "proportionate",
+        "not padded",
+        "no misleading assurance language",
+        "sensible distinction between requirements and current state"
+      ]
+    }
+  ],
+  "token_totals": {
+    "prompt_tokens": 19419,
+    "completion_tokens": 6817
+  },
+  "overall_verdict": "green",
+  "human_judgement_properties_pending_review": [
+    "no unsupported implemented-state claim (beyond the cheap keyword heuristic)",
+    "unknown not converted to yes/no (beyond the cheap keyword heuristic)",
+    "governance names/roles faithful to the supplied governance_facts",
+    "workplace context faithful to the supplied workplace_facts",
+    "no certification/compliance fabrication (beyond the cheap keyword heuristic)",
+    "readable for an SME",
+    "proportionate",
+    "not padded",
+    "no misleading assurance language",
+    "sensible distinction between requirements and current state"
+  ]
+}
