@@ -1,6 +1,11 @@
 # M006 Round 6 — Release Artifact + Fresh Customer-Zero Reproducibility
 
-**Status:** GREEN, 2026-09-25.
+**Status:** GREEN, 2026-09-25. **Corrected 2026-09-25 — release-image
+identity fixed; see §0.** The originally-recorded image
+(`infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b`) is
+SUPERSEDED / NOT THE ACCEPTED BETA ARTIFACT. The accepted artifact is
+`infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`
+(Image ID `sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa`).
 **PID:** `docs/pids/M006-CUSTOMER-ZERO-BETA-HARDENING.md` §15 (Release
 artifact), §16 (Fresh Customer-Zero reproducibility). Central Architecture's
 detailed Round 6 scoping document (reproduced in the dispatch prompt) is the
@@ -14,6 +19,55 @@ the static-file fix (`config/settings.py` MIDDLEWARE/STORAGES only).
 **Host:** dell-debian, worktree `/srv/eng-worktrees/m006-round6-release-artifact`,
 branch `wo/M006-round6-release-artifact`, based on
 `main @ 781eb64391a286eb01c076c6e339e9ec5705475b`.
+
+---
+
+## 0. CORRECTION — release-image identity fixed, 2026-09-25
+
+**This document's original release image is SUPERSEDED and is NOT the
+accepted Beta release artifact.** Central Architecture's independent PR
+verification found that the recorded image,
+`infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b`
+(Image ID `sha256:9eab6c24a4d89b62299f205bdd5b799a9d7d102d1e8ccda6c83f19d75095db60`),
+was in fact built from a working tree that contained Round 6 changes not
+present in that recorded Git commit — GitHub mechanically proved the Round
+6 head diverges from `781eb643...` in `.dockerignore`, `Dockerfile`,
+`config/settings.py`, WhiteNoise dependency locks,
+`docker-compose.release.yml`, `docker-compose.yml`,
+`scripts/release_tls_smoke_wrap.py`, and associated tests. A later
+follow-up commit (`a954c20`, a CodeQL-flagged TLSv1.2 floor fix to
+`scripts/release_tls_smoke_wrap.py`) was also applied to `main` *after*
+that image was built, so the image additionally could not contain that
+fix. This violated M006 §15's exact-SHA / clean-checkout release-artifact
+requirement. Both commits landed on `main` as merge commit
+`1674c223206e9ddc444287c88cdc53cfed06b226` (PR #40).
+
+**Correction performed:** a bounded, evidence-only Engineer dispatch
+rebuilt the release image from a genuinely clean checkout at exactly
+`main @ 1674c223206e9ddc444287c88cdc53cfed06b226` (worktree
+`/srv/eng-worktrees/m006-round6-release-correction`,
+`wo/M006-round6-release-correction`; `git rev-parse HEAD` and an empty
+`git status --porcelain` both proven immediately before the build) and
+re-ran every release-artifact proof item against the rebuilt image. No
+product/runtime file changed — this correction touches only this document.
+
+**The accepted release artifact as of this correction:**
+
+| Field | Value |
+|---|---|
+| Accepted product source SHA | `1674c223206e9ddc444287c88cdc53cfed06b226` |
+| Image tag | `infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226` |
+| Image ID | `sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa` |
+| OCI `org.opencontainers.image.revision` | `1674c223206e9ddc444287c88cdc53cfed06b226` (matches exactly) |
+| Superseded image (do not use) | `infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b` / `sha256:9eab6c24a4d89b62299f205bdd5b799a9d7d102d1e8ccda6c83f19d75095db60` |
+
+The remainder of §1–§14 below (except §3, §6, §7, §8, §11, which carry an
+explicit "CORRECTION" subsection each) is left as accurate, unmodified
+history of what Round 6 built and why — the product source, the
+`.dockerignore`/WhiteNoise/static-file fixes, the mid-round regression
+found and fixed, and the full test suite results are all still correct and
+unaffected; only the release-image build-and-evidence identity was wrong,
+and is corrected below.
 
 ---
 
@@ -82,6 +136,82 @@ found and fixed in `config/settings.py` mid-round required a rebuild. The
 Image ID above is the final, evidence-bearing one; the first build's Image
 ID, `sha256:5da18071d69857e5e752690b1d3f10980a1716c5bf0ee1bb3ab97a85852f8bd8`,
 is superseded and not part of the deliverable.)
+
+### 3a. CORRECTION — release image rebuilt from the true merged commit, 2026-09-25
+
+**Everything above in §3 describes a build whose Image ID/tag are now
+SUPERSEDED — see §0.** The build was performed from a working tree that
+contained Round 6 changes not yet present in the recorded source commit,
+and predates the later `a954c20` TLSv1.2 CodeQL fix. This subsection is
+the authoritative rebuild.
+
+Preflight (proven immediately before the build, worktree
+`/srv/eng-worktrees/m006-round6-release-correction`):
+
+```text
+$ git rev-parse HEAD
+1674c223206e9ddc444287c88cdc53cfed06b226
+$ git status --porcelain
+(empty)
+```
+
+Build:
+
+```bash
+RELEASE_SHA=1674c223206e9ddc444287c88cdc53cfed06b226
+docker build --no-cache \
+  --build-arg GIT_SHA=$RELEASE_SHA \
+  --build-arg BUILD_DATE_UTC=2026-09-25T09:14:23Z \
+  -t infosecurs-release:$RELEASE_SHA .
+```
+
+`--no-cache` — every layer genuinely re-executed against this exact
+checkout, no reused cached layer from the prior (incorrect) build. Build
+succeeded; `pip install --require-hashes` succeeded unchanged (no
+dependency-lock file touched by this correction).
+
+Identity, mechanically proven:
+
+```text
+$ docker inspect infosecurs-release:$RELEASE_SHA --format '{{.Id}}'
+sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa
+
+$ docker inspect infosecurs-release:$RELEASE_SHA --format '{{json .Config.Labels}}'
+{"org.opencontainers.image.created":"2026-09-25T09:14:23Z",
+ "org.opencontainers.image.revision":"1674c223206e9ddc444287c88cdc53cfed06b226",
+ "org.opencontainers.image.source":"https://github.com/maff0000/infosecurs",
+ "org.opencontainers.image.title":"infosecurs"}
+```
+
+`org.opencontainers.image.revision` reads exactly
+`1674c223206e9ddc444287c88cdc53cfed06b226` — the true, exact source
+commit that produced this image's contents.
+
+- **Accepted image tag:** `infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`
+- **Accepted Image ID:** `sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa`
+- **Base image digest:** unchanged — `python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9`.
+- **Dependency lock identity:** unchanged from the original Round 6
+  build — this correction did not touch `requirements*.txt`/`.in`.
+
+**Mechanical proof the TLSv1.2 floor fix (`a954c20`) is genuinely present
+inside this image** (PID §15 item 15 — not merely trusted from the source
+tree):
+
+```text
+$ docker run --rm infosecurs-release:$RELEASE_SHA \
+    grep -n 'minimum_version' scripts/release_tls_smoke_wrap.py
+125:    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+```
+
+**`.dockerignore` gap re-confirmed against this rebuilt image** (same
+mechanism as §4, re-run — no product file changed):
+
+```text
+$ docker run --rm infosecurs-release:$RELEASE_SHA sh -c \
+    'find /app -maxdepth 1 -iname "docker-compose*"; find /app -maxdepth 1 -iname ".env*"'
+                                    (no docker-compose* output - none present)
+/app/.env.example
+```
 
 - **Source Git SHA:** `781eb64391a286eb01c076c6e339e9ec5705475b` (mechanically
   proven via the OCI `org.opencontainers.image.revision` label, not a prose
@@ -342,6 +472,84 @@ Confirms `SECURE_SSL_REDIRECT=True` is genuinely active against the release
 image (same class of finding as `docs/evidence/M006-ROUND4-PRODCONFIG-HEALTH.md`
 §3) — not weakened, not bypassed, exactly as PID §F requires.
 
+### 6a. CORRECTION — re-proven against the true merged-commit image, 2026-09-25
+
+Everything above in §6 was re-run in full against
+`infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`
+(Image ID `sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa`),
+brought up as a fresh, distinctly-named/ported disposable stack
+(`docker compose -p m006r6corr --env-file .env.release -f
+docker-compose.release.yml up -d`) with brand-new named volumes
+(`m006r6corr_infosecurs_release_postgres_data`,
+`m006r6corr_infosecurs_release_evidence_data`). Fresh, empty Postgres
+volume; all ~55 migrations across every app applied cleanly on first
+start (`docker logs m006r6corr-web-1`).
+
+**No-source-bind — the running container's actual mounts:**
+
+```text
+$ docker inspect m006r6corr-web-1 --format '{{json .Mounts}}'
+[{"Type":"volume","Name":"m006r6corr_infosecurs_release_evidence_data",
+  "Source":"/var/lib/docker/volumes/m006r6corr_infosecurs_release_evidence_data/_data",
+  "Destination":"/data/evidence","Driver":"local","Mode":"rw","RW":true,
+  "Propagation":""}]
+```
+
+No `/app` entry — `/app` is entirely image-contained. Spot-check confirming
+the image's `/app` content is exactly the checked-out source:
+
+```text
+$ docker exec m006r6corr-web-1 md5sum /app/manage.py
+b08184ee2c96f20da8d96e963a29cab9  /app/manage.py
+$ md5sum manage.py   # host working tree, same commit
+b08184ee2c96f20da8d96e963a29cab9  manage.py
+```
+
+**DJANGO_ENV/DEBUG proof, directly from the running settings object:**
+
+```text
+$ docker exec m006r6corr-web-1 python -c \
+    "import django,os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); \
+     django.setup(); from django.conf import settings; \
+     print('DJANGO_ENV=',settings.DJANGO_ENV); print('DEBUG=',settings.DEBUG)"
+DJANGO_ENV= production
+DEBUG= False
+```
+
+**Plain-HTTP redirect behaviour, re-proven:**
+
+```text
+$ curl -s -D - -o /dev/null http://127.0.0.1:19904/healthz/
+HTTP/1.1 301 Moved Permanently
+Location: https://127.0.0.1:19904/healthz/
+```
+
+`SECURE_SSL_REDIRECT=True` genuinely active against the true merged-commit
+image.
+
+**WhiteNoise/static assets, re-proven over real HTTPS** (same content-hash
+as the original build — `config/settings.py`/the stylesheet did not
+change between the two commits):
+
+```text
+$ docker exec m006r6corr-web-1 sh -c 'cat /app/staticfiles/staticfiles.json | ...'
+organisations/css/app.b253b06e4a6c.css
+
+$ curl -sk -D - -o /dev/null https://127.0.0.1:19944/static/organisations/css/app.b253b06e4a6c.css
+HTTP/1.0 200 OK
+Content-Type: text/css; charset="utf-8"
+Cache-Control: max-age=315360000, public, immutable
+Content-Length: 10141
+```
+
+**Health check, re-proven:**
+
+```text
+$ curl -sk -D - -o /dev/null https://127.0.0.1:19944/healthz/
+HTTP/1.0 200 OK
+Content-Type: application/json
+```
+
 ## 7. Real-browser smoke against the release image — single-hop TLS topology
 
 **Why a topology change was needed, and why a reverse proxy was rejected:**
@@ -444,6 +652,30 @@ against a real Google/Microsoft provider remains out of scope for M006
 Beta (ADR-0002) and unrelated to this round's release-artifact/static-file
 authorisation.
 
+### 7a. CORRECTION — real Playwright/Chromium run re-proven against the true image, 2026-09-25
+
+Re-run in full against the corrected stack (project `m006r6corr`, TLS smoke
+wrapper on port `19944`, disposable `playwright@1.55.0` + Chromium
+install, same script logic as
+`docs/evidence/M006-RELEASE-smoke-script.js` with only the base URL/output
+path adjusted for the new project's ports/scratch dir — no assertion logic
+changed). Same sequence: unauthenticated login page, stylesheet
+content-hash + computed-style check, local-account login as Customer
+Zero, `/organisations/` listing shows "Infosecurs Limited", click into
+organisation, Overview page with primary nav present, clicked through
+every primary nav destination (Security, Evidence, Policy, Questionnaires,
+Activity, Organisation), each a real `waitForNavigation`.
+
+**Result:** zero console messages, zero page errors, zero
+failed/4xx/5xx requests across the entire sequence
+(`consoleMessages: []`, `pageErrors: []`, `failedRequests: []` in the raw
+result). Every step's title/URL recorded, matching the original Round 6
+run's product behaviour exactly (same stylesheet hash
+`app.b253b06e4a6c.css`, same page titles, same nav targets) — confirming
+the correction changed only release-image identity/provenance, never
+product behaviour. Screenshots captured at the same two checkpoints
+(unauthenticated login page; organisation Overview page).
+
 ## 8. Fresh Customer-Zero reproducibility (PID §16)
 
 Same fresh stack as §6 (fresh volumes → migrate → bootstrap → journey is
@@ -478,6 +710,41 @@ stdout):
 full Playwright journey in §7, run against this exact bootstrapped state.
 Synthetic data only throughout (`.env.release` — never committed, deleted
 at cleanup).
+
+### 8a. CORRECTION — re-proven against the true merged-commit image, 2026-09-25
+
+Re-run in full against the corrected stack's fresh volumes (project
+`m006r6corr`):
+
+```text
+$ docker compose -p m006r6corr --env-file .env.release -f docker-compose.release.yml \
+    exec web python manage.py create_customer_zero
+Created Customer Zero user 'customerzero'.
+Created Customer Zero organisation 'Infosecurs Limited'.
+Linked Customer Zero user to organisation.
+Customer Zero bootstrap complete.
+
+$ docker compose -p m006r6corr --env-file .env.release -f docker-compose.release.yml \
+    exec web python manage.py create_customer_zero   # rerun
+Customer Zero user 'customerzero' already exists; leaving as-is.
+Customer Zero organisation 'Infosecurs Limited' already exists; leaving as-is.
+Customer Zero bootstrap complete.
+```
+
+Direct DB proof of no duplication after the rerun:
+
+```text
+>>> User.objects.filter(username="customerzero").count()
+1
+>>> Organisation.objects.filter(name="Infosecurs Limited").count()
+1
+>>> OrganisationMembership.objects.count()
+1
+```
+
+"Product remains usable" re-proven by §7a's Playwright journey run against
+this exact bootstrapped state. Synthetic data only throughout
+(`.env.release` — never committed, deleted at cleanup).
 
 ## 9. Mechanical tests added this round
 
@@ -542,6 +809,39 @@ scope — `ai_platform/` untouched, §M of the authorisation), so there was
 never an opportunity for it to reach the image, the container, or this
 document.
 
+### 10a. CORRECTION — re-proven against the true merged-commit image, 2026-09-25
+
+```text
+$ docker save infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226 -o image.tar
+$ tar -xf image.tar -C extract/
+$ find extract/ -name '*.tar' -exec tar -tf {} \; | \
+    grep -iE 'litellm_gateway_key|AI_GATEWAY_API_KEY|docker-compose|\.env$|\.env\.release|\.env\.dev'
+no matches found across all layers
+
+$ docker run --rm infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226 sh -c \
+    'find / -xdev -iname "*litellm*" 2>/dev/null'
+(no output)
+
+$ docker run --rm infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226 \
+    grep -iE 'litellm|AI_GATEWAY_API_KEY_FILE=' /app/.env.example
+# Read LAZILY by ai_platform.gateway.LiteLLMGateway, only when a risk
+# Base URL of the existing, already-governed Trinity LiteLLM-compatible
+AI_GATEWAY_API_KEY_FILE=
+
+$ docker exec m006r6corr-web-1 sh -c 'env | grep -i AI_GATEWAY || echo none-set'
+none-set
+```
+
+No secret baked into the corrected image, same result as the original
+build. External read-only AI-gateway credential mount not exercised
+(this correction never mounted or referenced
+`/srv/secrets/infosecurs/litellm_gateway_key` — `ai_platform/` untouched);
+running container's environment confirms no `AI_GATEWAY_*` variable is
+set. Gateway remains the existing, already-governed Trinity
+LiteLLM-compatible gateway / `trinity-core` alias (`.env.example`'s
+documented default) — unaffected, since this correction does not touch
+`ai_platform/`.
+
 ## 11. Security scan bound to the exact release image
 
 ```text
@@ -582,6 +882,34 @@ security defect, purely an evidence-binding correction.
 `pip-audit -r requirements.txt` (dependency-scan equivalent to
 `security/dependencies`, run against the same regenerated lock): **"No
 known vulnerabilities found."**
+
+### 11a. CORRECTION — re-run against the true merged-commit image, 2026-09-25
+
+Both prior scans above (the original run and the PL correction) were bound
+to the now-superseded `781eb64...` image identity. Re-run against the
+exact new, correct Image ID:
+
+```text
+$ docker inspect infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226 --format '{{.Id}}'
+sha256:ed8b7d3078bd45f99e7a49e4a78e4dd8c55feb2cfbca2387515e4bdaa9f57faa
+
+$ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 \
+    image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --format table \
+    infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226
+...
+Report Summary — every scanned target (debian 13.7 OS packages +
+usr/local/lib/python3.12/site-packages/*.dist-info/METADATA for every
+installed package, including whitenoise-6.11.0.dist-info/METADATA): 0
+vulnerabilities.
+$ echo EXIT=$?
+EXIT=0
+```
+
+Same tool/version/flags as `.github/workflows/security.yml`'s
+`security/container` job. `whitenoise-6.11.0` specifically confirmed clean
+again. Zero CRITICAL/HIGH findings against the true, correctly-SHA-bound
+release image. `pip-audit` result unaffected (dependency lock untouched by
+this correction).
 
 ## 12. Full test suite (before/after reconciliation)
 
@@ -630,6 +958,22 @@ rm -rf /tmp/m006r6-tls /tmp/m006r6-playwright /tmp/m006r6-image*
 
 Never touched `infosecurs-relocation` or any other stack on this shared
 host at any point (`docker compose ls` checked before and after).
+
+### 13a. CORRECTION — this round's own disposable stack and cleanup, 2026-09-25
+
+```bash
+docker compose -p m006r6corr --env-file .env.release -f docker-compose.release.yml down -v
+rm -f .env .env.release
+rm -rf /tmp/m006r6corr-tls /tmp/m006r6corr-playwright /tmp/m006r6corr-scratch
+docker image rm infosecurs-release:781eb64391a286eb01c076c6e339e9ec5705475b   # superseded image removed
+```
+
+The corrected, accepted image
+(`infosecurs-release:1674c223206e9ddc444287c88cdc53cfed06b226`) is kept
+locally on dell-debian pending PL review, per this dispatch's own
+instructions. Never touched `infosecurs-relocation` or any other stack on
+this shared host at any point (`docker compose ls` checked before and
+after).
 
 ## 14. Judgement calls
 
