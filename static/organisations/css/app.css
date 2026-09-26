@@ -42,6 +42,56 @@ html, body {
   line-height: 1.5;
 }
 
+/* --- Systemic unbroken-text overflow guarantee (M006-AUDIT-0005 L1) ---
+   This is the fourth recurrence of the same defect class (G2 -> H2 -> J1
+   -> L1): each prior round patched only the specific location that
+   round's fresh Auditor happened to find - `.card-list__title` (G2),
+   `.asset-card__description` (H2), the centralised `.badge` (J1) - never
+   establishing a shared guarantee. L1 found the gap this left: ordinary
+   heading/paragraph customer text on detail pages (Evidence/Key Asset/
+   Risk/Remediation `<h1>` titles, Key Asset description `<p>`, etc.) had
+   no wrap protection at all, because none of those three prior fixes'
+   selectors reach a plain `<h1>`/`<p>`.
+
+   Central Architecture's own preferred direction was one inherited rule
+   at the application-content root (`.app-main`, templates/base.html).
+   That alone is not quite sufficient here: the organisation name is also
+   rendered OUTSIDE `.app-main`, in the page header
+   (`.app-header__context-name`, templates/base.html) - one of Central
+   Architecture's own required real-browser proof surfaces. `body` is the
+   one root every rendered page - header and main content alike - truly
+   shares, so setting the inherited property there (rather than only on
+   `.app-main`) closes the whole class, including the header, in a single
+   rule. Real-browser 375px measurement (`core/tests/
+   test_responsive_text_regression.py`) confirmed `.app-main` alone left
+   the header organisation name overflowing, and that this `body`-level
+   rule fixes it with no other change.
+
+   `overflow-wrap: anywhere` (never `word-break: break-all`, which
+   Central Architecture explicitly warned would damage normal prose by
+   breaking mid-word even where a natural break point exists nearby) -
+   it prefers breaking at whitespace/hyphens and only breaks within a
+   word as a last resort, for a run with no natural break point at all
+   (e.g. a pasted token/hash/URL). Being an inherited property, it
+   reaches every descendant text node unless a more specific rule already
+   overrides it - it never overrides an existing more specific rule (e.g.
+   `.hash-value`'s own `word-break: break-all`, or the `.badge`/
+   `.card-list__title` rules above/below, all of which are unaffected and
+   unnecessary to remove).
+
+   Real-browser measurement also confirmed this inherited rule alone
+   already lets every flex-item container measured (`.page-header`'s
+   title block, `.app-header__context`) shrink and wrap correctly - none
+   needed an additional explicit `min-width: 0` - because `overflow-wrap:
+   anywhere` (unlike `overflow-wrap: break-word`) is included in the
+   browser's min-content size calculation for the text itself, which
+   flows through to the automatic minimum size of its flex-item
+   ancestors. See the test file above for the actual measured
+   scrollWidth/clientWidth values proving this, surface by surface. */
+body {
+  overflow-wrap: anywhere;
+}
+
 h1, h2, h3 { line-height: 1.25; margin: 0 0 var(--space-2) 0; }
 h1 { font-size: 1.6rem; font-weight: 700; }
 h2 { font-size: 1.2rem; font-weight: 600; }

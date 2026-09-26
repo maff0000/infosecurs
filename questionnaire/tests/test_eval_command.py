@@ -22,7 +22,7 @@ class TestRunQuestionnaireAiEvalCommandFakeGateway:
         assert len(report["cases"]) == 14
         assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v3"
         assert report["interpretation_prompt_version"] == "questionnaire_interpretation_v1"
-        assert report["drafting_prompt_version"] == "questionnaire_drafting_v1"
+        assert report["drafting_prompt_version"] == "questionnaire_drafting_v2"
         assert report["gateway_mode"] == "fake"
 
     def test_writes_report_to_output_file_when_requested(self, tmp_path):

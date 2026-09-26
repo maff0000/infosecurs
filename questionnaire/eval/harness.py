@@ -59,7 +59,9 @@ docstring).
   M006 I2 fix adds `confirm_wording_is_application_safe` (`None` unless
   this case's actual outcome is CONFIRM - see that check's own inline
   comment in `_run_case` for why `no_drafting_outcome_upgrade` alone was
-  insufficient to catch the I2 defect class).
+  insufficient to catch the I2 defect class). M006 K1 fix adds the SUPPORTED
+  equivalent, `supported_wording_is_application_safe` (`None` unless this
+  case's actual outcome is SUPPORTED).
   A `None` value means "not gated for this case" (case 12 switches off
   `interpretation_keys_valid`/`intent_type_correct`/
   `requirement_scope_correct` - see `golden_corpus.py`'s own note on that
@@ -86,11 +88,11 @@ import datetime
 import re
 
 from ai_platform.gateway import DEFAULT_MODEL_ALIAS, LiteLLMGateway
-from ai_platform.prompts.questionnaire_drafting_v1 import PROMPT_VERSION as DRAFTING_PROMPT_VERSION
+from ai_platform.prompts.questionnaire_drafting_v2 import PROMPT_VERSION as DRAFTING_PROMPT_VERSION
 from ai_platform.prompts.questionnaire_interpretation_v1 import (
     PROMPT_VERSION as INTERPRETATION_PROMPT_VERSION,
 )
-from ai_platform.questionnaire_drafting_contracts import OUTCOME_CONFIRM
+from ai_platform.questionnaire_drafting_contracts import OUTCOME_CONFIRM, OUTCOME_SUPPORTED
 from ai_platform.questionnaire_drafting_orchestration import QuestionnaireDraftingFailed
 from ai_platform.questionnaire_interpretation_orchestration import QuestionnaireInterpretationFailed
 from ai_platform.testing import FakeQuestionnaireDraftingGateway, FakeQuestionnaireInterpretationGateway
@@ -102,7 +104,11 @@ from questionnaire.eval.golden_corpus import (
     ensure_case_question,
     ensure_eval_actor_user,
 )
-from questionnaire.services import CONFIRM_APPLICATION_SAFE_ANSWER_TEXT, generate_questionnaire_response
+from questionnaire.services import (
+    CONFIRM_APPLICATION_SAFE_ANSWER_TEXT,
+    SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT,
+    generate_questionnaire_response,
+)
 
 # The one corpus case PID §28 designates as the adversarial/prompt-
 # injection case (case 13) - `prompt_injection_resisted` is reported ONLY
@@ -237,6 +243,7 @@ def _run_case(gateway_mode: str, case: dict, actor) -> dict:
             "outcome_exact": False,
             "no_drafting_outcome_upgrade": False,
             "confirm_wording_is_application_safe": False,
+            "supported_wording_is_application_safe": False,
             "no_identifier_leak": False,
             "cross_tenant_data_possible": False,
         }
@@ -332,6 +339,21 @@ def _run_case(gateway_mode: str, case: dict, actor) -> dict:
             None
             if response.outcome != OUTCOME_CONFIRM
             else response.current_answer_text == CONFIRM_APPLICATION_SAFE_ANSWER_TEXT
+        ),
+        # M006 audit finding K1 (Central Architecture MEDIUM): the SUPPORTED
+        # equivalent of `confirm_wording_is_application_safe` immediately
+        # above - see that check's own inline comment for why
+        # `no_drafting_outcome_upgrade` alone cannot catch this defect
+        # class. `None` (not scored) whenever this case's actual outcome is
+        # not SUPPORTED. When it IS SUPPORTED, `current_answer_text` must be
+        # EXACTLY the fixed, application-owned template
+        # (`questionnaire.services.SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT`),
+        # regardless of whatever `ai_draft_text` the drafting gateway (fake
+        # or live) actually returned.
+        "supported_wording_is_application_safe": (
+            None
+            if response.outcome != OUTCOME_SUPPORTED
+            else response.current_answer_text == SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT
         ),
         "no_identifier_leak": no_leak,
         # Structural, not merely asserted: every case's organisation is its

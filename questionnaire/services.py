@@ -72,11 +72,15 @@ from activity.models import ActivityEvent
 from activity.services import record_event
 
 from ai_platform.gateway import LiteLLMGateway, QuestionnaireDraftingGateway, QuestionnaireInterpretationGateway
-from ai_platform.prompts.questionnaire_drafting_v1 import PROMPT_VERSION as DRAFTING_PROMPT_VERSION
+from ai_platform.prompts.questionnaire_drafting_v2 import PROMPT_VERSION as DRAFTING_PROMPT_VERSION
 from ai_platform.prompts.questionnaire_interpretation_v1 import (
     PROMPT_VERSION as INTERPRETATION_PROMPT_VERSION,
 )
-from ai_platform.questionnaire_drafting_contracts import OUTCOME_CONFIRM, QuestionnaireDraftingRequest
+from ai_platform.questionnaire_drafting_contracts import (
+    OUTCOME_CONFIRM,
+    OUTCOME_SUPPORTED,
+    QuestionnaireDraftingRequest,
+)
 from ai_platform.questionnaire_drafting_orchestration import draft_questionnaire_answer
 from ai_platform.questionnaire_interpretation_contracts import QuestionnaireInterpretationRequest
 from ai_platform.questionnaire_interpretation_orchestration import (
@@ -116,30 +120,67 @@ CONFIRM_APPLICATION_SAFE_ANSWER_TEXT = (
     "review the underlying security state before sending a final response."
 )
 
+# M006 audit finding K1 (MEDIUM, `docs/evidence/M006-AUDIT-0005.md`): the
+# exact same defect CLASS I2 already fixed for CONFIRM also reaches
+# SUPPORTED - the deterministic outcome badge is correct (the aggregated
+# signal genuinely supports the requirement per `questionnaire.outcome.
+# derive_outcome`), but the AI-drafted prose can still fabricate a claim of
+# independent verification or attached evidence that does not exist (e.g.
+# "Active supporting evidence confirms this control" for a control with
+# ZERO evidence items attached, or describing a "Customer stated"-only
+# answer as "documented and verified"). As with CONFIRM, the deterministic
+# badge does not make that wording acceptable - the application, not the
+# drafting model, owns the customer-facing initial wording for SUPPORTED
+# too.
+#
+# Binding semantics (Central Architecture's K1 correction, verbatim
+# requirements): state only that the deterministic current security record
+# supports the requirement; never claim independent verification; never
+# claim evidence exists unless separately and deterministically
+# established; never describe "Customer stated" as verified; never claim
+# certification/compliance unless the exact canonical fact establishes it;
+# remain customer-reviewable. This is the Central Architecture's own
+# example sentence, used verbatim - it satisfies every one of the above
+# without needing any deviation.
+#
+# Same discipline as `CONFIRM_APPLICATION_SAFE_ANSWER_TEXT` above: a FIXED,
+# deterministic sentence, never string-formatted with any raw question
+# text, interpretation summary or AI output.
+SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT = (
+    "Supported by the current security record. This reflects the "
+    "organisation's recorded security state for this requirement and does "
+    "not by itself mean the control has been independently verified or "
+    "that supporting evidence is attached. Please review before sending."
+)
+
 
 def _initial_current_answer_text(outcome: str, draft) -> str:
     """The APPLICATION-owned initial value for
-    `QuestionnaireResponse.current_answer_text` (M006 I2 fix).
+    `QuestionnaireResponse.current_answer_text` (M006 I2 fix, extended to
+    SUPPORTED by the M006 K1 fix).
 
-    For every outcome other than `OUTCOME_CONFIRM` (SUPPORTED, GAP,
-    NOT_APPLICABLE), this is unchanged from the original behaviour: the raw
-    AI-drafted text, exactly as before this fix - PID §12.5's outcome
-    aggregation already keeps those three paths' meaning safe, and Central
-    Architecture's own finding is scoped to CONFIRM only (do not
-    over-generalise - section F).
+    For `OUTCOME_GAP`/`OUTCOME_NOT_APPLICABLE`, this is unchanged from the
+    original behaviour: the raw AI-drafted text, exactly as before either
+    fix - PID §12.5's outcome aggregation already keeps those two paths'
+    meaning safe, and Central Architecture's own K1 finding explicitly
+    scopes this correction to CONFIRM (already fixed) and SUPPORTED only -
+    "Do not automatically replace GAP or NOT_APPLICABLE customer-facing
+    wording with canned output in this correction."
 
-    For `OUTCOME_CONFIRM`, the raw AI draft is NEVER used as the initial
-    customer-facing text, regardless of what the drafting model returned -
-    `draft.answer_text` is intentionally not read here at all. The raw
-    model output remains fully preserved, unmodified, in
-    `ai_draft_text` (see `_persist_response` below) for provenance/
-    evaluation; only what initialises the customer-facing
+    For `OUTCOME_CONFIRM`/`OUTCOME_SUPPORTED`, the raw AI draft is NEVER
+    used as the initial customer-facing text, regardless of what the
+    drafting model returned - `draft.answer_text` is intentionally not read
+    here at all for either. The raw model output remains fully preserved,
+    unmodified, in `ai_draft_text` (see `_persist_response` below) for
+    provenance/evaluation; only what initialises the customer-facing
     `current_answer_text` changes. The Account Holder can still freely edit
     this initial value afterwards via `edit_questionnaire_response_text` -
     this function only controls the STARTING value.
     """
     if outcome == OUTCOME_CONFIRM:
         return CONFIRM_APPLICATION_SAFE_ANSWER_TEXT
+    if outcome == OUTCOME_SUPPORTED:
+        return SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT
     return draft.answer_text
 
 
@@ -410,4 +451,5 @@ __all__ = [
     "accept_questionnaire_response",
     "edit_questionnaire_response_text",
     "CONFIRM_APPLICATION_SAFE_ANSWER_TEXT",
+    "SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT",
 ]
