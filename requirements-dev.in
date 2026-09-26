@@ -1,3 +1,12 @@
 -r requirements.in
 pytest==9.1.1
 pytest-django==4.14.0
+# Test-only: PDF text extraction for policy/tests/test_pdf_rendering.py's
+# review-warnings assertions (M006-AUDIT-0004 finding I1) - reportlab's
+# own content-stream layout splits a rendered run into multiple `Tj`
+# fragments at markup-token boundaries (confirmed directly against this
+# exact reportlab==5.0.1 by rendering escaped `<script>...</script>`-shaped
+# text and inspecting the raw stream bytes), so a raw pdf_bytes substring
+# check is not reliable for asserting rendered text content - pypdf's
+# `extract_text()` correctly reconstructs the full run.
+pypdf==6.19.0

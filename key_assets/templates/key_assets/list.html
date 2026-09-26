@@ -60,16 +60,9 @@
      unrelated prose elsewhere in the product. */
   .asset-card__description { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; overflow-wrap: anywhere; }
   .asset-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
-  .badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
+  /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
+     static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
+     page's own colour variants stay local. */
   .badge--suggested { background: #fdf1d6; color: #8a5a00; }
   .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
   .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }

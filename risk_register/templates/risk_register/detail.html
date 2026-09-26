@@ -5,16 +5,9 @@
 {% block content %}
 <style>
   .risk-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
-  .badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
+  /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
+     static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
+     page's own colour variants stay local. */
   .badge--ai-suggested { background: #fdf1d6; color: #8a5a00; }
   .badge--confirmed { background: var(--color-success-bg); color: var(--color-success-text); }
   .badge--dismissed { background: var(--color-border); color: var(--color-text-muted); }

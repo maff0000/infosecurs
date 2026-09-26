@@ -20,16 +20,9 @@
   .state-card__title { font-weight: 600; margin: 0 0 var(--space-1) 0; }
   .state-card__meta { color: var(--color-text-muted); font-size: 0.9rem; margin: 0 0 var(--space-1) 0; }
   .state-card__stats { display: flex; gap: var(--space-4); font-size: 0.85rem; color: var(--color-text-muted); }
-  .badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
+  /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
+     static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
+     page's own colour variants stay local. */
   .badge--not-confirmed { background: var(--color-border); color: var(--color-text); }
   .badge--not-applicable { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
   .badge--customer-stated { background: #e6eefb; color: #185ea8; }
