@@ -31,7 +31,12 @@ the second AI task.
    material unknown/gap is therefore never silently unflagged purely
    because the model itself failed to mention it, which is exactly the gap
    M006-AUDIT-0002's G1 finding exploited (zero review-warning flag
-   alongside the fabricated ISO 27001/MFA claim);
+   alongside the fabricated ISO 27001/MFA claim); each persisted entry is
+   tagged `source=ai`/`source=deterministic` (H3 correction, M006-AUDIT-0003
+   - see `_merge_and_tag_review_warnings`/`compute_current_review_warnings`
+   below) so a later approval-time recompute can refresh only the
+   deterministic subset against then-current canonical state without ever
+   discarding a genuinely AI-authored warning;
 4. emits exactly one `policy_draft_generated` `ActivityEvent` (PID §22),
    in the same transaction as the `PolicyDocument`/`PolicyVersion` writes,
    mirroring `workplace.services.create_workplace`'s single-writer-plus-
@@ -170,6 +175,22 @@ def _deterministic_review_warnings(security_state_facts: dict) -> list:
     return warnings
 
 
+# H3 correction (M006-AUDIT-0003, docs/evidence/M006-AUDIT-0003.md): each
+# persisted `review_warnings` entry is tagged with WHERE it came from, so a
+# later recompute (`compute_current_review_warnings` below - used both by
+# the approval-confirmation GET preview and by `_finalise_approval`'s own
+# freeze point) can cleanly REPLACE only the deterministic-sourced subset
+# with a fresh one derived from CURRENT canonical state, while leaving any
+# genuinely AI-authored entry alone. This is a persistence-layer tag only -
+# it lives in the plain dict this app stores in `PolicyVersion.
+# review_warnings` (a JSONField), not on `ai_platform.policy_contracts.
+# PolicyReviewWarning` itself (that contract module is out of scope for
+# this correction - see this dispatch's own hard constraints), so nothing
+# about the AI response contract changes.
+REVIEW_WARNING_SOURCE_AI = "ai"
+REVIEW_WARNING_SOURCE_DETERMINISTIC = "deterministic"
+
+
 def _merge_review_warnings(ai_warnings: list, security_state_facts: dict) -> list:
     """AI-supplied `review_warnings` (list[PolicyReviewWarning]) MERGED
     with the deterministic minimum `_deterministic_review_warnings` above
@@ -218,12 +239,90 @@ def _merge_review_warnings(ai_warnings: list, security_state_facts: dict) -> lis
     return merged
 
 
+def _merge_and_tag_review_warnings(ai_warnings: list, security_state_facts: dict) -> list:
+    """H3 correction: like `_merge_review_warnings` above (reused verbatim,
+    not a second warning-truth system), but returns plain, PERSISTENCE-READY
+    dicts (`{"subject", "detail", "source"}`) instead of
+    `PolicyReviewWarning` instances - `source` is
+    `REVIEW_WARNING_SOURCE_AI` for exactly the entries that came from
+    `ai_warnings` (matched by `(subject, detail)` - robust to
+    `_merge_review_warnings`'s own internal ordering, not merely "the first
+    len(ai_warnings) entries"), `REVIEW_WARNING_SOURCE_DETERMINISTIC` for
+    every other (i.e. deterministically-added) entry.
+
+    This is the ONE place that decides provenance tagging - both
+    `_persist_draft` (AI-generated drafts) and
+    `create_new_draft_from_approved` (manual drafts, `ai_warnings=[]`) and
+    `compute_current_review_warnings` (approval-time/preview recompute)
+    call this, so the tagging rule can never drift between the three call
+    sites."""
+    merged = _merge_review_warnings(ai_warnings, security_state_facts)
+    ai_keys = {(w.subject, w.detail) for w in ai_warnings}
+    return [
+        {
+            "subject": w.subject,
+            "detail": w.detail,
+            "source": REVIEW_WARNING_SOURCE_AI
+            if (w.subject, w.detail) in ai_keys
+            else REVIEW_WARNING_SOURCE_DETERMINISTIC,
+        }
+        for w in merged
+    ]
+
+
+def compute_current_review_warnings(version: PolicyVersion) -> list:
+    """H3 correction (M006-AUDIT-0003 finding H3): a pure, NON-MUTATING
+    recompute of what `version.review_warnings` should read RIGHT NOW,
+    against CURRENT canonical `security_state_facts` - never the stale
+    snapshot from whenever this draft happened to be created/last
+    generated.
+
+    This is the ONE function both:
+      - the approval-confirmation GET view uses to show the customer a
+        live, un-persisted preview of current warnings BEFORE they confirm
+        approval (Central Architecture's own "the customer must be able to
+        see the current warnings before confirming approval" requirement -
+        a derived-display approach, no DB write on a plain GET); and
+      - `_finalise_approval` uses to compute the value it actually
+        persists at the one authoritative freeze point - so what the
+        customer previewed is exactly what gets frozen into the approved
+        version, never a separately-computed value that could diverge.
+
+    Design for the AI-vs-deterministic tension (see this dispatch's own
+    report for the full reasoning): every entry in `version.review_warnings`
+    that is NOT explicitly tagged `source=deterministic` is treated as
+    "preserve" (a genuinely AI-authored entry, tagged `source=ai` by
+    `_merge_and_tag_review_warnings` at draft-generation time - or, for a
+    pre-H3 legacy row with no `source` key at all, preserved rather than
+    silently discarded, since discarding an unlabelled entry of unknown
+    provenance would risk exactly the "AI warnings silently discarded"
+    regression this correction must avoid). Only entries explicitly tagged
+    `source=deterministic` are dropped here and replaced wholesale by a
+    freshly-recomputed deterministic set - this is what lets a
+    since-resolved control's stale warning actually disappear (Case 2)
+    while a still-open one, or a newly-opened one, is correctly present
+    (Case 1 / Case 3), without ever discarding a real AI-authored warning
+    (AI-generated-draft regression check)."""
+    preserved_warnings = [
+        PolicyReviewWarning(subject=w.get("subject", ""), detail=w.get("detail", ""))
+        for w in version.review_warnings
+        if w.get("source") != REVIEW_WARNING_SOURCE_DETERMINISTIC
+    ]
+    grounding = build_policy_grounding_payload(version.organisation)
+    return _merge_and_tag_review_warnings(preserved_warnings, grounding.security_state_facts)
+
+
 @transaction.atomic
 def _persist_draft(
     organisation, result: PolicyGenerationResult, record, grounding, *, actor
 ) -> PolicyVersion:
     document, _ = PolicyDocument.objects.get_or_create(organisation=organisation)
-    review_warnings = _merge_review_warnings(result.review_warnings, grounding.security_state_facts)
+    # H3: tagged (source=ai / source=deterministic) so a later approval-time
+    # recompute (`compute_current_review_warnings`) can refresh only the
+    # deterministic subset without discarding these AI-authored entries.
+    review_warnings = _merge_and_tag_review_warnings(
+        result.review_warnings, grounding.security_state_facts
+    )
     version = PolicyVersion.objects.create(
         document=document,
         organisation=organisation,
@@ -231,7 +330,7 @@ def _persist_draft(
         status=PolicyVersion.STATUS_DRAFT,
         title=result.policy_title,
         sections=[dataclasses.asdict(section) for section in result.sections],
-        review_warnings=[dataclasses.asdict(warning) for warning in review_warnings],
+        review_warnings=review_warnings,
         generation_source=PolicyVersion.GENERATION_SOURCE_AI,
         prompt_version=result.prompt_version,
         ai_invocation_record=record,
@@ -308,6 +407,22 @@ def _finalise_approval(
     one exists) THEN `EVENT_POLICY_APPROVED` for `version` itself, both
     inside this same transaction - a rolled-back approval attempt therefore
     never leaves an orphaned event of either kind behind.
+
+    H3 correction (M006-AUDIT-0003): this is the ONE authoritative freeze
+    point for `review_warnings` too. Before this save persists
+    `status=APPROVED`, `review_warnings` is recomputed via
+    `compute_current_review_warnings` against CURRENT canonical
+    `security_state_facts` - never the stale snapshot from whenever this
+    draft happened to be created/generated - so a since-resolved control's
+    warning cannot survive into the frozen approved record, a
+    newly-appeared gap IS captured, and any genuinely AI-authored warning
+    already on this draft is preserved (see that function's own docstring
+    for the full reasoning). This write still runs while the row currently
+    PERSISTED in the database is `status=draft` (this function's own
+    defence-in-depth re-check above already guarantees that), so
+    `review_warnings` - one of `PROTECTED_WHILE_APPROVED_FIELDS` - is not
+    yet frozen by `PolicyVersion.save()`'s own guard at the moment this
+    save runs; once this save completes, it is.
     """
     if version.status != PolicyVersion.STATUS_DRAFT:
         raise PolicyLifecycleError(
@@ -327,6 +442,7 @@ def _finalise_approval(
     version.approved_by = approved_by
     version.approved_at = timezone.now()
     version.next_review_date = next_review_date
+    version.review_warnings = compute_current_review_warnings(version)
     version.save()
 
     if previous_approved is not None:
@@ -448,6 +564,23 @@ def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVe
     immutability guard would also reject any such mutation attempt against
     the source row directly.
 
+    H3 correction (M006-AUDIT-0003 finding H3): `review_warnings` is NOT
+    copied from `version` (the source approved row's own warnings may be
+    stale - see this function's own module-level H3 discussion in
+    `policy.services`) and is NOT left as `[]` either (the exact defect H3
+    names - a customer could edit-and-reapprove a redrafted policy that
+    ends up with zero review warnings even though real, unresolved gaps are
+    unchanged). Instead a fresh `security_state_facts` projection is taken
+    for this organisation RIGHT NOW and the deterministic warnings it
+    implies are persisted immediately, tagged
+    `source=deterministic` (`_merge_and_tag_review_warnings` with no
+    AI-authored input - there is none for a manual copy) - so a customer
+    looking at this brand-new draft before making any edits already sees
+    an accurate warning set reflecting current canonical state, and
+    `_finalise_approval` can later cleanly recompute/replace that
+    deterministic subset again at the moment of approval if state has
+    moved on since.
+
     `generation_source=GENERATION_SOURCE_MANUAL`, no `ai_invocation_record`,
     no `prompt_version` carried over - this is deliberately NOT recorded as
     an AI-generated draft (see that constant's own docstring in
@@ -462,6 +595,7 @@ def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVe
         )
 
     document = version.document
+    grounding = build_policy_grounding_payload(version.organisation)
     new_version = PolicyVersion.objects.create(
         document=document,
         organisation=version.organisation,
@@ -469,7 +603,7 @@ def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVe
         status=PolicyVersion.STATUS_DRAFT,
         title=version.title,
         sections=[dict(section) for section in version.sections],
-        review_warnings=[],
+        review_warnings=_merge_and_tag_review_warnings([], grounding.security_state_facts),
         generation_source=PolicyVersion.GENERATION_SOURCE_MANUAL,
         prompt_version="",
         created_by=actor,
@@ -497,4 +631,7 @@ __all__ = [
     "approve_policy_directly",
     "record_external_policy_approval",
     "create_new_draft_from_approved",
+    "compute_current_review_warnings",
+    "REVIEW_WARNING_SOURCE_AI",
+    "REVIEW_WARNING_SOURCE_DETERMINISTIC",
 ]

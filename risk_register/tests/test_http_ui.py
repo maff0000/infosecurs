@@ -15,6 +15,8 @@ from django.urls import reverse
 from key_assets.models import KeyAsset
 from risk_register.models import Risk
 
+MAX_ASSET_NAME_LENGTH = KeyAsset._meta.get_field("name").max_length
+
 
 @pytest.mark.django_db
 class TestRiskGenerationView:
@@ -58,6 +60,71 @@ class TestRiskGenerationView:
         existing.refresh_from_db()
         assert existing.status == Risk.STATUS_CONFIRMED
         assert Risk.objects.filter(organisation=org_a).count() == before_count
+
+
+@pytest.mark.django_db
+class TestMaximumLengthAssetNameGenerationRegression:
+    """
+    M006-AUDIT-0003 H1's own required HTTP/browser regression: this closes
+    the actual customer-facing dead end PID §18 item 7 requires (a
+    `django.db.utils.DataError` 500 at "Find candidate risks", pre-
+    correction), not merely the underlying `_build_title` function in
+    isolation (see `risk_register/tests/test_scenario_engine.py` for the
+    exhaustive mechanical proofs of that function).
+
+    Exercises the REAL customer-facing views end to end - the real
+    `KeyAssetForm` submission (`key_assets:create`, which sets a manually-
+    added asset straight to `STATUS_CONFIRMED` - see
+    `key_assets.views.key_asset_create`), then the real "Find candidate
+    risks" POST (`risk_register:generate`) - not
+    `instantiate_risks_for_organisation`/`generate_draft_risks` called
+    directly. A plain Django `Client`-based HTTP test is sufficient to
+    prove this flow: the assertions needed (normal redirect/success, no
+    500, the candidate risk visible on the resulting page) do not require
+    real browser rendering/CSS the way the H2 narrow-viewport regressions
+    do, so no Playwright/real-browser dependency is introduced here.
+    """
+
+    def test_maximum_length_asset_name_through_the_real_form_produces_a_visible_candidate_risk(
+        self, client_a, org_a
+    ):
+        max_length_name = "A" * MAX_ASSET_NAME_LENGTH
+
+        create_response = client_a.post(
+            reverse("key_assets:create", args=[org_a.id]),
+            {
+                "name": max_length_name,
+                "category": "endpoint",
+                "description": "",
+                "criticality": "medium",
+            },
+        )
+        assert create_response.status_code == 302
+        assert KeyAsset.objects.filter(
+            organisation=org_a, name=max_length_name, status=KeyAsset.STATUS_CONFIRMED
+        ).exists()
+
+        generate_response = client_a.post(reverse("risk_register:generate", args=[org_a.id]))
+        assert generate_response.status_code == 302, (
+            "the real 'Find candidate risks' submission must redirect normally, "
+            "never a 500 (django.db.utils.DataError, pre-correction)"
+        )
+        assert generate_response.url == reverse("risk_register:list", args=[org_a.id])
+
+        created_risks = Risk.objects.filter(
+            organisation=org_a, status=Risk.STATUS_DRAFT_AI_SUGGESTED
+        )
+        assert created_risks.exists(), "the candidate risk must be genuinely created, not silently skipped"
+        for risk in created_risks:
+            assert len(risk.title) <= Risk._meta.get_field("title").max_length
+
+        list_response = client_a.get(generate_response.url)
+        assert list_response.status_code == 200
+        content = list_response.content.decode()
+        # the candidate is genuinely visible on the resulting page - not
+        # merely persisted in the database
+        for risk in created_risks:
+            assert risk.title in content
 
 
 @pytest.mark.django_db

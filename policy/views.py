@@ -27,6 +27,7 @@ from policy.presentation import approval_summary
 from policy.services import (
     PolicyLifecycleError,
     approve_policy_directly,
+    compute_current_review_warnings,
     create_new_draft_from_approved,
     default_next_review_date,
     generate_policy_draft,
@@ -245,10 +246,28 @@ def policy_edit(request, organisation_id, version_id):
                 initial[section_field_name(entry["section_key"])] = entry["content"]
         form = PolicyVersionEditForm(initial=initial, section_keys=editable_section_keys)
 
+    # H3 correction (M006-AUDIT-0003): editing policy prose must never
+    # itself be a source of review warnings (canonical security state
+    # remains the sole authority - see `policy.services` module docstring),
+    # and this POST path above deliberately never touches
+    # `version.review_warnings` at all. This GET-time preview mirrors the
+    # approval-confirmation page's own preview (`compute_current_review_warnings`)
+    # purely so the customer editing a draft sees live-current warnings
+    # here too, not a stale edit-time/generation-time snapshot - the
+    # eventual approved version's own warnings are still guaranteed correct
+    # independently by `_finalise_approval`'s own recompute regardless of
+    # what is shown here.
+    current_review_warnings = compute_current_review_warnings(version)
+
     return render(
         request,
         "policy/edit.html",
-        {"organisation": organisation, "version": version, "form": form},
+        {
+            "organisation": organisation,
+            "version": version,
+            "form": form,
+            "current_review_warnings": current_review_warnings,
+        },
     )
 
 
@@ -333,6 +352,17 @@ def _approve(request, organisation_id, version_id, *, mode):
             initial={"next_review_date": version.next_review_date or default_next_review_date()}
         )
 
+    # H3 correction (M006-AUDIT-0003): a freshly-derived, NOT-YET-PERSISTED
+    # preview of what `review_warnings` would be recomputed to right now -
+    # the exact same `compute_current_review_warnings` call
+    # `policy.services._finalise_approval` itself uses at the actual
+    # approval-write freeze point, so what the customer sees here on this
+    # confirmation page is exactly what gets persisted if they confirm.
+    # Deliberately a pure read (no DB mutation on this GET) - Central
+    # Architecture's own stated preference for a derived-display approach
+    # over a GET-time write.
+    current_review_warnings = compute_current_review_warnings(version)
+
     return render(
         request,
         "policy/approve.html",
@@ -342,6 +372,7 @@ def _approve(request, organisation_id, version_id, *, mode):
             "form": form,
             "mode": mode,
             "policy_authoriser": authoriser,
+            "current_review_warnings": current_review_warnings,
         },
     )
 

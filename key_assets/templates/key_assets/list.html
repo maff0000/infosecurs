@@ -42,7 +42,23 @@
      break at any character once it no longer fits. */
   .asset-card__title-text { min-width: 0; overflow-wrap: anywhere; }
   .asset-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 var(--space-1) 0; }
-  .asset-card__description { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; }
+  /* M006-AUDIT-0003 H2: same defect class as `.asset-card__title-text`
+     above (M006-AUDIT-0002 G2) - `.asset-card__description` renders
+     customer-controlled free text (`KeyAsset.description`) as a flex
+     item inside `.asset-card__body` and had no wrap rule of its own, so a
+     long unbroken token (or ordinary long prose with no natural break
+     near the card's width) could push the card, and the page, wider than
+     the viewport at 375px - confirmed by real-browser measurement before
+     this rule was added (see key_assets/tests/
+     test_narrow_viewport_regression.py). `overflow-wrap: anywhere` alone
+     (no `min-width: 0`, unlike the title-text fix) is the smallest local
+     fix: `.asset-card__body` (the actual flex item) already has its own
+     `min-width: 0`, and this paragraph is a normal block child of that
+     body, not itself a sibling flex item competing for space - it only
+     needs permission to break at any character once it no longer fits.
+     Scoped to this one element only - not a global word-breaking rule for
+     unrelated prose elsewhere in the product. */
+  .asset-card__description { margin: 0; color: var(--color-text-muted); font-size: 0.9rem; overflow-wrap: anywhere; }
   .asset-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
   .badge {
     display: inline-block;

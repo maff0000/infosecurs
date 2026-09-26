@@ -104,6 +104,13 @@ from security_baseline.models import ANSWER_UNKNOWN, BaselineAssessment
 DEFAULT_IMPACT = 3
 DEFAULT_LIKELIHOOD = 3
 
+# M006-AUDIT-0003 H1: appended to a derived `Risk.title` ONLY when
+# `key_asset.name` actually had to be cut short to fit the field - never
+# for a title that already fits in full. Plain ASCII on purpose (not a
+# Unicode ellipsis character) so it can never itself introduce a
+# multibyte-boundary concern into the truncation math below.
+TITLE_TRUNCATION_MARKER = "..."
+
 
 def _canonical_control_answers(organisation) -> dict:
     """This organisation's canonical `BaselineAnswer` states, keyed by
@@ -169,8 +176,87 @@ def _unconfirmed_control_keys(scenario, control_answers: dict) -> list:
 
 
 def _build_title(scenario, key_asset) -> str:
+    """The ONE authoritative builder of a `Risk.title` value (M006-AUDIT-0003
+    H1 correction) - the sole call site is `instantiate_risks_for_organisation`
+    below.
+
+    Confirmed root cause (fresh independent Auditor, `docs/evidence/
+    M006-AUDIT-0003.md`, confirmed by Central Architecture): `KeyAsset.name`
+    and `Risk.title` are both `CharField(max_length=255)`, and this
+    function's pre-correction body (`f"{threat_event} - {key_asset.name}"`)
+    had no bound of its own - so a completely valid, maximum-length
+    `KeyAsset.name` could deterministically produce a title longer than
+    `Risk.title`'s own capacity, raising `django.db.utils.DataError` at the
+    `Risk.objects.create(...)` call site and leaving the customer at a dead
+    end (PID §18 item 7) despite having done nothing wrong.
+
+    Central Architecture's ruling on the correct fix, applied here exactly:
+    bound the DERIVED title to `Risk.title`'s own field capacity - derived
+    via Django's own model introspection
+    (`Risk._meta.get_field("title").max_length`), not a second hardcoded
+    `255` - never shrink the source `key_asset.name` itself (it remains
+    completely intact on its own `KeyAsset` row, still reachable through the
+    unchanged `key_asset` FK - this function only ever affects the derived
+    summary string, not the customer's own data), never enlarge
+    `Risk.title`, never catch `DataError` and show a friendlier error, never
+    silently skip the risk candidate.
+
+    Behaviour:
+      1. The methodology-owned `threat_event` portion and the literal
+         `" - "` separator are ALWAYS preserved in full, never truncated -
+         see the `ValueError` guard below for what happens if that portion
+         alone can't fit.
+      2. As much of `key_asset.name` as remains within the field's capacity
+         (after the threat_event/separator/marker overhead) is kept.
+      3. `TITLE_TRUNCATION_MARKER` is appended ONLY when truncation actually
+         happened - a title that already fits in full is returned completely
+         unmodified, exactly as this function returned it before this
+         correction; nothing is needlessly marked or altered for the common
+         case.
+
+    Truncation, when it happens, slices `key_asset.name` with ordinary
+    Python string indexing/slicing, which operates on Unicode codepoints,
+    not raw bytes - so a Unicode asset name (accented characters, CJK,
+    emoji, ...) is never cut mid-character. Proven, not merely assumed - see
+    the Unicode boundary test in `risk_register/tests/test_scenario_engine.py`.
+
+    The `ValueError` below is a catalogue/programming-time invariant guard,
+    not runtime "handling" of a customer-triggered condition: if a
+    scenario's own `threat_event` were ever so long that even a
+    zero-length asset-name contribution, plus the separator and the
+    truncation marker, could not fit in `Risk.title`'s capacity, that is a
+    defect in the catalogue entry itself - the fix is to shorten that
+    scenario's `threat_event`, not to further mangle the methodology-owned
+    prefix at runtime to force a fit. `TestCatalogueThreatEventFitsTitleField`
+    proves this condition does not occur for any scenario in the current
+    `CATALOGUE`, for every current methodology scenario - this guard exists
+    so that, if it ever did, the failure would be loud and immediate at
+    generation time rather than a silent truncation of methodology-owned
+    text.
+    """
+    max_length = Risk._meta.get_field("title").max_length
     threat_event = scenario.threat_event.rstrip(".")
-    return f"{threat_event} - {key_asset.name}"
+    prefix = f"{threat_event} - "
+
+    worst_case_overhead = len(prefix) + len(TITLE_TRUNCATION_MARKER)
+    if worst_case_overhead > max_length:
+        raise ValueError(
+            f"Scenario {scenario.scenario_id!r}'s threat_event leaves no "
+            f"room for ANY asset-name content within Risk.title's "
+            f"max_length={max_length} (fixed prefix alone is "
+            f"{len(prefix)} chars, plus a {len(TITLE_TRUNCATION_MARKER)}-char "
+            "truncation marker in the worst case). This is a "
+            "catalogue/programming-time invariant violation - shorten this "
+            "scenario's threat_event; do not attempt to fix this at "
+            "runtime by truncating methodology-owned text."
+        )
+
+    full_title = f"{prefix}{key_asset.name}"
+    if len(full_title) <= max_length:
+        return full_title
+
+    available_for_name = max_length - len(prefix) - len(TITLE_TRUNCATION_MARKER)
+    return f"{prefix}{key_asset.name[:available_for_name]}{TITLE_TRUNCATION_MARKER}"
 
 
 def _build_rationale(scenario, key_asset, control_key: str, resolved_state: str) -> str:
