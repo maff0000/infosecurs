@@ -243,6 +243,46 @@ a:hover { color: var(--color-primary-dark); }
   text-align: center;
 }
 
+/* --- Badges (M006-AUDIT-0004 J1) ---
+   Before this fix, `.badge { ... white-space: nowrap; ... }` was copy-
+   pasted, verbatim/near-identically, into a local <style> block in 12
+   separate templates (key_assets, evidence, risk_register,
+   security_state, remediation x2 each, questionnaire response_detail,
+   organisations detail/Overview) - the same "another page-by-page
+   divergence" `.card-list__title` above was already fixed against, but
+   never centralised for this one. `white-space: nowrap` on a genuinely
+   long/long-and-hostile status label (see the former Accepted
+   remediation-status label, now shortened to plain "Accepted" - PID/
+   Central Architecture correction) forced horizontal overflow at 375px
+   on every page carrying one of these badges, reproduced by a fresh
+   independent Auditor.
+
+   This is now the ONE shared definition of badge *geometry* (size,
+   shape, spacing, and - critically - wrap behaviour). Every domain's own
+   `.badge--<variant>` colour/background rule remains local to its own
+   template <style> block (deliberately NOT centralised here - Central
+   Architecture's own instruction: "leaving per-domain colour classes
+   local"), since those are page-specific meaning, not shared geometry.
+   `max-width: 100%` keeps a badge from ever being wider than its
+   container; `white-space: normal` (the browser default, stated
+   explicitly here since every local copy this replaces set `nowrap`) plus
+   `overflow-wrap: anywhere` let even a single long unbroken run wrap
+   instead of pushing the page wider than the viewport, while the badge
+   keeps its visual pill styling (background/padding/radius) whichever
+   local `.badge--<variant>` rule colours it. */
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* --- Forms --- */
 .form-section {
   background: var(--color-surface);

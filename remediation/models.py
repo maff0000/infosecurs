@@ -25,8 +25,13 @@ NEVER automatically:
 
 `status=accepted` specifically means the organisation consciously accepts
 the issue/risk for now - it does NOT mean the underlying control
-requirement is met (PID §6.5). The label text below says so explicitly so
-this distinction is visible in the product, not only in code comments.
+requirement is met (PID §6.5). This distinction is visible in the product,
+not only in code comments - but (M006-AUDIT-0004 J1) as page copy next to
+the status, not stuffed into the `STATUS_CHOICES` label itself: that label
+is rendered inside a `.badge` pill (remediation/templates/remediation/
+{list,detail}.html), so it stays a concise status token ("Accepted"), and
+the fuller "not the same as done" wording lives as ordinary explanatory
+text alongside it on both templates instead.
 """
 import uuid
 
@@ -56,10 +61,22 @@ class RemediationAction(models.Model):
         (STATUS_OPEN, "Open"),
         (STATUS_IN_PROGRESS, "In progress"),
         (STATUS_DONE, "Done"),
-        (
-            STATUS_ACCEPTED,
-            "Accepted (risk consciously accepted for now — not the same as done)",
-        ),
+        # M006-AUDIT-0004 J1: this label is rendered inside `.badge`
+        # (remediation/templates/remediation/{list,detail}.html's
+        # `{{ action.get_status_display }}`), so it must stay a concise
+        # status token, not a full sentence - a sentence-length label
+        # forced horizontal overflow at 375px (Central Architecture's own
+        # bounded correction: "A badge should ideally carry the concise
+        # state: 'Accepted'"). The "not the same as done" distinction
+        # this label used to carry by itself is NOT lost - it already
+        # exists, verbatim, as page copy OUTSIDE the badge on both
+        # templates: list.html's "Accepted" section intro ("Consciously
+        # accepted for now — this does not mean the underlying control
+        # requirement is met.") and detail.html's `.accepted-note` block
+        # ("Accepted, not resolved... The organisation has consciously
+        # accepted this issue for now."). See this dispatch's report for
+        # confirmation neither of those was touched.
+        (STATUS_ACCEPTED, "Accepted"),
     ]
     # Statuses from which the action can still be actively worked.
     ACTIVE_STATUSES = (STATUS_OPEN, STATUS_IN_PROGRESS)

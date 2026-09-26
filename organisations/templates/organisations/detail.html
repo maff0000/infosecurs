@@ -4,20 +4,9 @@
 
 {% block content %}
 <style>
-  /* Same badge-modifier convention security_state/list.html and
-     questionnaire/response_detail.html already use: a shared `.badge`
-     base plus per-page state modifiers, defined inline next to the page
-     that uses them. */
-  .badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
+  /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
+     static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
+     page's own colour variants stay local. */
   .badge--not_started { background: var(--color-border); color: var(--color-text); }
   .badge--in_progress { background: var(--color-primary-tint); color: var(--color-primary-dark); }
   .badge--needs_attention { background: var(--color-warning-bg); color: var(--color-warning-text); }

@@ -3,6 +3,18 @@
 {% block title %}{{ version.title }} (v{{ version.version_number }}) — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  /* M006-AUDIT-0004 J1: `approval_summary` (policy/presentation.py) names
+     a real person - `policy_authoriser.full_name` (direct approval) or
+     both `full_name` and `job_title` (external-recorded approval, via
+     `_authoriser_display`) - which is customer-controlled governance data
+     (governance.OrganisationPerson, edited via "Edit your details"/role
+     assignment) and can legitimately be long. The paragraph below had no
+     wrap rule of its own, so a long/unbroken name could push the page
+     wider than the viewport at 375px. `overflow-wrap: anywhere` lets it
+     wrap - the name itself is never truncated. */
+  .approval-summary { overflow-wrap: anywhere; }
+</style>
 <div class="page-header">
     <div>
         <h1>{{ version.title }}</h1>
@@ -34,7 +46,7 @@
 </div>
 
 {% if approval_summary %}
-    <p><strong>{{ approval_summary }}</strong></p>
+    <p class="approval-summary"><strong>{{ approval_summary }}</strong></p>
 {% endif %}
 
 {% if version.status == "superseded" and version.superseded_by %}

@@ -76,7 +76,7 @@ from ai_platform.prompts.questionnaire_drafting_v1 import PROMPT_VERSION as DRAF
 from ai_platform.prompts.questionnaire_interpretation_v1 import (
     PROMPT_VERSION as INTERPRETATION_PROMPT_VERSION,
 )
-from ai_platform.questionnaire_drafting_contracts import QuestionnaireDraftingRequest
+from ai_platform.questionnaire_drafting_contracts import OUTCOME_CONFIRM, QuestionnaireDraftingRequest
 from ai_platform.questionnaire_drafting_orchestration import draft_questionnaire_answer
 from ai_platform.questionnaire_interpretation_contracts import QuestionnaireInterpretationRequest
 from ai_platform.questionnaire_interpretation_orchestration import (
@@ -87,6 +87,60 @@ from questionnaire.catalogue import CATALOGUE
 from questionnaire.grounding import build_questionnaire_grounding_snapshot
 from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
 from questionnaire.outcome import derive_outcome
+
+
+# M006 audit finding I2 (originally LOW, reclassified MEDIUM by Central
+# Architecture, `docs/evidence/M006-AUDIT-0004.md`): for outcome ==
+# OUTCOME_CONFIRM, the deterministic outcome badge is correct (the
+# underlying canonical security state is genuinely unconfirmed/unknown),
+# but the AI-drafted prose can still read as an unqualified implementation
+# claim (e.g. "Staff receive regular security awareness training.") that a
+# customer could copy verbatim into a real vendor questionnaire and
+# unintentionally misrepresent an unconfirmed control as implemented. The
+# deterministic badge does not make that wording acceptable, so the
+# application - not the drafting model - owns the customer-facing initial
+# wording for this one outcome.
+#
+# This is a FIXED, deterministic sentence, never string-formatted with any
+# raw question text, interpretation summary or AI output (Central
+# Architecture's explicit instruction: "Do not insert untrusted raw
+# question prose into this deterministic status sentence" - the existing
+# separate "Why this answer?" panel already supplies question-specific
+# context). Its semantics are binding, independent of the exact wording:
+# no yes; no no; no implemented-state assertion; no certification/
+# compliance assertion; makes uncertainty explicit; tells the customer
+# confirmation is still required.
+CONFIRM_APPLICATION_SAFE_ANSWER_TEXT = (
+    "Not yet confirmed. The current security record does not contain enough "
+    "confirmed information to answer this requirement definitively. Please "
+    "review the underlying security state before sending a final response."
+)
+
+
+def _initial_current_answer_text(outcome: str, draft) -> str:
+    """The APPLICATION-owned initial value for
+    `QuestionnaireResponse.current_answer_text` (M006 I2 fix).
+
+    For every outcome other than `OUTCOME_CONFIRM` (SUPPORTED, GAP,
+    NOT_APPLICABLE), this is unchanged from the original behaviour: the raw
+    AI-drafted text, exactly as before this fix - PID §12.5's outcome
+    aggregation already keeps those three paths' meaning safe, and Central
+    Architecture's own finding is scoped to CONFIRM only (do not
+    over-generalise - section F).
+
+    For `OUTCOME_CONFIRM`, the raw AI draft is NEVER used as the initial
+    customer-facing text, regardless of what the drafting model returned -
+    `draft.answer_text` is intentionally not read here at all. The raw
+    model output remains fully preserved, unmodified, in
+    `ai_draft_text` (see `_persist_response` below) for provenance/
+    evaluation; only what initialises the customer-facing
+    `current_answer_text` changes. The Account Holder can still freely edit
+    this initial value afterwards via `edit_questionnaire_response_text` -
+    this function only controls the STARTING value.
+    """
+    if outcome == OUTCOME_CONFIRM:
+        return CONFIRM_APPLICATION_SAFE_ANSWER_TEXT
+    return draft.answer_text
 
 
 def _hash_grounding_snapshot(grounding_snapshot: dict) -> str:
@@ -131,7 +185,7 @@ def _persist_response(
         evidence_explicitly_requested=interpretation.evidence_explicitly_requested,
         outcome=outcome,
         ai_draft_text=draft.answer_text,
-        current_answer_text=draft.answer_text,
+        current_answer_text=_initial_current_answer_text(outcome, draft),
         review_warnings=review_warnings,
         grounding_snapshot=grounding_snapshot,
         grounding_snapshot_hash=_hash_grounding_snapshot(grounding_snapshot),
@@ -355,4 +409,5 @@ __all__ = [
     "generate_questionnaire_response",
     "accept_questionnaire_response",
     "edit_questionnaire_response_text",
+    "CONFIRM_APPLICATION_SAFE_ANSWER_TEXT",
 ]
