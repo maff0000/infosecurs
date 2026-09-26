@@ -36,6 +36,22 @@
         </p>
     {% endif %}
 
+    {% if current_review_warnings %}
+        <section class="form-section">
+            <h2 class="form-section__heading">Current review warnings</h2>
+            <p class="field__help">
+                Reflects current canonical security state right now, not a stale snapshot from
+                when this draft was created or last edited. This is exactly what will be recorded
+                on the approved version if you confirm below.
+            </p>
+            <ul>
+                {% for warning in current_review_warnings %}
+                    <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}

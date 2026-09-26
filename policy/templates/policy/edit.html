@@ -13,6 +13,21 @@
     </div>
 </div>
 
+{% if current_review_warnings %}
+    <section class="form-section">
+        <h2 class="form-section__heading">Current review warnings</h2>
+        <p class="field__help">
+            Reflects current canonical security state, not a stale snapshot from when this draft
+            was created — editing this policy's wording never changes this list.
+        </p>
+        <ul>
+            {% for warning in current_review_warnings %}
+                <li><strong>{{ warning.subject }}</strong>: {{ warning.detail }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+
 <div class="form-card">
     <p class="form-card__intro">
         This is still a <strong>draft</strong>. Review and edit each section below, then approve it
