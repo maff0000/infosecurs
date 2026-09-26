@@ -1,3 +1,57 @@
+> ## ⚠️ FINAL ACCEPTED BETA 0.1 PRODUCT ARTIFACT — read this first
+>
+> Everything below this banner is historical evidence, preserved unmodified.
+> **None of the release images named anywhere below this banner — including
+> the one this file's own original text calls "currently accepted" — is the
+> accepted Beta 0.1 artifact.** Three further product corrections and their
+> own release rebuilds happened after this file was last updated (M006 J1/K1/L1/H1/H2/H3/I1/I2
+> audit-fix rounds). The single FINAL accepted artifact, superseding every
+> image named anywhere else in this document, is:
+>
+> - **Product SHA:** `225c0aeecf4f6f898eb2b4b4eeb4f207ae718e76`
+> - **Image:** `infosecurs-release:225c0aeecf4f6f898eb2b4b4eeb4f207ae718e76`
+> - **Image ID:** `sha256:afc488184d7bcd749befa88b2a9cfeaab4be82c8203568b168af49f77320a281`
+> - **OCI revision label:** `225c0aeecf4f6f898eb2b4b4eeb4f207ae718e76`
+>
+> This exact image was built by a clean checkout of exactly this commit
+> (no uncommitted branch, `git status --porcelain` empty at build time),
+> `--no-cache`, and independently re-proven by the PL (not merely
+> asserted by the build dispatch) directly against this exact Image ID:
+>
+> - No source bind: `docker inspect` Mounts on the running container show
+>   only the evidence named volume — never a bind of the working tree.
+> - `DEBUG=False`, `DJANGO_ENV=production`, `SECURE_SSL_REDIRECT=True`
+>   genuinely active (a plain-HTTP request 301-redirects to `https://`).
+> - The AI-gateway secret is mounted read-only from
+>   `/srv/secrets/infosecurs/litellm_gateway_key` via `AI_GATEWAY_API_KEY_FILE`
+>   (a file path, never a literal credential value) and is **absent from
+>   the image itself** — confirmed by extracting every image layer and
+>   grepping for the literal secret path/content, finding nothing.
+> - Live connectivity to the real Trinity LiteLLM gateway
+>   (`http://192.168.246.202:4000`) confirmed, with the `trinity-core`
+>   model alias present in the gateway's own model list.
+> - Health check (`/healthz/`) returns 200 over genuine HTTPS via the
+>   repository's own sanctioned `scripts/release_tls_smoke_wrap.py`
+>   single-hop TLS wrapper.
+> - Real Chromium browser smoke against the running container: zero
+>   console errors, zero page errors, primary navigation reachable.
+> - `aquasec/trivy:0.70.0` image scan: **0 CRITICAL, 0 HIGH** vulnerabilities.
+>
+> Full behavioural/security acceptance evidence for this exact artifact is
+> in `docs/evidence/M006-AUDIT-0006.md` (§18, sixth fresh independent
+> Auditor, GREEN — including its own independent re-confirmation of image
+> identity, no-source-bind, and `DEBUG=False`), `docs/evidence/
+> M006-SECTION19-CHALLENGE.md` (§19 adversarial challenge, GREEN), and
+> `docs/evidence/M006-SECTION19-XSS-BROWSER-COMPLETION.md` (§19 real-browser
+> XSS execution proof, GREEN). See `docs/evidence/M006-CLOSURE.md` for the
+> single consolidated closure record.
+>
+> **Make no mistake: any earlier image tag referenced anywhere below this
+> banner in this file is superseded and must never be deployed, referenced,
+> or treated as the Beta 0.1 product.**
+
+---
+
 # M006 Round 6 — Release Artifact + Fresh Customer-Zero Reproducibility
 
 **Status:** GREEN, 2026-09-25. **Corrected 2026-09-25 (four times) — see

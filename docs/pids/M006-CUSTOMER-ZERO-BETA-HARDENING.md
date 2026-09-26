@@ -1,6 +1,6 @@
 # M006 — Customer-Zero Beta Hardening
 
-**Status:** AUTHORISED FOR BUILD  
+**Status:** PRODUCT_GREEN  
 **Parent:** `/PID.md`  
 **Depends on:** M001–M005 PRODUCT_GREEN + M005→M006 Host Relocation Gate GREEN  
 **Authoritative baseline main SHA at authorisation:** `bc47c2f167406b62aa3a0e59724357aa0478ef5b`  
@@ -648,3 +648,30 @@ M006 is GREEN only when:
 Stop after Beta 0.1 GREEN.
 
 Do not start production-readiness work or post-Beta feature expansion without new Central Architecture authority.
+
+---
+
+## 27. Closure Record — PRODUCT_GREEN (immutable, do not edit; append only)
+
+M006 is ratified **PRODUCT_GREEN**. This record is additive evidence of that
+ratification — it does not alter, and must never be used to alter, any preceding
+section of this PID.
+
+- **Accepted product SHA:** `225c0aeecf4f6f898eb2b4b4eeb4f207ae718e76`
+- **Accepted release image:** `infosecurs-release:225c0aeecf4f6f898eb2b4b4eeb4f207ae718e76`
+- **Image ID:** `sha256:afc488184d7bcd749befa88b2a9cfeaab4be82c8203568b168af49f77320a281`
+- **§18 (end-to-end real-browser acceptance):** GREEN — `docs/evidence/M006-AUDIT-0006.md`
+  (a sixth fresh, independent Auditor's complete from-scratch rerun of all 35 items,
+  no unresolved defect).
+- **§19 (adversarial Beta challenge):** GREEN — `docs/evidence/M006-SECTION19-CHALLENGE.md`
+  (a zero-context, independent challenger, all 15 objectives and 11 mandatory
+  challenge families, no unresolved Critical/High/Medium/Low finding).
+- **§19 real-browser XSS execution completion:** GREEN —
+  `docs/evidence/M006-SECTION19-XSS-BROWSER-COMPLETION.md` (closes the specific
+  evidence-completeness gap the §19 report itself disclosed).
+- **Real customer data:** remains explicitly **NOT AUTHORISED** by this closure.
+- **Production-readiness:** remains a separate, future gate, not authorised by this
+  closure.
+
+This closure record binds product identity for Beta 0.1. See
+`docs/evidence/M006-CLOSURE.md` for the full, consolidated closure evidence index.
