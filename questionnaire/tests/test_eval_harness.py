@@ -253,7 +253,7 @@ class TestRunEvalMechanics:
         report = run_eval("fake")
         assert report["corpus_version"] == "m005-questionnaire-eval-corpus-v3"
         assert report["interpretation_prompt_version"] == "questionnaire_interpretation_v1"
-        assert report["drafting_prompt_version"] == "questionnaire_drafting_v1"
+        assert report["drafting_prompt_version"] == "questionnaire_drafting_v2"
         assert report["gateway_mode"] == "fake"
         assert "generated_at" in report
         assert report["human_judgement_properties_pending_review"] == HUMAN_JUDGEMENT_PROPERTIES

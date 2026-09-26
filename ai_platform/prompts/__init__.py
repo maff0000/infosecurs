@@ -23,6 +23,7 @@ from ai_platform.prompts import (
     policy_generation_v1,
     policy_generation_v2,
     questionnaire_drafting_v1,
+    questionnaire_drafting_v2,
     questionnaire_interpretation_v1,
     risk_generation_v1,
     risk_generation_v2,
@@ -125,6 +126,7 @@ def build_questionnaire_interpretation_messages_for_version(
 # `QuestionnaireDraftingRequest`. -----------------------------------------
 _QUESTIONNAIRE_DRAFTING_PROMPT_MODULES_BY_VERSION = {
     questionnaire_drafting_v1.PROMPT_VERSION: questionnaire_drafting_v1,
+    questionnaire_drafting_v2.PROMPT_VERSION: questionnaire_drafting_v2,
 }
 
 KNOWN_QUESTIONNAIRE_DRAFTING_PROMPT_VERSIONS = tuple(

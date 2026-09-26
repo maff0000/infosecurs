@@ -148,7 +148,14 @@ class QuestionnaireResponse(models.Model):
     current_answer_text = models.TextField(
         blank=True,
         default="",
-        help_text="Editable answer text. Starts equal to ai_draft_text.",
+        help_text=(
+            "Editable answer text. For outcome CONFIRM or SUPPORTED, starts "
+            "equal to a fixed, application-owned safe sentence (never the "
+            "raw AI draft) - see questionnaire.services."
+            "CONFIRM_APPLICATION_SAFE_ANSWER_TEXT / "
+            "SUPPORTED_APPLICATION_SAFE_ANSWER_TEXT. For GAP or "
+            "NOT_APPLICABLE, starts equal to ai_draft_text."
+        ),
     )
     review_warnings = models.JSONField(
         default=list,
