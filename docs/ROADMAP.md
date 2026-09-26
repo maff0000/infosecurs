@@ -7,6 +7,6 @@
 | M003 | Evidence & Security State | Write after M002 |
 | M004 | Policy Foundation | AUTHORISED |
 | M005 | Questionnaire Assurance | PRODUCT_GREEN |
-| M006 | Customer-Zero Beta Hardening | AUTHORISED |
+| M006 | Customer-Zero Beta Hardening | PRODUCT_GREEN |
 
 Do not pre-build later modules merely because they are listed here.
