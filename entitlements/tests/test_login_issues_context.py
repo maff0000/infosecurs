@@ -10,7 +10,7 @@ import pytest
 from django.urls import reverse
 
 from entitlements.session import SESSION_KEY
-from entitlements.tiers import CODE_PRO, TIER_PRO
+from entitlements.tiers import CODE_MONTHLY, TIER_MONTHLY
 
 pytestmark = pytest.mark.django_db
 
@@ -30,8 +30,8 @@ class TestRealLoginIssuesInfosecursContext:
         context = client.session[SESSION_KEY]
         assert context["schema_version"] == 1
         assert context["subject_id"] == str(user.pk)
-        assert context["package_tier"] == TIER_PRO
-        assert context["package_code"] == CODE_PRO
+        assert context["package_tier"] == TIER_MONTHLY
+        assert context["package_code"] == CODE_MONTHLY
         assert context["auth_source"] == "django_beta"
         assert context["organisation_id"] is None
 
@@ -57,4 +57,4 @@ class TestRealLoginIssuesInfosecursContext:
 
         result = validate_context(raw, user=user)
         assert isinstance(result, InfosecursContext)
-        assert result.package_tier == TIER_PRO
+        assert result.package_tier == TIER_MONTHLY
