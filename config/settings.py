@@ -55,6 +55,12 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
     "core",
+    # M007-WI1 (docs/pids/M007-DASHBOARD-SHELL-ENTITLEMENTS-FOUNDATION-METRICS.md):
+    # ProductArea/FoundationRequirement registry, package tiers, session
+    # contract and entitlement service - listed before the domain apps
+    # below since it is cross-cutting product/commercial metadata those
+    # apps' own WI2/WI3/WI4 work will come to depend on.
+    "entitlements",
     "organisations",
     "security_baseline",
     "key_assets",
@@ -182,6 +188,18 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
     },
 }
+
+# M007-WI1 (PID §6.1): explicit, not implicit. Django's own unconfigured
+# default is already this exact backend - see
+# entitlements/tests/test_session_engine.py, which both introspects this
+# setting directly and proves a saved session is genuinely persisted as a
+# django.contrib.sessions.models.Session database row, not merely that the
+# setting string looks right - so this line is a documented contract, not a
+# behaviour change. Reason (PID §6.1): the Infosecurs session/entitlement
+# contract needs real server-side invalidation/logout semantics, which the
+# signed-cookie backend cannot provide (the "session" would be nothing but
+# a client-held, tamper-resistant-but-not-server-revocable blob).
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False  # Django's own forms need the CSRF cookie readable for the token
