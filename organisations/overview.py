@@ -201,6 +201,19 @@ def _organisation_setup_area(organisation) -> dict:
     )
 
 
+def is_organisation_profile_complete(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Organisation profile" Foundations completion
+    milestone - reuses `_organisation_setup_area`'s own STATE_READY
+    condition directly (PID §24: "prefer reusing/extracting the same
+    underlying predicates rather than copying subtly different
+    conditions") rather than re-deriving a second definition of "profile
+    complete". `_organisation_setup_area` never reaches STATE_NEEDS_ATTENTION
+    (see its own docstring), so this is a clean, unambiguous 1:1 mapping.
+    """
+    return _organisation_setup_area(organisation)["state"] == STATE_READY
+
+
 def _security_baseline_area(organisation) -> dict:
     """
     Not started: no `BaselineAssessment` row exists.
@@ -309,6 +322,22 @@ def _assets_area(organisation) -> dict:
     )
 
 
+def is_assets_review_complete(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Assets review" Foundations completion milestone.
+
+    PL judgement call (M007-WI4 dispatch, verified here against
+    `_assets_area`'s own source): mapped to `state == STATE_READY`
+    specifically, NOT "zero pending suggestions" on its own - the latter
+    would vacuously count a completely untouched, zero-asset organisation
+    (`_assets_area`'s own STATE_NOT_STARTED) as "complete", which is not
+    the intended meaning of "the review work was completed honestly".
+    `_assets_area` never reaches STATE_NEEDS_ATTENTION, so STATE_READY is
+    the only state past STATE_NOT_STARTED/STATE_IN_PROGRESS this can be.
+    """
+    return _assets_area(organisation)["state"] == STATE_READY
+
+
 def _risks_area(organisation) -> dict:
     """
     Not started: no `Risk` row exists.
@@ -384,6 +413,28 @@ def _risks_area(organisation) -> dict:
         organisation_id=organisation.id,
         next_action_label="Open risk register",
     )
+
+
+def is_risks_review_complete(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Risks review" Foundations completion milestone.
+
+    PID §12.3's own wording for this milestone is narrow: "Complete when no
+    AI-suggested draft risk remains awaiting customer review. Do not
+    require 'no risks exist'." - it says nothing about every confirmed
+    high/critical risk having a linked remediation action. That additional
+    condition is `_risks_area`'s OWN, separate STATE_NEEDS_ATTENTION signal
+    (an unaddressed confirmed high/critical risk with no remediation link)
+    - a real, concrete "this needs a decision" signal in its own right, but
+    not part of what PID §12.3 asks THIS milestone to require. Judgement
+    call (documented in the M007-WI4 dispatch report): both
+    STATE_NEEDS_ATTENTION and STATE_READY count as complete here, since
+    both represent "the AI-suggested-draft review step itself has been
+    done" - only STATE_NOT_STARTED (no risk recorded at all - same
+    zero-row reasoning as Assets, above) and STATE_IN_PROGRESS (a draft is
+    still pending review) are incomplete.
+    """
+    return _risks_area(organisation)["state"] in (STATE_NEEDS_ATTENTION, STATE_READY)
 
 
 def _evidence_area(organisation) -> dict:
@@ -554,6 +605,42 @@ def _security_state_area(organisation) -> dict:
     )
 
 
+def is_governance_complete(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Governance roles" Foundations completion
+    milestone, extracted out of `_governance_workplace_area` below (PID §24
+    "if reuse requires a small refactor to extract pure resolver
+    functions, that is authorised") so there is exactly one definition of
+    "all required governance roles assigned to active people", shared by
+    the Overview area and this milestone rather than a second, subtly
+    different copy of the same condition.
+
+    True only when every `GovernanceRoleAssignment.ROLE_CHOICES` role has
+    an assignment, AND none of those assignments is to a person who has
+    since been marked inactive (`assignee_is_inactive` - reused directly
+    from governance.models, never re-derived).
+    """
+    assignments = list(
+        GovernanceRoleAssignment.objects.filter(organisation=organisation).select_related(
+            "person"
+        )
+    )
+    if len(assignments) != len(GovernanceRoleAssignment.ROLE_CHOICES):
+        return False
+    return not any(a.assignee_is_inactive for a in assignments)
+
+
+def is_workplace_complete(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Workplace" Foundations completion milestone,
+    extracted out of `_governance_workplace_area` below for the same
+    "one definition" reason as `is_governance_complete` above.
+
+    True when at least one active `Workplace` row is recorded.
+    """
+    return Workplace.objects.filter(organisation=organisation, is_active=True).exists()
+
+
 def _governance_workplace_area(organisation) -> dict:
     """
     Not started: no `GovernanceRoleAssignment` and no `Workplace` row
@@ -568,7 +655,13 @@ def _governance_workplace_area(organisation) -> dict:
         marked inactive (`GovernanceRoleAssignment.assignee_is_inactive` -
         reused directly from governance.models, never re-derived).
     Ready: all three governance roles are assigned to active people, and
-        at least one active workplace is recorded.
+        at least one active workplace is recorded. Reuses
+        `is_governance_complete`/`is_workplace_complete` above (PID §24) -
+        note that by the time this branch is reached, `inactive_assignees`
+        (below) is already known empty, so `is_governance_complete`'s own
+        "no inactive assignee" clause is trivially satisfied here and this
+        is exactly equivalent to the previous inline
+        `all_roles_assigned and active_workplace_count > 0` check.
     In progress: anything short of Ready that isn't Not started/Needs
         attention - e.g. roles assigned but no workplace recorded yet, or
         vice versa.
@@ -609,8 +702,7 @@ def _governance_workplace_area(organisation) -> dict:
             count=len(inactive_assignees),
         )
 
-    all_roles_assigned = len(assignments) == len(GovernanceRoleAssignment.ROLE_CHOICES)
-    if all_roles_assigned and active_workplace_count > 0:
+    if is_governance_complete(organisation) and is_workplace_complete(organisation):
         return _area(
             key="governance_workplace",
             title="Governance / workplace",
@@ -638,6 +730,48 @@ def _governance_workplace_area(organisation) -> dict:
 # ---------------------------------------------------------------------------
 # Worked example 2 of 2 (dispatch instructions): Policy.
 # ---------------------------------------------------------------------------
+def has_approved_policy(organisation) -> bool:
+    """
+    M007-WI4 (PID §12.3) "Information Security Policy" Foundations
+    completion milestone. Deliberately NARROWER than `_policy_area`'s own
+    `state` (see that function's docstring): PID §12.3 requires this
+    milestone to be true the moment ANY approved `PolicyVersion` exists,
+    even if that approved version's review has since gone overdue ("A
+    later overdue review may generate Needs Attention, but must not
+    rewrite the fact that the Foundation policy milestone was completed").
+    `_policy_area`'s `state` conflates "approved and current" (STATE_READY)
+    with "approved but overdue" (STATE_NEEDS_ATTENTION) - reusing that
+    `state` field for completion would incorrectly flip an
+    overdue-but-approved policy back to "incomplete", so this predicate is
+    extracted separately rather than reusing `state`.
+    """
+    return PolicyVersion.objects.filter(
+        organisation=organisation, status=PolicyVersion.STATUS_APPROVED
+    ).exists()
+
+
+def is_approved_policy_review_overdue(organisation) -> bool:
+    """
+    The Needs Attention signal PID §14 asks for alongside the completion
+    milestone above: whether the CURRENT approved policy's own
+    `next_review_date` has passed. Extracted out of `_policy_area` below
+    (PID §24) so both this module's Overview area and M007-WI4's Needs
+    Attention derivation share exactly one overdue definition - never two.
+    False (not overdue) whenever no approved version exists at all, since
+    "overdue" is only meaningful once there is something to review.
+    """
+    approved = list(
+        PolicyVersion.objects.filter(
+            organisation=organisation, status=PolicyVersion.STATUS_APPROVED
+        )
+    )
+    if not approved:
+        return False
+    latest_approved = max(approved, key=lambda v: v.version_number)
+    today = datetime.date.today()
+    return latest_approved.next_review_date is not None and latest_approved.next_review_date < today
+
+
 def _policy_area(organisation) -> dict:
     """
     Not started: no `PolicyVersion` exists at all.
@@ -654,6 +788,11 @@ def _policy_area(organisation) -> dict:
         choice named in the dispatch instructions: reuse the field M004
         already has for exactly this purpose, rather than inventing a new
         staleness threshold PID does not ask for.
+
+    Reuses `has_approved_policy`/`is_approved_policy_review_overdue` above
+    (PID §24) rather than duplicating either condition a third time; only
+    the "current version number for the detail string" computation stays
+    local here, since neither extracted predicate needs it.
     """
     versions = list(PolicyVersion.objects.filter(organisation=organisation))
     if not versions:
@@ -667,8 +806,7 @@ def _policy_area(organisation) -> dict:
             next_action_label="Generate policy",
         )
 
-    approved = [v for v in versions if v.status == PolicyVersion.STATUS_APPROVED]
-    if not approved:
+    if not has_approved_policy(organisation):
         return _area(
             key="policy",
             title="Policy",
@@ -679,9 +817,10 @@ def _policy_area(organisation) -> dict:
             next_action_label="Review draft policy",
         )
 
+    approved = [v for v in versions if v.status == PolicyVersion.STATUS_APPROVED]
     latest_approved = max(approved, key=lambda v: v.version_number)
-    today = datetime.date.today()
-    if latest_approved.next_review_date is not None and latest_approved.next_review_date < today:
+
+    if is_approved_policy_review_overdue(organisation):
         return _area(
             key="policy",
             title="Policy",
@@ -771,4 +910,20 @@ def build_overview(organisation) -> list[dict]:
     ]
 
 
-__all__ = ["build_overview", "STATE_LABELS"]
+__all__ = [
+    "build_overview",
+    "STATE_LABELS",
+    "STATE_NOT_STARTED",
+    "STATE_NEEDS_ATTENTION",
+    "STATE_IN_PROGRESS",
+    "STATE_READY",
+    # M007-WI4 (PID §12.3/§24) - Foundations completion milestone
+    # predicates, extracted/reused from this module's own Overview areas.
+    "is_organisation_profile_complete",
+    "is_governance_complete",
+    "is_workplace_complete",
+    "is_assets_review_complete",
+    "is_risks_review_complete",
+    "has_approved_policy",
+    "is_approved_policy_review_overdue",
+]
