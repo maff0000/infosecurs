@@ -483,6 +483,162 @@ a:hover { color: var(--color-primary-dark); }
 .auth-disclosure > .field,
 .auth-disclosure > form { margin-top: var(--space-3); }
 
+/* --- Application shell (M007-WI2 PID §2.1/§18) ---
+   One canonical authenticated shell: top bar + left sidebar + single main
+   region, replacing templates/base.html's old flat 7-item top nav for
+   every organisation-scoped page (templates/base.html itself is
+   unchanged and keeps serving the four pre-organisation-selection pages
+   - see that file's own comment). `.app-header`/`.app-header__bar`/
+   `.app-header__brand`/`.app-header__context*`/`.app-header__nav`/
+   `.app-header__logout`/`.app-header__user`/`.link-button` above are
+   REUSED verbatim, not forked, for the shell's own top bar - in
+   particular `.app-header__context-name` is the exact same selector a
+   real-browser regression test (core/tests/
+   test_responsive_text_regression.py) already measures, so keeping the
+   class unchanged (only its markup's surrounding structure moved) keeps
+   that proof valid without touching the test. */
+.shell-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 40px;
+  height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  cursor: pointer;
+  flex: none;
+}
+.shell-hamburger__bar {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--color-text);
+  border-radius: 1px;
+}
+
+.shell-account {
+  /* `flex-wrap: wrap` here (unlike the plain `.app-header__nav` this
+     class is always paired with in application_shell.html) closes a
+     previously-flagged, pre-existing, out-of-scope defect noted by
+     several M006 narrow-viewport regression tests' own comments (e.g.
+     key_assets/tests/test_narrow_viewport_regression.py's `USERNAME`
+     comment): a sufficiently long username alone, independent of any
+     page content, overflowed the header at 375px because the account
+     group had no wrap of its own. Scoped to `.shell-account` only -
+     `.app-header__nav` alone (templates/base.html's own pre-organisation
+     pages) is intentionally left exactly as it was. */
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.shell-account__placeholder {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  cursor: default;
+}
+
+.shell-body {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 61px);
+}
+
+.shell-sidebar {
+  flex: none;
+  width: 240px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-3);
+}
+
+.shell-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.shell-nav__children {
+  list-style: none;
+  margin: var(--space-1) 0 var(--space-2) var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.shell-nav__link {
+  display: block;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shell-nav__link:hover { background: var(--color-bg); }
+.shell-nav__link--child {
+  font-weight: 500;
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+}
+.shell-nav__link[aria-current="page"] {
+  background: var(--color-primary-tint);
+  color: var(--color-primary-dark);
+}
+
+.shell-main {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.shell-overlay {
+  display: none;
+}
+
+/* --- Narrow viewport: sidebar becomes a hamburger-triggered drawer
+   (PID §16.2). This codebase's one existing responsive breakpoint
+   (640px, already used immediately below for the pre-existing rules) is
+   reused rather than introducing a second breakpoint value. */
+@media (max-width: 640px) {
+  .shell-hamburger { display: flex; }
+
+  .shell-body { position: relative; }
+
+  .shell-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  }
+  .shell-sidebar.shell-sidebar--open {
+    transform: translateX(0);
+  }
+
+  .shell-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 50;
+  }
+  .shell-overlay[hidden] { display: none; }
+}
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .app-header__bar { padding: var(--space-3); }

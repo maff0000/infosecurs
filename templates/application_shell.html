@@ -1,0 +1,96 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ product_name }}{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'organisations/css/app.css' %}">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    {# One canonical authenticated application shell (PID §2.1/§18): every #}
+    {# organisation-scoped template extends this file instead of copying #}
+    {# its own menu/account/organisation-header markup. The pre-organisation- #}
+    {# selection pages (login, organisations list/create, the identity #}
+    {# unsafe-link page) deliberately keep extending templates/base.html - #}
+    {# see that file's own comment and this dispatch's report for why. #}
+    <header class="app-header">
+        <div class="app-header__bar">
+            <button type="button"
+                    class="shell-hamburger"
+                    id="shell-nav-toggle"
+                    aria-expanded="false"
+                    aria-controls="shell-sidebar"
+                    aria-label="Open navigation menu">
+                <span class="shell-hamburger__bar" aria-hidden="true"></span>
+                <span class="shell-hamburger__bar" aria-hidden="true"></span>
+                <span class="shell-hamburger__bar" aria-hidden="true"></span>
+            </button>
+            <a class="app-header__brand" href="{% url 'home' %}">{{ product_name }}</a>
+            {% if organisation %}
+                <span class="app-header__context" aria-label="Current organisation">
+                    <span class="app-header__context-label">Organisation</span>
+                    <span class="app-header__context-name">{{ organisation.name }}</span>
+                </span>
+            {% endif %}
+            <div class="app-header__nav shell-account" aria-label="Account">
+                <span class="app-header__user">{{ user.username }}</span>
+                <button type="button" class="shell-account__placeholder" disabled
+                        aria-label="Account management (handled outside Infosecurs today)">Account</button>
+                <form method="post" action="{% url 'logout' %}" class="app-header__logout">
+                    {% csrf_token %}
+                    <button type="submit" class="link-button">Log out</button>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <div class="shell-body">
+        <div class="shell-overlay" id="shell-nav-overlay" hidden></div>
+
+        {# Rendered once (PID §16.3) - the exact same markup is the desktop #}
+        {# sidebar and the narrow-viewport drawer; only CSS/the small script #}
+        {# below change how it is *presented*, never what is in it or who #}
+        {# is entitled to see it. `nav_tree` comes from #}
+        {# `entitlements.context_processors.navigation`, itself built #}
+        {# entirely from `ProductArea` + `has_capability` #}
+        {# (`entitlements/navigation.py`) - never a hard-coded list here. #}
+        <nav class="shell-sidebar" id="shell-sidebar" aria-label="Primary">
+            <ul class="shell-nav">
+                {% for item in nav_tree %}
+                    <li class="shell-nav__item{% if item.has_active_descendant %} shell-nav__item--open{% endif %}">
+                        <a class="shell-nav__link"
+                           href="{{ item.url }}"
+                           {% if item.is_active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                        {% if item.children %}
+                            <ul class="shell-nav__children">
+                                {% for child in item.children %}
+                                    <li class="shell-nav__item">
+                                        <a class="shell-nav__link shell-nav__link--child"
+                                           href="{{ child.url }}"
+                                           {% if child.is_active %}aria-current="page"{% endif %}>{{ child.label }}</a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </nav>
+
+        <main id="main-content" class="app-main shell-main">
+            {% if messages %}
+                <ul class="messages" role="status">
+                    {% for message in messages %}
+                        <li class="message message--{{ message.tags }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="{% static 'organisations/js/shell.js' %}"></script>
+</body>
+</html>

@@ -107,6 +107,13 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.product",
                 "core.context_processors.active_nav",
+                # M007-WI2 (docs/pids/M007-DASHBOARD-SHELL-ENTITLEMENTS-
+                # FOUNDATION-METRICS.md §4.4/§18): builds `nav_tree` for
+                # `templates/application_shell.html`'s sidebar. Listed
+                # after `active_nav` since it is the newer, WI2-owned
+                # concern; both remain independent and neither depends on
+                # the other's context key.
+                "entitlements.context_processors.navigation",
             ],
         },
     },
