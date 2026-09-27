@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from governance import services
@@ -10,6 +11,7 @@ from governance.models import GovernanceRoleAssignment, OrganisationPerson
 
 
 @login_required
+@require_capability()
 def role_assignments(request, organisation_id):
     """
     PID §8.1's "Role UX": one page listing the three governance roles and
@@ -136,6 +138,7 @@ def role_assignments(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def edit_my_details(request, organisation_id):
     """
     PID §3 user outcome #4 ("confirm/edit their name and job title") -

@@ -11,12 +11,14 @@ from django.core.paginator import Paginator
 from django.shortcuts import render
 
 from activity.models import ActivityEvent
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 PAGE_SIZE = 50
 
 
 @login_required
+@require_capability()
 def activity_list(request, organisation_id):
     """
     Tenant-scoped, paginated, read-only activity list for one organisation.

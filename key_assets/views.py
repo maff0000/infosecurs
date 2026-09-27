@@ -4,6 +4,7 @@ from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
 from organisations.models import OrganisationProfile
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from key_assets.forms import KeyAssetForm
@@ -33,6 +34,7 @@ def _get_member_key_asset_or_404(user, organisation_id, asset_id):
 
 
 @login_required
+@require_capability()
 def key_asset_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -62,6 +64,7 @@ def key_asset_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def key_asset_create(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -94,6 +97,7 @@ def key_asset_create(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def key_asset_edit(request, organisation_id, asset_id):
     organisation, asset = _get_member_key_asset_or_404(
         request.user, organisation_id, asset_id
@@ -119,6 +123,7 @@ def key_asset_edit(request, organisation_id, asset_id):
 
 
 @login_required
+@require_capability()
 def key_asset_detail(request, organisation_id, asset_id):
     """
     Asset-specific protection/exposure assessment (PID.md M002 §0.5).
@@ -204,6 +209,7 @@ def key_asset_detail(request, organisation_id, asset_id):
 
 
 @login_required
+@require_capability()
 def key_asset_confirm(request, organisation_id, asset_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -217,6 +223,7 @@ def key_asset_confirm(request, organisation_id, asset_id):
 
 
 @login_required
+@require_capability()
 def key_asset_dismiss(request, organisation_id, asset_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

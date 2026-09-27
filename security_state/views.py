@@ -12,6 +12,7 @@ from django.http import Http404
 from django.shortcuts import render
 
 from activity.models import ActivityEvent
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 from remediation.models import RemediationAction
 from security_baseline.catalogue import CATALOGUE_BY_KEY
@@ -19,6 +20,7 @@ from security_state.services import get_security_state
 
 
 @login_required
+@require_capability()
 def security_state_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -33,6 +35,7 @@ def security_state_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def security_state_detail(request, organisation_id, control_key):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)

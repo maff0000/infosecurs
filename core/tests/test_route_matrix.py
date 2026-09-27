@@ -94,18 +94,35 @@ clearly"):
    real GET and a real POST (empty body) first. A `405` response marks
    that method as categorically unavailable for the route (an explicit
    `HttpResponseNotAllowed` in the view); anything else (200, 302, 404 for
-   a missing placeholder object) marks it as accepted. This observed
-   baseline is then used to compute what the WRONG-tenant attempt below is
-   expected to return - a `405` route must still return `405` for anyone,
-   since Django raises it before any tenant check ever runs, and that is
-   not a leak (it reveals nothing about whether org_a exists).
+   a missing placeholder object) marks it as accepted. This owner baseline
+   is captured for diagnostic/failure-message context only - it no longer
+   determines what the WRONG-tenant attempt below should return (see the
+   M007-WI3 note immediately below for why that changed since PID §11a/
+   this file were first written).
+
+   M007-WI3 note (`docs/pids/M007-DASHBOARD-SHELL-ENTITLEMENTS-FOUNDATION-
+   METRICS.md` §9): every organisation-scoped view is now wrapped in
+   `entitlements.decorators.require_capability`, whose own tenant-
+   membership check (`organisations.views.get_member_organisation_or_404`,
+   called before the view body ever runs) sits AHEAD of any view-level
+   `if request.method != "POST": return HttpResponseNotAllowed(...)` check.
+   Before WI3, a wrong-tenant request hit the view's own method check
+   FIRST, so a POST-only route rejected a non-member's GET with `405`
+   (revealing nothing about whether org_a exists) exactly like it would for
+   anyone. WI3 deliberately moves the tenant gate earlier than that: a
+   non-member's request - GET or POST - is now denied by
+   `require_capability` itself, before the view's own method policy is
+   ever consulted, so the wrong-tenant expectation is unconditionally `404`
+   regardless of which method the route accepts for a genuine member. This
+   is a stronger, earlier, uniform tenant boundary, not a regression - see
+   `entitlements/tests/test_decorators.py`'s own tenant/tier composition
+   tests for the isolated proof of the same property.
 
 5. For every route, four requests are made and asserted:
      a. anonymous GET  -> 302 to the login page, never served.
      b. anonymous POST -> 302 to the login page, never served.
      c. `client_b` (a member of `org_b` only) GET  on org_a's URL -> never
-        200; matches the method-based expectation from point 4 (404, or
-        405 if that method is rejected for everyone).
+        200, always 404 (point 4's M007-WI3 note).
      d. `client_b` POST on org_a's URL -> same as (c) for POST.
 
    Every route this sweep walks becomes its own parametrized test id (see
@@ -252,14 +269,18 @@ def test_organisation_scoped_route_requires_auth_and_tenant_scope(
 
     # Baseline: org_a's own member, to learn (per method) whether this
     # route rejects that method outright for everyone (405) - see module
-    # docstring point 4. Never asserted against directly beyond that - a
-    # 404 here just means the fabricated secondary id does not exist,
-    # which is expected and does not weaken the cross-tenant proof below.
+    # docstring point 4. Captured only for the assertion failure messages
+    # below (a 404 here just means the fabricated secondary id does not
+    # exist, which is expected) - since M007-WI3, it no longer determines
+    # the wrong-tenant expectation (see point 4's own M007-WI3 note: the
+    # tenant gate now runs before any view-level method check, for every
+    # route, so a non-member is always denied with 404 regardless of
+    # method).
     owner_get = client_a.get(url)
     owner_post = client_a.post(url, data={})
 
-    expected_get = 405 if owner_get.status_code == 405 else 404
-    expected_post = 405 if owner_post.status_code == 405 else 404
+    expected_get = 404
+    expected_post = 404
 
     # (c)/(d) wrong-tenant - a member of org_b only, using org_a's id.
     cross_get = client_b.get(url)

@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from evidence import link_services, services
@@ -47,6 +48,7 @@ def _get_supersedes_target(organisation, request):
 
 
 @login_required
+@require_capability()
 def evidence_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -62,6 +64,7 @@ def evidence_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def evidence_upload(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -103,6 +106,7 @@ def evidence_upload(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def evidence_add_reference(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -140,6 +144,7 @@ def evidence_add_reference(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def evidence_detail(request, organisation_id, evidence_id):
     organisation, item = _get_member_evidence_item_or_404(
         request.user, organisation_id, evidence_id
@@ -151,6 +156,7 @@ def evidence_detail(request, organisation_id, evidence_id):
 
 
 @login_required
+@require_capability()
 def evidence_download(request, organisation_id, evidence_id):
     """
     Private, authenticated, tenant-scoped file download (PID §9/§22).
@@ -186,6 +192,7 @@ def evidence_download(request, organisation_id, evidence_id):
 
 
 @login_required
+@require_capability()
 def evidence_withdraw(request, organisation_id, evidence_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -202,6 +209,7 @@ def evidence_withdraw(request, organisation_id, evidence_id):
 
 
 @login_required
+@require_capability()
 def evidence_link_control(request, organisation_id, evidence_id):
     """
     Link this evidence item to a catalogue control (PID §6.4, §18).
@@ -256,6 +264,7 @@ def evidence_link_control(request, organisation_id, evidence_id):
 
 
 @login_required
+@require_capability()
 def evidence_unlink_control(request, organisation_id, evidence_id, link_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

@@ -16,6 +16,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from activity.models import ActivityEvent
@@ -49,6 +50,7 @@ def _get_member_response_or_404(user, organisation_id, response_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_list(request, organisation_id):
     """Organisation-level questionnaire overview: the paste-a-question form
     plus every question asked so far, most recent first."""
@@ -89,6 +91,7 @@ def questionnaire_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_analyse(request, organisation_id):
     """Create a `QuestionnaireQuestion` from the pasted text, then run the
     full interpret -> ground -> derive-outcome -> draft pipeline (PID §22:
@@ -142,6 +145,7 @@ def questionnaire_analyse(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_response_detail(request, organisation_id, response_id):
     """One specific `QuestionnaireResponse`'s outcome, draft text, selected
     canonical keys and review warnings, plus (PID §16, §25, §26) the
@@ -164,6 +168,7 @@ def questionnaire_response_detail(request, organisation_id, response_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_response_accept(request, organisation_id, response_id):
     """PID §17/§18: accept a draft response as the organisation's external
     answer. POST only, mirroring `questionnaire_analyse`'s
@@ -187,6 +192,7 @@ def questionnaire_response_accept(request, organisation_id, response_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_response_edit(request, organisation_id, response_id):
     """PID §17: edit a draft response's wording only. GET+POST, mirroring
     `policy.views.policy_edit`'s exact shape."""
@@ -228,6 +234,7 @@ def questionnaire_response_edit(request, organisation_id, response_id):
 
 
 @login_required
+@require_capability()
 def questionnaire_response_regenerate(request, organisation_id, response_id):
     """PID §18: create a brand-new response attempt for the SAME question
     as `response`, leaving `response` itself completely unchanged

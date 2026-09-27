@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_VERSION
 from security_baseline.forms import BaselineAssessmentForm, answer_field_name, note_field_name
@@ -10,6 +11,7 @@ from security_baseline.services import save_baseline_answers
 
 
 @login_required
+@require_capability()
 def baseline_view(request, organisation_id):
     """
     View/answer the organisation's security baseline (PID §6).

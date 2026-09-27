@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from workplace import services
@@ -52,6 +53,7 @@ def _get_member_workplace_or_404(user, organisation_id, workplace_id):
 # Onboarding wizard (PID §9.1)
 # ---------------------------------------------------------------------------
 @login_required
+@require_capability()
 def workplace_onboarding_start(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -72,6 +74,7 @@ def workplace_onboarding_start(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_onboarding_all_remote(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -101,6 +104,7 @@ def workplace_onboarding_all_remote(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_onboarding_one_office(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -130,6 +134,7 @@ def workplace_onboarding_one_office(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_onboarding_shared_coworking(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -159,6 +164,7 @@ def workplace_onboarding_shared_coworking(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_onboarding_office_and_home(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -204,6 +210,7 @@ def workplace_onboarding_office_and_home(request, organisation_id):
 # General list / create / edit / deactivate / activate
 # ---------------------------------------------------------------------------
 @login_required
+@require_capability()
 def workplace_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -218,6 +225,7 @@ def workplace_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_create(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -248,6 +256,7 @@ def workplace_create(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def workplace_edit(request, organisation_id, workplace_id):
     organisation, workplace = _get_member_workplace_or_404(
         request.user, organisation_id, workplace_id
@@ -280,6 +289,7 @@ def workplace_edit(request, organisation_id, workplace_id):
 
 
 @login_required
+@require_capability()
 def workplace_deactivate(request, organisation_id, workplace_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -292,6 +302,7 @@ def workplace_deactivate(request, organisation_id, workplace_id):
 
 
 @login_required
+@require_capability()
 def workplace_activate(request, organisation_id, workplace_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

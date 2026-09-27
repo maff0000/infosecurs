@@ -82,6 +82,39 @@ def client_b(user_b, member_b):
     return c
 
 
+@pytest.fixture
+def user_ab(make_user):
+    """A third user, deliberately a genuine member of BOTH `org_a` and
+    `org_b` (M007-WI3, PID §25.4's "stale/cross-organisation session
+    alignment" scenario) - distinct from `user_a`/`user_b`, which are each
+    scoped to exactly one organisation, so a decorator test proving
+    realignment between two organisations a user is LEGITIMATELY a member
+    of is never confused with the separate "not a member at all" tenant-
+    isolation tests those single-organisation fixtures already cover."""
+    return make_user("user_ab")
+
+
+@pytest.fixture
+def member_ab_in_a(db, org_a, user_ab):
+    return OrganisationMembership.objects.create(
+        organisation=org_a, user=user_ab, role=OrganisationMembership.ROLE_OWNER
+    )
+
+
+@pytest.fixture
+def member_ab_in_b(db, org_b, user_ab):
+    return OrganisationMembership.objects.create(
+        organisation=org_b, user=user_ab, role=OrganisationMembership.ROLE_OWNER
+    )
+
+
+@pytest.fixture
+def client_ab(user_ab, member_ab_in_a, member_ab_in_b):
+    c = Client()
+    c.force_login(user_ab)
+    return c
+
+
 def set_session_tier(client, user, tier, organisation_id=None):
     """
     Overwrites the given (already-logged-in) test client's
