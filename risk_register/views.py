@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from activity.models import ActivityEvent
 from activity.services import record_event
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from risk_register.forms import RiskEditForm
@@ -46,6 +47,7 @@ def _get_member_risk_or_404(user, organisation_id, risk_id):
 
 
 @login_required
+@require_capability()
 def risk_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -61,6 +63,7 @@ def risk_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def risk_generate(request, organisation_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -93,6 +96,7 @@ def risk_generate(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def risk_detail(request, organisation_id, risk_id):
     organisation, risk = _get_member_risk_or_404(request.user, organisation_id, risk_id)
     return render(
@@ -103,6 +107,7 @@ def risk_detail(request, organisation_id, risk_id):
 
 
 @login_required
+@require_capability()
 def risk_edit(request, organisation_id, risk_id):
     organisation, risk = _get_member_risk_or_404(request.user, organisation_id, risk_id)
 
@@ -173,6 +178,7 @@ def risk_edit(request, organisation_id, risk_id):
 
 
 @login_required
+@require_capability()
 def risk_confirm(request, organisation_id, risk_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -191,6 +197,7 @@ def risk_confirm(request, organisation_id, risk_id):
 
 
 @login_required
+@require_capability()
 def risk_dismiss(request, organisation_id, risk_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

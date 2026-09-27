@@ -14,6 +14,7 @@ from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from activity.models import ActivityEvent
@@ -67,6 +68,7 @@ def _approval_eligibility(organisation, user):
 
 
 @login_required
+@require_capability()
 def policy_detail(request, organisation_id):
     """Organisation-level policy overview: the most recent `PolicyVersion`
     (if any) shown in full, plus a list of every version for history/
@@ -93,6 +95,7 @@ def policy_detail(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def policy_generate(request, organisation_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -119,6 +122,7 @@ def policy_generate(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def policy_version_detail(request, organisation_id, version_id):
     """One specific `PolicyVersion`'s full content, plus the actions
     available to this user for this version's current status (edit/
@@ -148,6 +152,7 @@ def policy_version_detail(request, organisation_id, version_id):
 
 
 @login_required
+@require_capability()
 def policy_edit(request, organisation_id, version_id):
     """
     Section-based draft editor (PID §16). Only a `status=draft` version may
@@ -378,12 +383,14 @@ def _approve(request, organisation_id, version_id, *, mode):
 
 
 @login_required
+@require_capability()
 def policy_approve_direct(request, organisation_id, version_id):
     """PID §17.1 - Account Holder is also the assigned Policy Authoriser."""
     return _approve(request, organisation_id, version_id, mode="direct")
 
 
 @login_required
+@require_capability()
 def policy_approve_external(request, organisation_id, version_id):
     """PID §17.2 - a different named Policy Authoriser; the Account Holder
     records that approval was obtained externally."""
@@ -391,6 +398,7 @@ def policy_approve_external(request, organisation_id, version_id):
 
 
 @login_required
+@require_capability()
 def policy_new_draft(request, organisation_id, version_id):
     """PID §15 - the only way to "edit" an approved policy's content: copy
     it into a brand new draft version, leaving the approved version
@@ -422,6 +430,7 @@ def policy_new_draft(request, organisation_id, version_id):
 
 
 @login_required
+@require_capability()
 def policy_download(request, organisation_id, version_id):
     """
     Private, authenticated, tenant-scoped approved-artefact download (PID

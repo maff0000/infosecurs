@@ -4,6 +4,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
 import governance.services
+from entitlements.decorators import require_capability
 
 from organisations.forms import OrganisationCreateForm, OrganisationProfileForm
 from organisations.models import AuditEvent, Organisation, OrganisationMembership, OrganisationProfile
@@ -61,6 +62,7 @@ def organisation_create(request):
 
 
 @login_required
+@require_capability()
 def organisation_detail(request, organisation_id):
     """
     The Overview / journey page (M006 PID §6). This used to render a flat
@@ -83,6 +85,7 @@ def organisation_detail(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def organisation_hub(request, organisation_id):
     """
     The "Organisation" primary-nav landing page (M006 PID §5): Profile,
@@ -102,6 +105,7 @@ def organisation_hub(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def organisation_profile(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)

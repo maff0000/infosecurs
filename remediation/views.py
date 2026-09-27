@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from activity.models import ActivityEvent
 from activity.services import record_event
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 from remediation import services
 from remediation.forms import ActionEvidenceAttachForm, RemediationActionForm
@@ -37,6 +38,7 @@ def _get_member_action_or_404(user, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_list(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -70,6 +72,7 @@ def action_list(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def action_create(request, organisation_id):
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
@@ -105,6 +108,7 @@ def action_create(request, organisation_id):
 
 
 @login_required
+@require_capability()
 def action_create_from_risk(request, organisation_id, risk_id):
     """
     Explicit "create action from risk" flow (PID §13):
@@ -163,6 +167,7 @@ def action_create_from_risk(request, organisation_id, risk_id):
 
 
 @login_required
+@require_capability()
 def action_detail(request, organisation_id, action_id):
     organisation, action = _get_member_action_or_404(request.user, organisation_id, action_id)
     evidence_links = action.evidence_links.select_related("evidence", "linked_by")
@@ -180,6 +185,7 @@ def action_detail(request, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_attach_evidence(request, organisation_id, action_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -208,6 +214,7 @@ def action_attach_evidence(request, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_edit(request, organisation_id, action_id):
     organisation, action = _get_member_action_or_404(request.user, organisation_id, action_id)
 
@@ -229,6 +236,7 @@ def action_edit(request, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_start(request, organisation_id, action_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -256,6 +264,7 @@ def action_start(request, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_complete(request, organisation_id, action_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -293,6 +302,7 @@ def action_complete(request, organisation_id, action_id):
 
 
 @login_required
+@require_capability()
 def action_accept(request, organisation_id, action_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

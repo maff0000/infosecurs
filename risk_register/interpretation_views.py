@@ -26,6 +26,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import redirect
 
+from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
 from ai_platform.interpretation_orchestration import InterpretationFailed
@@ -33,6 +34,7 @@ from risk_register.interpretation_service import interpret_draft_risks
 
 
 @login_required
+@require_capability()
 def risk_interpret(request, organisation_id):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
