@@ -10,3 +10,21 @@ pytest-django==4.14.0
 # check is not reliable for asserting rendered text content - pypdf's
 # `extract_text()` correctly reconstructs the full run.
 pypdf==6.19.0
+# Test-only: real-browser (Chromium) acceptance testing (PID §16/§19/§28 -
+# real-browser drawer/keyboard/XSS-execution proof, WI6 browser acceptance).
+# Python package only - the Chromium browser binary itself is deliberately
+# NEVER installed as part of any image build (this codebase's single
+# Dockerfile is shared by both the dev/CI image and the exact-SHA release
+# image - Central Architecture's "avoid introducing browser/runtime
+# dependencies into the production application image unless genuinely
+# required" instruction). `playwright install --with-deps chromium` is a
+# runtime-only step, run against an already-built container's writable
+# layer (see docs/runbooks/BROWSER-ACCEPTANCE-CAPABILITY.md), never part of
+# this pinned, hash-locked dependency graph or any `RUN` line in the
+# Dockerfile. Every existing `*_narrow_viewport_regression.py` /
+# `test_responsive_text_regression.py` / `test_badge_narrow_viewport_
+# regression.py` test already gates on `pytest.importorskip("playwright")`
+# and is SKIPPED wherever this package is absent - installing it here is
+# what turns those tests from skipped to genuinely running, everywhere this
+# lock file is installed (dev image, CI).
+playwright==1.63.0
