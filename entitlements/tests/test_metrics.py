@@ -618,3 +618,74 @@ class TestUnresolvableFoundationRequirement:
             get_foundations_requirement_states(org_a)
         with pytest.raises(UnresolvableFoundationRequirementError):
             get_foundational_security_posture(org_a)
+
+
+# ---------------------------------------------------------------------------
+# Methodology version isolation (PID §10.3, Central Architecture correction
+# to WI4) - an active `FoundationRequirement` row belonging to a DIFFERENT
+# `methodology_version` must never be consumed by a calculation that itself
+# reports `methodology_version=FOUNDATION_METRIC_VERSION` for its result,
+# even though that row is `is_active=True` too.
+# ---------------------------------------------------------------------------
+class TestMethodologyVersionIsolation:
+    def test_foreign_version_active_row_never_affects_any_of_the_four_functions(self, org_a):
+        # A realistic, non-trivial baseline that engages both
+        # BASELINE_CONTROL and DERIVED_MILESTONE resolvers, so all four
+        # functions below have meaningful, non-zero/non-empty state to
+        # compare before and after - not just "doesn't crash".
+        _set_baseline_answers(
+            org_a,
+            {
+                "mfa_user_accounts": ANSWER_YES,
+                "mfa_privileged_accounts": ANSWER_NO,
+                "endpoint_protection": ANSWER_PARTIAL,
+                "patching": ANSWER_UNKNOWN,
+                "device_encryption": ANSWER_YES,
+                "backups": ANSWER_NOT_APPLICABLE,
+            },
+        )
+        _make_full_governance(org_a)
+        _make_active_workplace(org_a)
+        _make_approved_policy(org_a)
+
+        states_before = get_foundations_requirement_states(org_a)
+        posture_before = get_foundational_security_posture(org_a)
+        completion_before = get_security_foundations_completion(org_a)
+        needs_attention_before = get_needs_attention(org_a)
+        assert len(states_before) == 18  # the seeded v1 row count (PID §10.2/§22)
+
+        baseline_area = ProductArea.objects.get(code="baseline")
+        FoundationRequirement.objects.create(
+            code="test_future_version_requirement",
+            title="Deliberately future-methodology test requirement",
+            product_area=baseline_area,
+            methodology_version="2099-01-v2",  # deliberately NOT FOUNDATION_METRIC_VERSION
+            requirement_kind=RequirementKind.BASELINE_CONTROL,
+            # Deliberately unregistered in BASELINE_RESOLVERS/MILESTONE_RESOLVERS
+            # too: if version filtering ever regressed and let this row
+            # through, every call below would raise
+            # UnresolvableFoundationRequirementError instead of silently
+            # changing a result - a second, independent proof that version
+            # filtering (not some other accident) is what excludes it.
+            source_key="not_a_real_registered_source_key_future_version",
+            min_package_tier=1,
+            counts_toward_posture=True,
+            counts_toward_completion=True,
+            security_weight=5,
+            is_active=True,
+        )
+
+        states_after = get_foundations_requirement_states(org_a)
+        posture_after = get_foundational_security_posture(org_a)
+        completion_after = get_security_foundations_completion(org_a)
+        needs_attention_after = get_needs_attention(org_a)
+
+        # The foreign-version row must not appear in the returned list at all.
+        assert len(states_after) == 18
+        assert "test_future_version_requirement" not in {state.code for state in states_after}
+
+        # And none of the four functions' results changed in any way.
+        assert states_after == states_before
+        assert posture_after == posture_before
+        assert completion_after == completion_before
+        assert needs_attention_after == needs_attention_before

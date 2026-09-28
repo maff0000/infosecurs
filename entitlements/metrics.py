@@ -288,6 +288,15 @@ def get_foundations_requirement_states(organisation) -> list[RequirementState]:
     build their results from exactly this list - never a second,
     independently recomputed pass over the same rows.
 
+    Filtered to `methodology_version=FOUNDATION_METRIC_VERSION` as well as
+    `is_active=True` (PID §10.3, Central Architecture correction post-WI4):
+    every result this module returns reports `methodology_version:
+    FOUNDATION_METRIC_VERSION`, so the rows it consumes must be bound to
+    that exact version - never merely "active" - otherwise a future
+    rollout window where both an old and a new version's rows are
+    simultaneously active could silently blend two methodologies' rows
+    into one calculation while still claiming a single version's name.
+
     Bounded query cost regardless of the number of requirement rows: one
     query for the active+ordered `FoundationRequirement` rows (with
     `product_area` select_related to avoid a per-row FK query), one bounded
@@ -297,7 +306,10 @@ def get_foundations_requirement_states(organisation) -> list[RequirementState]:
     one query per requirement.
     """
     requirements = list(
-        FoundationRequirement.objects.filter(is_active=True)
+        FoundationRequirement.objects.filter(
+            is_active=True,
+            methodology_version=FOUNDATION_METRIC_VERSION,
+        )
         .select_related("product_area")
         .order_by("display_order", "code")
     )
