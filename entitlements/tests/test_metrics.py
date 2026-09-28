@@ -661,13 +661,19 @@ class TestMethodologyVersionIsolation:
             product_area=baseline_area,
             methodology_version="2099-01-v2",  # deliberately NOT FOUNDATION_METRIC_VERSION
             requirement_kind=RequirementKind.BASELINE_CONTROL,
-            # Deliberately unregistered in BASELINE_RESOLVERS/MILESTONE_RESOLVERS
-            # too: if version filtering ever regressed and let this row
-            # through, every call below would raise
-            # UnresolvableFoundationRequirementError instead of silently
-            # changing a result - a second, independent proof that version
-            # filtering (not some other accident) is what excludes it.
-            source_key="not_a_real_registered_source_key_future_version",
+            # Deliberately a REAL, registered, resolvable source_key - the
+            # same "mfa_user_accounts" key already answered ANSWER_YES above
+            # for org_a's baseline - not an unregistered one. If version
+            # filtering ever regressed and let this row through, it would
+            # NOT raise UnresolvableFoundationRequirementError; it would be
+            # silently, successfully resolved (to ANSWER_YES, weight 5,
+            # counting toward both posture and completion) and quietly
+            # change every one of the four functions' results below. That
+            # is the actual failure mode this test must catch, so this row
+            # must be excluded solely because
+            # methodology_version != FOUNDATION_METRIC_VERSION - not
+            # because it fails to resolve at all.
+            source_key="mfa_user_accounts",
             min_package_tier=1,
             counts_toward_posture=True,
             counts_toward_completion=True,
