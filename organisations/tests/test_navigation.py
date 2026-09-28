@@ -1,17 +1,37 @@
 """
-Mechanical tests for the primary organisation-scoped navigation added to
-`templates/base.html` (M006 PID §5, §22 "navigation/active organisation").
+Mechanical tests originally written (M006 PID §5, §22 "navigation/active
+organisation") for the primary organisation-scoped navigation this file's
+own tests were named after in `templates/base.html`.
 
-Complements `core/tests/test_active_nav.py` (which tests the mapping
-function in isolation): these tests prove the mapping is actually wired
-into a real rendered page - the seven links are present, the current
-section is marked `aria-current="page"`, the nav is absent where PID §5
-says it must be, and every one of the seven destinations is genuinely
-reachable for a member (PID §18.19 "navigate the whole journey using
-product navigation, not crafted URLs" - this proves the URLs the nav
-itself points at are each live, even though the full customer-journey
-walk-through is done as this dispatch's own manual sanity check, not
-re-run test-by-test here).
+M007-WI6 stale-assumption sweep note (2026-09): `templates/base.html`'s own
+`{% if organisation %}`-gated `<nav class="app-header__nav-primary">` block
+is no longer reachable for ANY currently-registered route. Every
+organisation-scoped template (`organisations/templates/organisations/
+detail.html` included) now `{% extends "application_shell.html" %}` (M007-
+WI2/WI5) - a standalone template that does not itself extend `base.html` -
+so `organisation` is never in a `base.html`-rendered context any more;
+only the pre-organisation-selection pages (login, `organisations:list`/
+`:create`) still extend `base.html`, and none of them ever has `organisation`
+in context either. `core.context_processors.active_nav`'s mapping function
+itself is untouched and still computes the same values (see
+`core/tests/test_active_nav.py`), but nothing renders them into
+`base.html`'s markup any more.
+
+The tests below still pass, and are still a genuine, valuable proof - just
+of a DIFFERENT rendering than their own original docstrings claimed: the
+seven destinations they check are now linked from the WI2/WI5 sidebar
+(`entitlements.navigation.build_navigation_tree`, rendered by
+`application_shell.html`), and the single `aria-current="page"` they count
+is that sidebar's own active-item marking (`entitlements/tests/
+test_navigation.py`'s own subject), not `base.html`'s. This is a
+documentation-only correction (no assertion below was touched) - see
+`docs/evidence/M007-SESSION-ENTITLEMENTS.md`'s Part D table for the full
+classification. `core/tests/test_application_shell.py::
+TestShellIsRenderedOnceNotDuplicatedPerPage`/`TestSidebarContentMatchesTierThroughRealHtml`
+are the current, WI2/WI5-native equivalent of this file's own intent - this
+file is kept (not deleted, PID's "never weaken/delete existing coverage")
+because it still independently proves the same seven-destination-reachable
+property this file's original PID §5/§22 authority names.
 """
 import pytest
 from django.urls import reverse
