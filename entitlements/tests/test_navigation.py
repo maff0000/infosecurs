@@ -162,11 +162,21 @@ class TestNavigationLinksAreRealResolvedUrls:
 
 
 class TestActiveItemHighlighting:
-    """PID §16.1 'selected area clearly highlighted'. Two of the sixteen
-    seeded rows deliberately share a destination route with another row
-    (see entitlements/navigation.py's `_pick_current_area` docstring for
-    the full reasoning) - both collisions are exercised explicitly here,
-    not just the non-colliding common case."""
+    """PID §16.1 'selected area clearly highlighted'. One of the sixteen
+    seeded rows deliberately shares a destination route with another row
+    today (`security`/`security_state` both point at `security_state:list`
+    - see entitlements/navigation.py's `_pick_current_area` docstring for
+    the full reasoning) - exercised explicitly below, not just the non-
+    colliding common case. The OTHER collision `_pick_current_area`'s own
+    docstring still describes (`home`/`foundations` both pointing at
+    `organisations:detail`) was WI1's own flagged temporary placeholder
+    state; M007-WI5's migration 0004 resolved it by giving `foundations`
+    its own real `organisations:foundations` destination, so that
+    collision no longer exists in the seeded data this test runs
+    against - `test_visiting_home_marks_only_home_active` and
+    `test_visiting_foundations_marks_only_foundations_active` below prove
+    the two routes are now genuinely independent, superseding the old
+    `test_home_foundations_collision_prefers_home` test this replaces."""
 
     def test_baseline_page_marks_only_baseline_active(self, user):
         organisation_id = uuid.uuid4()
@@ -185,10 +195,12 @@ class TestActiveItemHighlighting:
         other_children = [child for child in security.children if child.code != "baseline"]
         assert all(child.is_active is False for child in other_children)
 
-    def test_home_foundations_collision_prefers_home(self, user):
-        """Both `home` and the WI5-pending `foundations` placeholder point
-        at `organisations:detail` today. Visiting that route must mark
-        exactly `home` active, not the placeholder."""
+    def test_visiting_home_marks_only_home_active_not_foundations(self, user):
+        """M007-WI5's migration 0004 resolved the WI1-flagged temporary
+        `home`/`foundations` destination collision - `foundations` now
+        points at its own real `organisations:foundations` route, not
+        `organisations:detail`. Visiting Home must mark only `home`
+        active."""
         organisation_id = uuid.uuid4()
         path = reverse("organisations:detail", kwargs={"organisation_id": organisation_id})
         resolver_match = resolve(path)
@@ -200,6 +212,19 @@ class TestActiveItemHighlighting:
 
         assert home.is_active is True
         assert foundations.is_active is False
+
+    def test_visiting_foundations_marks_only_foundations_active_not_home(self, user):
+        organisation_id = uuid.uuid4()
+        path = reverse("organisations:foundations", kwargs={"organisation_id": organisation_id})
+        resolver_match = resolve(path)
+        request = _request_at_tier(user, TIER_PRO, resolver_match=resolver_match)
+
+        tree = build_navigation_tree(request, organisation_id)
+        home = next(item for item in tree if item.code == "home")
+        foundations = next(item for item in tree if item.code == "foundations")
+
+        assert foundations.is_active is True
+        assert home.is_active is False
 
     def test_security_state_page_prefers_the_child_over_its_own_parent(self, user):
         """`security` (top-level) and `security_state` (its first child)

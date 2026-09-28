@@ -41,7 +41,11 @@ instruction text - see the WO report for the full quote) required:
 
 This file is the real-browser acceptance proof for all four, at 375px,
 across every page Central Architecture's own required browser-proof list
-names: Overview, Evidence (list + detail), Key Assets (list + detail -
+names: Overview (M007-WI5, 2026-09: `organisations:detail` was rewritten
+into the new badge-free Home dashboard - PID §13/§24 - so this file's own
+Overview coverage below now targets `organisations:foundations`, the
+actual successor page that carries the same badge/action-link shape the
+original Overview state chips did), Evidence (list + detail), Key Assets (list + detail -
 confirming the M006-AUDIT-0002 G2 / M006-AUDIT-0003 H2 wrap fixes there
 are not regressed by this change), Risk Register (list + detail),
 Remediation (list + detail, with an Accepted action present),
@@ -164,15 +168,26 @@ def _assert_badges_still_styled(page):
         )
 
 
-# --- Overview (organisations detail) ---------------------------------------
-
-
+# --- Foundations workspace (organisations detail's badge-bearing --------
+#     successor page, M007-WI5) ------------------------------------------
+#
+# M007-WI5 (PID §13/§24) rewrote `organisations:detail` (Overview) into the
+# new Home dashboard, which deliberately carries no `.badge`/
+# `.overview-card__action` markup at all any more (two plain metric-
+# percentage cards + Needs Attention text-only lines - PID §2.3's own
+# "function before form", no state-chip badges). The `.overview-card__action
+# a` / `.badge` assertions this test originally made against
+# `organisations:detail` are exercised against the new
+# `organisations:foundations` workspace instead - the actual successor page
+# that now carries the same shape of content (a requirement title +
+# `.badge` state chip + `.foundations-row__action a` link, one row per
+# Foundations requirement) this file's own J1 badge-geometry fix protects.
 @pytest.mark.django_db(transaction=True)
-def test_organisation_overview_badges_no_overflow_at_375px(live_server):
+def test_organisation_foundations_badges_no_overflow_at_375px(live_server):
     user, organisation = _new_org_and_user(
-        "viewport_j1_overview", "Viewport J1 Overview Synthetic Ltd"
+        "viewport_j1_foundations", "Viewport J1 Foundations Synthetic Ltd"
     )
-    detail_url = f"{live_server.url}{reverse('organisations:detail', args=[organisation.id])}"
+    foundations_url = f"{live_server.url}{reverse('organisations:foundations', args=[organisation.id])}"
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -185,13 +200,13 @@ def test_organisation_overview_badges_no_overflow_at_375px(live_server):
             )
 
             _login(page, live_server, user.username)
-            page.goto(detail_url)
+            page.goto(foundations_url)
             page.wait_for_load_state("networkidle")
 
             _assert_no_overflow(page)
             _assert_badges_still_styled(page)
 
-            actions = page.locator(".overview-card__action a")
+            actions = page.locator(".foundations-row__action a")
             assert actions.count() > 0
             assert actions.first.is_visible()
 

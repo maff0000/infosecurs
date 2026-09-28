@@ -45,6 +45,12 @@ ORGANISATIONS_URL_NAME_TO_CAPABILITY: dict[str, str] = {
     "detail": "home",
     "profile": "company",
     "organisation_hub": "company",
+    # M007-WI5 (PID §15): the new Foundations workspace route. `foundations`
+    # (the ProductArea.code) and `foundations` (this url_name) are the same
+    # string by coincidence, not a shortcut generalised elsewhere in this
+    # map - every other entry here maps a DIFFERENT url_name to its
+    # capability code.
+    "foundations": "foundations",
 }
 
 

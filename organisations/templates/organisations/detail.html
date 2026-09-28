@@ -1,61 +1,61 @@
 {% extends "application_shell.html" %}
 
-{% block title %}Overview — {{ organisation.name }} — {{ product_name }}{% endblock %}
+{% block title %}Home — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
-<style>
-  /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
-     static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
-     page's own colour variants stay local. */
-  .badge--not_started { background: var(--color-border); color: var(--color-text); }
-  .badge--in_progress { background: var(--color-primary-tint); color: var(--color-primary-dark); }
-  .badge--needs_attention { background: var(--color-warning-bg); color: var(--color-warning-text); }
-  .badge--ready { background: var(--color-success-bg); color: var(--color-success-text); }
-  .overview-grid { display: flex; flex-direction: column; gap: var(--space-3); }
-  .overview-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    padding: var(--space-3) var(--space-4);
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .overview-card__body { flex: 1 1 320px; min-width: 0; }
-  .overview-card__title-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
-  .overview-card__title { font-weight: 600; margin: 0; }
-  .overview-card__detail { color: var(--color-text-muted); font-size: 0.9rem; margin: 0; }
-  .overview-card__action { flex: none; }
-</style>
-
 <div class="page-header">
     <div>
-        <h1>Overview</h1>
+        <h1>Home</h1>
         <p class="page-header__subtitle">{{ organisation.name }}</p>
     </div>
 </div>
 
-<p class="page-header__subtitle">
-    This page reflects your current state across every area, worked out fresh from what
-    has actually been recorded - it is not a separate score or checklist of its own.
-</p>
-
-<div class="overview-grid">
-    {% for area in overview_areas %}
-        <div class="overview-card">
-            <div class="overview-card__body">
-                <div class="overview-card__title-row">
-                    <p class="overview-card__title">{{ area.title }}</p>
-                    <span class="badge badge--{{ area.state }}">{{ area.state_label }}</span>
-                </div>
-                <p class="overview-card__detail">{{ area.detail }}</p>
-            </div>
-            <div class="overview-card__action">
-                <a class="button button--secondary" href="{{ area.next_action_url }}">{{ area.next_action_label }}</a>
-            </div>
+{% if is_paused %}
+    {# PID §13.1: a Paused session gets only this minimal state - no #}
+    {# metric cards, no Needs Attention, nothing computed from #}
+    {# entitlements.metrics at all (the view never even calls it for a #}
+    {# Paused session - see organisations/views.py). #}
+    <div class="paused-state">
+        <p>Your Infosecurs subscription is currently paused.</p>
+        <p>Product areas are unavailable while the subscription is paused.</p>
+        <p>Account management is handled separately.</p>
+    </div>
+{% else %}
+    {# PID §13: exactly two primary metric cards, no third headline score, #}
+    {# no chart/gauge/icon - a plain percentage and text (PID §2.3/§13's #}
+    {# own "function before form"). Both percentages come straight from #}
+    {# entitlements.metrics - nothing here computes or re-derives either #}
+    {# number. #}
+    <div class="metric-card-row">
+        <div class="metric-card">
+            <h2 class="metric-card__title">Foundational Security Posture</h2>
+            <p class="metric-card__value">{{ posture.percentage }}%</p>
+            <p class="metric-card__copy">
+                Based on your recorded foundational security state. This is not an independent security assessment.
+            </p>
+            <a class="button button--secondary" href="{{ security_state_url }}">View security state</a>
         </div>
-    {% endfor %}
-</div>
+        <div class="metric-card">
+            <h2 class="metric-card__title">Security Foundations Completion</h2>
+            <p class="metric-card__value">{{ completion.percentage }}%</p>
+            <p class="metric-card__copy">
+                {{ completion.completed_count }} of {{ completion.total_count }} Foundations items completed.
+            </p>
+            <a class="button button--secondary" href="{{ foundations_url }}">Continue Foundations</a>
+        </div>
+    </div>
+
+    {% if needs_attention_lines %}
+        {# PID §14.1 - Product Authority decision, not negotiable: the #}
+        {# whole line is never itself a link. Only the literal words #}
+        {# "click here" at the end are the <a>. Do not turn this into a #}
+        {# clickable card/row. #}
+        <div class="needs-attention">
+            <h2>Needs attention</h2>
+            {% for line in needs_attention_lines %}
+                <p class="needs-attention__line">{{ line.text }} — <a href="{{ line.url }}">click here</a></p>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endif %}
 {% endblock %}

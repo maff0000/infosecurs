@@ -639,6 +639,106 @@ a:hover { color: var(--color-primary-dark); }
   .shell-overlay[hidden] { display: none; }
 }
 
+/* --- Home dashboard metric cards (M007-WI5 PID §13) ---
+   Side-by-side on desktop, stacked at this codebase's one existing 640px
+   breakpoint (reused below, not a second breakpoint value). No gauge/
+   chart/icon - a plain number + text (PID §2.3/§13's own "function
+   before form"), so these are deliberately just flex-row cards built from
+   the same `--color-*`/`--space-*`/`--radius` tokens every other card in
+   this stylesheet already uses. */
+.metric-card-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: stretch;
+  margin-bottom: var(--space-4);
+}
+.metric-card {
+  flex: 1 1 0%;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.metric-card__title { margin: 0; }
+.metric-card__value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+.metric-card__copy {
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2) 0;
+}
+
+/* --- Tier-0 paused Home (PID §13.1) --- */
+.paused-state {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+.paused-state p:last-child { margin-bottom: 0; }
+
+/* --- Needs attention (PID §14) - deliberately NOT another `.card-list`
+   variant: each line is one plain paragraph, never itself a clickable
+   row/card (PID §14.1's binding "only the words click here are the
+   link" rule - see organisations/templates/organisations/detail.html). */
+.needs-attention {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+.needs-attention h2 { margin-bottom: var(--space-3); }
+.needs-attention__line { margin: 0 0 var(--space-2) 0; }
+.needs-attention__line:last-child { margin-bottom: 0; }
+
+/* --- Foundations workspace (PID §15) --- */
+.foundations-summary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.foundations-summary__count { margin: 0; color: var(--color-text-muted); }
+
+.foundations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.foundations-row {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+.foundations-row__body { flex: 1 1 320px; min-width: 0; }
+.foundations-row__title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+.foundations-row__title { font-weight: 600; margin: 0; }
+.foundations-row__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
+.foundations-row__action { flex: none; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .app-header__bar { padding: var(--space-3); }
@@ -646,4 +746,8 @@ a:hover { color: var(--color-primary-dark); }
   .page-header { flex-direction: column; align-items: flex-start; }
   .form-actions { flex-direction: column-reverse; }
   .button { text-align: center; }
+  /* M007-WI5: the two Home metric cards stack narrow (PID §13's own
+     "narrow view stacks them"), same breakpoint as every other rule in
+     this block - not a second breakpoint value. */
+  .metric-card-row { flex-direction: column; }
 }
