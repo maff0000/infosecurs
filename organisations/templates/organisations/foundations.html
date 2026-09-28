@@ -1,0 +1,71 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Foundations — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  {# Page-local badge colour variants only (this codebase's own established #}
+  {# convention - see organisations/templates/organisations/detail.html's #}
+  {# equivalent M006-era comment / static/organisations/css/app.css's #}
+  {# ".badge" shared-geometry comment): `.badge`'s shared size/shape/wrap #}
+  {# geometry lives in app.css; only this page's own answer-state colours #}
+  {# are local here. #}
+  .badge--yes { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--partial { background: var(--color-warning-bg); color: var(--color-warning-text); }
+  .badge--no { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--unknown { background: var(--color-border); color: var(--color-text); }
+  .badge--not_applicable { background: var(--color-border); color: var(--color-text-muted); }
+  .badge--complete { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--incomplete { background: var(--color-warning-bg); color: var(--color-warning-text); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Security Foundations</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p class="page-header__subtitle">
+    What the 30-Day Security Foundations work consists of, and what remains - worked out
+    fresh from what has actually been recorded, not a separate checklist of its own.
+</p>
+
+{# PID §15: the completion percentage plus a "completed of total items #}
+{# completed" count - the total is read live from the service result #}
+{# below, never hard-coded as the literal number 18. #}
+<div class="foundations-summary">
+    <p class="metric-card__value">{{ completion.percentage }}%</p>
+    <p class="foundations-summary__count">
+        {{ completion.completed_count }} of {{ completion.total_count }} items completed.
+    </p>
+</div>
+
+<ul class="foundations-list">
+    {% for row in rows %}
+        <li class="foundations-row">
+            <div class="foundations-row__body">
+                <div class="foundations-row__title-row">
+                    <p class="foundations-row__title">{{ row.state.title }}</p>
+                    {# The real answer (Yes/Partially/No/Not sure/Not #}
+                    {# applicable), or Complete/Needs completion for a #}
+                    {# milestone row - never a flattened "Complete"/ #}
+                    {# "Incomplete" for a baseline row (PID §15: workflow #}
+                    {# completion and the underlying security fact are two #}
+                    {# separate things a customer must be able to see). #}
+                    <span class="badge badge--{{ row.state.answer_state }}">{{ row.answer_display }}</span>
+                </div>
+                <p class="foundations-row__meta">
+                    {{ row.area_label }}
+                    {% if row.state.requirement_kind == "BASELINE_CONTROL" %}
+                        · Security importance: {{ row.state.security_weight }}
+                    {% endif %}
+                </p>
+            </div>
+            <div class="foundations-row__action">
+                <a class="button button--secondary" href="{{ row.action_url }}">Open</a>
+            </div>
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}

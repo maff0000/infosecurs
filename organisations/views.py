@@ -1,14 +1,135 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import redirect_to_login
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 import governance.services
 from entitlements.decorators import require_capability
+from entitlements.metrics import (
+    STATE_COMPLETE,
+    STATE_INCOMPLETE,
+    get_foundational_security_posture,
+    get_needs_attention,
+    get_security_foundations_completion,
+)
+from entitlements.models import ProductArea, RequirementKind
+from entitlements.session import Invalid, get_validated_context
+from entitlements.tiers import TIER_PAUSED
 
 from organisations.forms import OrganisationCreateForm, OrganisationProfileForm
 from organisations.models import AuditEvent, Organisation, OrganisationMembership, OrganisationProfile
-from organisations.overview import build_overview
+from security_baseline.models import ANSWER_CHOICES
+
+# ---------------------------------------------------------------------------
+# M007-WI5 (PID §13-15) small shared helpers. Both `organisation_detail`
+# (Home's Needs Attention links) and `organisation_foundations` (each
+# requirement row's own action link) resolve a `ProductArea.code` to a real
+# URL the exact same way `entitlements.navigation.build_navigation_tree`
+# already does - `reverse(area.destination_view_name, kwargs={...})` - so
+# there is exactly one route-resolution approach in this app, not one
+# hand-rolled per template (PID dispatch: "reuse the same small resolution
+# approach in both places... do not duplicate route-resolution logic").
+# Deliberately NOT added to `entitlements.navigation`/`entitlements.
+# capabilities` itself - those modules are WI2/WI1 scope this dispatch does
+# not redesign; this is a small view-level helper, not a new shared service.
+# ---------------------------------------------------------------------------
+
+
+def _product_area_url(product_area_code: str, organisation_id) -> str:
+    area = ProductArea.objects.get(code=product_area_code)
+    return reverse(area.destination_view_name, kwargs={"organisation_id": organisation_id})
+
+
+# PID §14.1's "recommended wording shape" example lines, expressed as
+# (singular, plural) phrases that follow the leading count - e.g. count=3 +
+# this dict's "important security controls are not fully implemented"
+# plural renders "3 important security controls are not fully implemented",
+# matching the PID's own example verbatim. The singular form only fires for
+# `policy_review_overdue` in practice today (its count is always 0 or 1 -
+# entitlements.metrics.get_needs_attention's own docstring), but every
+# signal gets one anyway so a future signal whose count can be exactly 1
+# never reads ungrammatically ("1 important security controls are...").
+_NEEDS_ATTENTION_PHRASES: dict[str, tuple[str, str]] = {
+    "important_controls_not_fully_implemented": (
+        "important security control is not fully implemented",
+        "important security controls are not fully implemented",
+    ),
+    "foundations_items_incomplete": (
+        "Security Foundations item still needs completion",
+        "Security Foundations items still need completion",
+    ),
+    "controls_marked_not_sure": (
+        "security control is marked Not sure",
+        "security controls are marked Not sure",
+    ),
+    "policy_review_overdue": (
+        "policy review is overdue",
+        "policy reviews are overdue",
+    ),
+}
+
+
+def _needs_attention_lines(needs_attention, organisation_id) -> list[dict]:
+    """
+    PID §14/§27: only a non-zero-count signal produces a rendered line (a
+    `count == 0` signal is entirely omitted here - `entitlements.metrics`
+    itself always returns all four, count=0 where nothing applies, so this
+    is the one place that filters, matching that module's own docstring).
+    Iterated in `entitlements.metrics.NeedsAttention`'s own field order,
+    which is PID §14's own listed order. No HTML is built here - `text` is
+    plain wording, `url` a plain string; the template alone decides how
+    `click here` is marked up (PID §14.1's binding link-behaviour rule).
+    """
+    lines = []
+    for signal in (
+        needs_attention.important_controls,
+        needs_attention.foundations_incomplete,
+        needs_attention.not_sure_controls,
+        needs_attention.policy_review_overdue,
+    ):
+        if signal.count == 0:
+            continue
+        singular, plural = _NEEDS_ATTENTION_PHRASES[signal.key]
+        phrase = singular if signal.count == 1 else plural
+        lines.append(
+            {
+                "text": f"{signal.count} {phrase}",
+                "url": _product_area_url(signal.destination_product_area_code, organisation_id),
+            }
+        )
+    return lines
+
+
+# PID §15's "show the real answer, not a flattened Complete/Incomplete" for
+# a BASELINE_CONTROL row - reuses `security_baseline.models.ANSWER_CHOICES`
+# verbatim (the exact same Yes/Partially/No/Not sure/Not applicable wording
+# the Baseline questionnaire itself already shows the customer), never a
+# second, independently-worded label table.
+_BASELINE_ANSWER_DISPLAY: dict[str, str] = dict(ANSWER_CHOICES)
+
+# A DERIVED_MILESTONE row's `answer_state` is one of these two
+# (entitlements.metrics.STATE_COMPLETE/STATE_INCOMPLETE) - simpler wording
+# is fine here per the dispatch ("there is no separate security-strength
+# fact for a milestone to preserve").
+_MILESTONE_ANSWER_DISPLAY: dict[str, str] = {
+    STATE_COMPLETE: "Complete",
+    STATE_INCOMPLETE: "Needs completion",
+}
+
+
+def _requirement_answer_display(state) -> str:
+    if state.requirement_kind == RequirementKind.BASELINE_CONTROL:
+        return _BASELINE_ANSWER_DISPLAY.get(state.answer_state, state.answer_state)
+    return _MILESTONE_ANSWER_DISPLAY.get(state.answer_state, state.answer_state)
+
+
+def _product_area_labels() -> dict[str, str]:
+    """One bounded query for every active ProductArea's label, shared
+    across every row `organisation_foundations` renders - never one query
+    per requirement row."""
+    return dict(ProductArea.objects.active().values_list("code", "label"))
 
 
 def get_member_organisation_or_404(user, organisation_id):
@@ -65,22 +186,107 @@ def organisation_create(request):
 @require_capability()
 def organisation_detail(request, organisation_id):
     """
-    The Overview / journey page (M006 PID §6). This used to render a flat
-    "does X exist yet" card list gated only by a crude `profile_exists`
-    boolean; it now renders `organisations.overview.build_overview`'s
-    derived per-area state - recomputed fresh on every request, never
-    stored - which is the URL/view every "Overview" primary-nav link
-    (templates/base.html) and `core.context_processors.active_nav` point
-    at. The URL name (`organisations:detail`) and this view's name are
-    both left unchanged: only what the page shows has changed.
+    The Home dashboard (M007-WI5, PID §13-14) - supersedes the old M006
+    flat Overview card list this view used to render via `organisations.
+    overview.build_overview` (that module and every one of its area
+    functions remain fully intact and independently tested -
+    `organisations/tests/test_overview.py` - this view simply no longer
+    renders their output as Home's primary content, per Central
+    Architecture's own "do not clutter the initial Home beyond the
+    authorised M007 structure" instruction).
+
+    Tier-branched, not route-guard-branched: `home`'s own `ProductArea.
+    min_package_tier` is 0 (PID Appendix A), so `require_capability()`
+    above never denies this route for ANY tier including Paused - PID
+    §13.1 is explicit that the Paused/non-Paused distinction here is a
+    VIEW-LEVEL content decision, not an access-control one. A Paused
+    session renders only the minimal paused state, with ZERO calls into
+    `entitlements.metrics` (computed-then-hidden is exactly what PID §13.1
+    asks this view NOT to do); every other tier gets the two metric cards
+    plus Needs Attention.
     """
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
-    overview_areas = build_overview(organisation)
+
+    context = get_validated_context(request)
+    if isinstance(context, Invalid):
+        # Defence in depth only - unreachable in normal operation:
+        # `require_capability()` above already calls `has_capability`,
+        # which itself calls `get_validated_context` and denies (redirects
+        # to login) an Invalid session before this view body ever runs
+        # (entitlements/decorators.py's own fail-closed handling). This
+        # mirrors that exact same redirect rather than assuming it can
+        # never happen.
+        return redirect_to_login(request.get_full_path())
+
+    if context.package_tier == TIER_PAUSED:
+        return render(
+            request,
+            "organisations/detail.html",
+            {"organisation": organisation, "is_paused": True},
+        )
+
+    posture = get_foundational_security_posture(organisation)
+    completion = get_security_foundations_completion(organisation)
+    needs_attention = get_needs_attention(organisation)
+
     return render(
         request,
         "organisations/detail.html",
-        {"organisation": organisation, "overview_areas": overview_areas},
+        {
+            "organisation": organisation,
+            "is_paused": False,
+            "posture": posture,
+            "completion": completion,
+            "security_state_url": _product_area_url("security_state", organisation.id),
+            "foundations_url": reverse(
+                "organisations:foundations", kwargs={"organisation_id": organisation.id}
+            ),
+            "needs_attention_lines": _needs_attention_lines(needs_attention, organisation.id),
+        },
+    )
+
+
+@login_required
+@require_capability()
+def organisation_foundations(request, organisation_id):
+    """
+    The Foundations workspace (M007-WI5, PID §15) - a plain, read-only
+    listing of every active v1 `FoundationRequirement`'s resolved state.
+    Reuses `get_security_foundations_completion`'s own `requirement_states`
+    (already filtered to every `counts_toward_completion=True` row - today
+    all 18) rather than calling `get_foundations_requirement_states` a
+    second time: the exact same per-item facts the Home completion card
+    itself is built from (PID §15's own "each displayed state is derived
+    from the same resolver used by the Home completion metric"), one query
+    pass, not two.
+
+    No metric/completion math happens here - `completion.percentage`/
+    `completion.completed_count`/`completion.total_count` are rendered
+    exactly as `entitlements.metrics` returns them. No form, no POST, no
+    editable checkbox anywhere on this page - every state is derived and
+    read-only, exactly like Home.
+    """
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+
+    completion = get_security_foundations_completion(organisation)
+    area_labels = _product_area_labels()
+
+    rows = [
+        {
+            "state": state,
+            "area_label": area_labels.get(state.product_area_code, state.product_area_code),
+            "answer_display": _requirement_answer_display(state),
+            "action_url": _product_area_url(state.product_area_code, organisation.id),
+        }
+        for state in completion.requirement_states
+    ]
+
+    return render(
+        request,
+        "organisations/foundations.html",
+        {"organisation": organisation, "completion": completion, "rows": rows},
     )
 
 
@@ -90,8 +296,10 @@ def organisation_hub(request, organisation_id):
     """
     The "Organisation" primary-nav landing page (M006 PID §5): Profile,
     Governance roles and Workplace used to live as three of the flat card
-    list on `organisations:detail` (now the Overview page, above); they
-    need a single home now that they are no longer there. Deliberately
+    list `organisations:detail` used to render (M006's Overview page;
+    M007-WI5, above, rewrote that URL into the new Home dashboard - PID
+    §13 - which does not render this hub's own links either); they need a
+    single home now that they are no longer on either page. Deliberately
     minimal - three links, mirroring the existing `summary-card` style
     already used across this codebase - not a new CRUD surface of its own.
     """
