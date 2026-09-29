@@ -42,7 +42,12 @@ services:
       - .:/app
       - infosecurs_evidence_data:/data/evidence
     ports:
-      - "127.0.0.1:${WEB_HOST_PORT:-8000}:8000"
+      # Configurable host bind address (default stays loopback-only - a
+      # normal clone is never reachable off the host unless someone
+      # deliberately sets WEB_BIND_ADDRESS in their own local, gitignored
+      # .env). Never hard-code a real LAN address here - see .env.example's
+      # own comment on this variable.
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_HOST_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
