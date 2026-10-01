@@ -43,15 +43,15 @@ jobs:
       # Pinned tool version, not "whatever pip-audit ships today".
       - run: pip install --no-cache-dir pip-audit==2.10.1
 
-      # Exactly one authorised, temporary advisory suppression (Central
-      # Architecture risk acceptance, 2026-10-01) - CVE-2026-49265 /
-      # GHSA-xpv3-w29h-x7cv (oauthlib's PKCE code_verifier timing
-      # comparison, server/authorization-grant-type code Infosecurs never
-      # loads - see docs/evidence/SECURITY-REMEDIATION-2026-10-01.md for
-      # the full reachability evidence and review triggers). No other
-      # advisory is or should be ignored here.
+      # No suppression. The one temporary advisory ignore this job carried
+      # (CVE-2026-49265 / GHSA-xpv3-w29h-x7cv, oauthlib's PKCE
+      # code_verifier timing comparison) was removed in WI0.1 (2026-10-01)
+      # once django-allauth==65.19.6 made the genuinely fixed oauthlib>=4.0.0
+      # installable - see docs/evidence/SECURITY-REMEDIATION-2026-10-01.md
+      # for the full history of why the suppression existed and how it was
+      # closed.
       - name: pip-audit (application dependencies)
-        run: pip-audit -r requirements.txt --ignore-vuln CVE-2026-49265
+        run: pip-audit -r requirements.txt
 
   sast:
     name: security/sast

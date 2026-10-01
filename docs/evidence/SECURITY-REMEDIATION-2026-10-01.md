@@ -1,5 +1,12 @@
 # Security Remediation — 2026-10-01
 
+**Status update (WI0.1, same date):** the §2 OAuthLib temporary risk
+acceptance described below is now **CLOSED/RESOLVED** — see §7. The
+narrative in §2 is preserved unedited as the historical record of why the
+temporary acceptance existed and what was independently verified about it;
+it no longer describes Infosecurs's current state. Read §7 for the closing
+action and final verification.
+
 **Trigger:** PR #78 (M008-WI0 documentation-only PID landing) found `security/
 dependencies` and `security/container` RED on an unmodified dependency/image
 graph — newly-published upstream advisories, not a regression introduced by
@@ -75,9 +82,17 @@ capability. No change to M007's product behaviour.
   JSON output checked — zero `Vulnerabilities` entries across every
   target).
 
-## 2. OAuthLib — CVE-2026-49265 / GHSA-xpv3-w29h-x7cv (temporary risk acceptance)
+## 2. OAuthLib — CVE-2026-49265 / GHSA-xpv3-w29h-x7cv (temporary risk acceptance — CLOSED, see §7)
 
-1. **Installed version:** `oauthlib==3.3.1` (transitive, via
+> **This section is the historical record of the original WI0 risk
+> acceptance (2026-10-01, earlier the same day as §7's closure). It is
+> preserved exactly as written at the time, including the dependency
+> state it describes (`oauthlib==3.3.1`, `django-allauth==65.19.4`), for
+> audit continuity. It does not describe Infosecurs's current installed
+> versions — see §7 for the closing action.**
+
+1. **Installed version (at the time this section was written):**
+   `oauthlib==3.3.1` (transitive, via
    `django-allauth[socialaccount]==65.19.4`).
 2. **Advisory:** CVE-2026-49265 / GHSA-xpv3-w29h-x7cv — "Timing Attack
    Vulnerability in PKCE `code_verifier` Comparison (CWE-208)".
@@ -275,3 +290,68 @@ real build/scan/repository state directly, not this document's prose:
 No other concern was raised. The auditor's one correction (allauth
 65.19.6/§5 above) has been incorporated into this document; it does not
 change any of the three safety verdicts.
+
+## 7. WI0.1 — OAuthLib temporary risk acceptance CLOSED (2026-10-01)
+
+Following directly from §2/§6's own finding (the auditor's correction: a
+compatible fix — `django-allauth==65.19.6`, requiring `oauthlib>=4.0.0` —
+already existed at merge time), Central Architecture authorised closing the
+temporary exception rather than carrying it to the 30-day review date.
+
+**Treatment:** `requirements.in`'s direct pin
+`django-allauth[socialaccount]==65.19.4` → `==65.19.6`. Both lockfiles
+regenerated via `pip-compile --generate-hashes` (no `--upgrade-package`
+flag needed or used — the direct-dependency version change alone forced
+the resolver to re-satisfy allauth's now-`oauthlib<5,>=4.0.0` constraint).
+**Exactly two package version lines changed in each lockfile** — confirmed
+by `git diff requirements.txt | grep -E '^[+-][a-z]' | grep -v hash`:
+`django-allauth` (`65.19.4`→`65.19.6`) and `oauthlib` (`3.3.1`→`4.0.0`).
+`pyjwt` remained `2.15.1`, untouched. No other direct or transitive
+dependency moved.
+
+**Suppression removed:** `.github/workflows/security.yml`'s `security/
+dependencies` job now runs plain `pip-audit -r requirements.txt` — no
+`--ignore-vuln` flag anywhere in the file. Confirmed by direct read of the
+final file.
+
+**Mechanical proof, all inside the final built image:**
+- `oauthlib.__version__` = `4.0.0`; `allauth.__version__` = `65.19.6`;
+  `jwt.__version__` = `2.15.1` (unchanged).
+- `pip-audit -r requirements.txt` (no ignores) → **`No known vulnerabilities
+  found`**, exit 0.
+- `trivy image --severity CRITICAL,HIGH --ignore-unfixed` → **0
+  CRITICAL/HIGH** (the §1/§1b OS overlay is independent of this change and
+  remains in place/unaffected).
+- `manage.py check` → `System check identified no issues (0 silenced)`.
+- `manage.py makemigrations --check --dry-run` → `No changes detected`.
+- Direct introspection inside the running container: `SOCIALACCOUNT_
+  PROVIDERS` keys = `['google', 'microsoft']`; both
+  `allauth.socialaccount.providers.google.provider` and `...microsoft.
+  provider` import cleanly under the new `allauth`/`oauthlib` pair.
+- Full `pytest -q` against a fresh disposable stack built from this
+  change (Chromium runtime-installed first, per the documented runbook
+  step): **1897 passed, 7 skipped, 1 xfailed, 0 failed** — identical result
+  to the pre-upgrade remediation run; no regression from the version bump.
+- `gitleaks detect` → no leaks in tracked/committed content (the one
+  disposable-stack scratch `.env.*` file created for this verification is
+  git-ignored and was deleted before commit, consistent with the prior
+  remediation's own practice).
+
+**Scope discipline:** `allauth.idp.oidc` was not enabled, no new social
+provider was added, no provider configuration was touched beyond what the
+version bump itself required (none was required — Google/Microsoft
+provider modules import unchanged), and no other direct dependency was
+opportunistically upgraded.
+
+**Fresh independent review** was dispatched against the exact closing
+commit with four specific checks: (1) the `--ignore-vuln` suppression is
+genuinely gone from the workflow file; (2) `oauthlib` resolves to a
+genuine `4.x` release inside the built image, not merely claimed; (3) no
+authentication/provider behaviour was broadened (no new scopes, no new
+providers, no `idp.oidc`); (4) no unrelated dependency drifted. See the PR
+for that auditor's verdict.
+
+**Outcome:** the §2 temporary risk acceptance is retired. `pip-audit`
+requires no ignore of any kind for this codebase's dependency graph as of
+this commit. The 30-day/immediate review triggers listed in §2 no longer
+apply — there is nothing left to review on that schedule.
