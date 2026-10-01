@@ -76,6 +76,30 @@ class Organisation(models.Model):
         return self.name
 
 
+class CustomerZeroFixture(models.Model):
+    """
+    Marks exactly one Organisation as the trusted, synthetic Customer Zero
+    test fixture - the ONLY organisation a destructive dev-only reset
+    (M008A) may ever target. Created exclusively by
+    `create_customer_zero` (a management command, never reachable over
+    HTTP) inside its own transaction, alongside the Organisation row
+    itself. No form, view, serializer, or other user-facing write path in
+    this codebase may create, update, or delete this row - if you are
+    tempted to expose it anywhere reachable by an authenticated request,
+    stop: that would defeat the entire point of this model, which is that
+    "is this the trusted fixture" can never be made true by anything a
+    client can submit.
+    """
+
+    organisation = models.OneToOneField(
+        Organisation, on_delete=models.CASCADE, related_name="customer_zero_fixture"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Customer Zero fixture marker for {self.organisation}"
+
+
 class OrganisationMembership(models.Model):
     """Associates an authenticated user with an organisation tenant."""
 
