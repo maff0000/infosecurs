@@ -4,7 +4,7 @@ from django.db import transaction
 
 import governance.services
 from config.env import require_env
-from organisations.models import Organisation, OrganisationMembership
+from organisations.models import CustomerZeroFixture, Organisation, OrganisationMembership
 
 
 class Command(BaseCommand):
@@ -56,6 +56,17 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"Customer Zero organisation '{organisation_name}' already exists; leaving as-is."
                 )
+
+            # M008A-WI1a: mark this organisation as the trusted, synthetic
+            # Customer Zero fixture - the server-only, tamper-proof marker
+            # a future destructive reset feature will use instead of ever
+            # trusting a display-name match. Idempotent, and runs on every
+            # bootstrap invocation (not only when org_created), so a
+            # pre-fix Customer Zero organisation (one bootstrapped before
+            # this fix existed) gets the fixture row the next time this
+            # command runs - same repair pattern as
+            # `ensure_account_holder_person` below.
+            CustomerZeroFixture.objects.get_or_create(organisation=organisation)
 
             _, membership_created = OrganisationMembership.objects.get_or_create(
                 organisation=organisation,
