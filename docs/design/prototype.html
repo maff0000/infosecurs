@@ -1,0 +1,696 @@
+<title>Foundations Journey</title>
+<style>
+  :root {
+    --ink: #16261F;
+    --ink-soft: #46564E;
+    --paper: #FAFAF7;
+    --surface: #FFFFFF;
+    --surface-sunken: #F0F3F1;
+    --line: #DCE3DE;
+    --accent: #0E6E62;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #E3F1EE;
+    --warn: #B3661F;
+    --warn-soft: #FBEEE0;
+    --bad: #B3261E;
+    --bad-soft: #FBE9E8;
+    --good: #1B7A4A;
+    --good-soft: #E7F4ED;
+    --focus: #0E6E62;
+    --radius-s: 8px;
+    --radius-m: 14px;
+    --sidebar-w: 248px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #EAF0EC;
+      --ink-soft: #AEBDB4;
+      --paper: #111713;
+      --surface: #171F1A;
+      --surface-sunken: #1D261F;
+      --line: #2B362F;
+      --accent: #3FB6A3;
+      --accent-ink: #0A1512;
+      --accent-soft: #163229;
+      --warn: #E3A15B;
+      --warn-soft: #2E2114;
+      --bad: #E58A83;
+      --bad-soft: #2E1716;
+      --good: #6FCB9A;
+      --good-soft: #142A1E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #EAF0EC;
+    --ink-soft: #AEBDB4;
+    --paper: #111713;
+    --surface: #171F1A;
+    --surface-sunken: #1D261F;
+    --line: #2B362F;
+    --accent: #3FB6A3;
+    --accent-ink: #0A1512;
+    --accent-soft: #163229;
+    --warn: #E3A15B;
+    --warn-soft: #2E2114;
+    --bad: #E58A83;
+    --bad-soft: #2E1716;
+    --good: #6FCB9A;
+    --good-soft: #142A1E;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, .display {
+    font-family: "Lexend", "Source Sans 3", sans-serif;
+    text-wrap: balance;
+    margin: 0;
+  }
+  a { color: inherit; }
+  button { font-family: inherit; }
+
+  .app {
+    display: flex;
+    min-height: 100vh;
+    padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px);
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex: 0 0 var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    padding: 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 6px;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-ink);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Lexend", sans-serif; font-weight: 700; font-size: 15px;
+    flex: none;
+  }
+  .brand-name { font-family: "Lexend", sans-serif; font-weight: 600; font-size: 15px; }
+  .brand-org { font-size: 12px; color: var(--ink-soft); }
+
+  .nav-group-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--ink-soft); padding: 0 10px; margin-bottom: 6px;
+  }
+  .nav-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .nav-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: var(--radius-s);
+    font-size: 14px; text-decoration: none; color: var(--ink-soft);
+    border: 1px solid transparent; background: none; width: 100%; text-align: left;
+    cursor: pointer;
+  }
+  .nav-link:hover { background: var(--surface-sunken); color: var(--ink); }
+  .nav-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .nav-link.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); flex: none; }
+  .nav-dot.done { background: var(--good); }
+  .nav-dot.current { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .dev-tools-block {
+    margin-top: auto;
+    border: 1px dashed var(--warn);
+    border-radius: var(--radius-s);
+    padding: 10px;
+    background: var(--warn-soft);
+  }
+  .dev-tools-block .tag {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    background: var(--warn); color: #fff; border-radius: 4px; padding: 2px 6px; margin-bottom: 6px;
+  }
+  .dev-tools-block p { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-soft); }
+  .dev-reset-btn {
+    width: 100%; border: 1px solid var(--warn); color: var(--warn); background: var(--surface);
+    border-radius: var(--radius-s); padding: 7px 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .dev-reset-btn:hover { background: var(--warn-soft); }
+
+  /* ---------- Main ---------- */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .topbar-title { font-family: "Lexend", sans-serif; font-weight: 600; font-size: 16px; }
+  .topbar-sub { font-size: 12.5px; color: var(--ink-soft); }
+  .content { padding: 32px 28px 64px; max-width: 880px; width: 100%; margin: 0 auto; }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .eyebrow {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--accent);
+    font-weight: 700; margin-bottom: 6px;
+  }
+  .page-title { font-size: 26px; margin-bottom: 6px; }
+  .page-lede { color: var(--ink-soft); font-size: 15px; max-width: 60ch; margin-bottom: 26px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+    padding: 22px;
+  }
+  .card + .card { margin-top: 16px; }
+
+  /* Home */
+  .primary-cta {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: var(--accent); color: var(--accent-ink);
+    border-radius: var(--radius-m); padding: 20px 24px; margin-bottom: 24px;
+  }
+  .primary-cta-text .k { font-size: 12px; opacity: .85; text-transform: uppercase; letter-spacing: .06em; }
+  .primary-cta-text .v { font-family: "Lexend", sans-serif; font-weight: 600; font-size: 19px; margin-top: 2px; }
+  .primary-cta-text .d { font-size: 13px; opacity: .9; margin-top: 2px; }
+  .cta-btn {
+    flex: none; background: var(--accent-ink); color: var(--accent);
+    border: none; border-radius: 999px; padding: 11px 20px; font-weight: 700; font-size: 14.5px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .cta-btn:hover { opacity: .9; }
+
+  .metric-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; margin-bottom: 24px; }
+  .metric-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 18px; }
+  .metric-card h3 { font-size: 13.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 10px; }
+  .metric-big { font-family: "Lexend", sans-serif; font-size: 34px; font-weight: 700; line-height: 1; }
+  .metric-note { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+  .ring-wrap { display: flex; align-items: center; gap: 14px; }
+
+  .attn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .attn-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-radius: var(--radius-s); background: var(--surface-sunken);
+  }
+  .attn-item .label { font-size: 14px; }
+  .attn-item .link { font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+
+  /* Foundations landing */
+  .stage-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+  .stage-tile {
+    border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px; background: var(--surface);
+    display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: var(--ink);
+    cursor: pointer; text-align: left;
+  }
+  .stage-tile:hover { border-color: var(--accent); }
+  .stage-num { font-size: 12px; color: var(--ink-soft); }
+  .stage-name { font-family: "Lexend", sans-serif; font-weight: 600; font-size: 15px; }
+  .stage-status { font-size: 12.5px; }
+  .stage-status.done { color: var(--good); }
+  .stage-status.current { color: var(--accent); font-weight: 700; }
+  .stage-status.todo { color: var(--ink-soft); }
+
+  /* Question screens */
+  .progress-line {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 13px; color: var(--ink-soft);
+  }
+  .progress-bar { flex: 1; height: 6px; background: var(--surface-sunken); border-radius: 999px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--accent); }
+
+  .q-why { font-size: 14px; color: var(--ink-soft); margin: 10px 0 22px; padding-left: 14px; border-left: 3px solid var(--accent-soft); }
+  .options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+  .option {
+    display: block; border: 1.5px solid var(--line); border-radius: var(--radius-s);
+    padding: 14px 16px; cursor: pointer; background: var(--surface);
+  }
+  .option:hover { border-color: var(--accent); }
+  .option input { margin-right: 10px; accent-color: var(--accent); }
+  .option .opt-label { font-size: 14.5px; font-weight: 600; }
+  .option.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .option.notsure { border-style: dashed; }
+
+  .followup {
+    margin-top: 6px; margin-bottom: 18px; padding: 14px 16px; background: var(--surface-sunken);
+    border-radius: var(--radius-s); border: 1px solid var(--line);
+  }
+  .followup label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .followup input[type=text] {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-s);
+    font-size: 14px; background: var(--surface); color: var(--ink);
+  }
+
+  .explainer {
+    margin-top: 4px; margin-bottom: 20px; padding: 14px 16px; border-radius: var(--radius-s);
+    background: var(--good-soft); color: var(--good); font-size: 14px; display: none;
+  }
+  .explainer.warn { background: var(--warn-soft); color: var(--warn); }
+  .explainer.show { display: block; }
+
+  .na-note { font-size: 12.5px; color: var(--ink-soft); margin: -6px 0 18px; }
+
+  .q-actions { display: flex; justify-content: space-between; margin-top: 10px; }
+  .btn { border-radius: var(--radius-s); padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--ink-soft); }
+  .btn:focus-visible, .option:focus-within, .nav-link:focus-visible, .cta-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* Stage complete */
+  .complete-wrap { text-align: center; padding: 40px 20px; }
+  .complete-icon {
+    width: 56px; height: 56px; border-radius: 50%; background: var(--good-soft); color: var(--good);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; font-size: 26px;
+  }
+
+  /* Risk/action */
+  .risk-card { display: flex; gap: 14px; align-items: flex-start; }
+  .risk-sev { width: 8px; align-self: stretch; border-radius: 4px; flex: none; }
+  .risk-sev.high { background: var(--bad); }
+  .risk-sev.med { background: var(--warn); }
+  .risk-body { flex: 1; }
+  .risk-title { font-family: "Lexend", sans-serif; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .risk-meta { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 10px; }
+  .risk-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); margin: 10px 0 3px; }
+  .risk-action { font-size: 13.5px; background: var(--surface-sunken); border-radius: var(--radius-s); padding: 10px 12px; }
+
+  /* Policy */
+  .policy-doc { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 26px; font-size: 14px; }
+  .policy-doc h2 { font-size: 17px; margin: 0 0 8px; }
+  .policy-section { padding: 14px 0; border-top: 1px solid var(--line); }
+  .policy-section:first-child { border-top: none; padding-top: 0; }
+  .truth-tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
+  .truth-tag.fact { background: var(--good-soft); color: var(--good); }
+  .truth-tag.gap { background: var(--warn-soft); color: var(--warn); }
+  .truth-tag.norm { background: var(--accent-soft); color: var(--accent); }
+  .policy-actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+
+  /* DEV tools screen */
+  .dev-warning {
+    background: var(--warn-soft); border: 1px solid var(--warn); border-radius: var(--radius-m);
+    padding: 18px; margin-bottom: 18px;
+  }
+  .dev-warning .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; background: var(--warn); color: #fff; border-radius: 4px; padding: 2px 6px; margin-bottom: 10px; }
+  .confirm-input { width: 100%; max-width: 280px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: var(--radius-s); font-size: 15px; margin: 12px 0; background: var(--surface); color: var(--ink); }
+
+  /* Mobile drawer */
+  .hamburger { display: none; }
+  @media (max-width: 860px) {
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; z-index: 20; transform: translateX(-100%);
+      transition: transform .2s ease; box-shadow: 0 0 0 100vmax rgba(0,0,0,0); width: 82vw; max-width: 300px;
+    }
+    .sidebar.open { transform: translateX(0); box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); }
+    .hamburger {
+      display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+      border-radius: var(--radius-s); border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+    }
+    .content { padding: 22px 16px 48px; }
+    .topbar { padding: 12px 16px; }
+    .metric-row { grid-template-columns: 1fr; }
+    .stage-grid { grid-template-columns: 1fr; }
+    .risk-card { flex-direction: row; }
+  }
+  @media (min-width: 861px) { .hamburger { display: none; } }
+
+  .skip-link {
+    position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--accent-ink);
+    padding: 10px 14px; border-radius: 0 0 8px 0; z-index: 50;
+  }
+  .skip-link:focus { left: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar { transition: none; }
+  }
+</style>
+
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<div class="app">
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">IS</div>
+      <div>
+        <div class="brand-name">Infosecurs</div>
+        <div class="brand-org">Thornfield Bookkeeping Ltd</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="nav-group-label">Overview</div>
+      <ul class="nav-list">
+        <li><button class="nav-link" data-go="home">Home</button></li>
+        <li><button class="nav-link" data-go="foundations">Security Foundations</button></li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="nav-group-label">Your journey</div>
+      <ul class="nav-list">
+        <li><button class="nav-link" data-go="foundations"><span class="nav-dot done"></span>1&nbsp; Your Business</button></li>
+        <li><button class="nav-link" data-go="foundations"><span class="nav-dot done"></span>2&nbsp; Your People &amp; Workplaces</button></li>
+        <li><button class="nav-link" data-go="foundations"><span class="nav-dot done"></span>3&nbsp; Your Technology &amp; Data</button></li>
+        <li><button class="nav-link" data-go="q-simple"><span class="nav-dot current"></span>4&nbsp; Your Security</button></li>
+        <li><button class="nav-link" data-go="risks"><span class="nav-dot"></span>5&nbsp; Your Risks &amp; Actions</button></li>
+        <li><button class="nav-link" data-go="policy"><span class="nav-dot"></span>6&nbsp; Your Security Policy</button></li>
+      </ul>
+    </div>
+
+    <div class="dev-tools-block">
+      <span class="tag">DEV ONLY</span>
+      <p>Not available outside this test environment.</p>
+      <button class="dev-reset-btn" data-go="dev-tools">Reset test organisation</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Open navigation" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4.5h14M2 9h14M2 13.5h14"/></svg>
+      </button>
+      <div>
+        <div class="topbar-title" id="topbar-title">Home</div>
+        <div class="topbar-sub" id="topbar-sub">Design prototype — not connected to real data</div>
+      </div>
+      <div style="width:36px"></div>
+    </div>
+
+    <main class="content" id="main-content">
+
+      <!-- ============ HOME ============ -->
+      <section class="screen active" id="screen-home" aria-labelledby="home-h1">
+        <div class="eyebrow">Welcome back</div>
+        <h1 class="page-title" id="home-h1">Thornfield Bookkeeping Ltd</h1>
+        <p class="page-lede">Here's where things stand, and what to do next.</p>
+
+        <div class="primary-cta">
+          <div class="primary-cta-text">
+            <div class="k">Continue</div>
+            <div class="v">Security Foundations — Stage 4 of 6</div>
+            <div class="d">Your Security: 2 of 12 questions answered</div>
+          </div>
+          <button class="btn cta-btn" data-go="q-simple">Continue →</button>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-card">
+            <h3>Foundational Security Posture</h3>
+            <div class="ring-wrap">
+              <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true">
+                <circle cx="28" cy="28" r="24" fill="none" stroke="var(--surface-sunken)" stroke-width="7"/>
+                <circle cx="28" cy="28" r="24" fill="none" stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
+                  stroke-dasharray="150.8" stroke-dashoffset="87.5" transform="rotate(-90 28 28)"/>
+              </svg>
+              <div class="metric-big">42%</div>
+            </div>
+            <div class="metric-note">Based on what you've confirmed so far. Can go up <em>or</em> down as answers change.</div>
+          </div>
+          <div class="metric-card">
+            <h3>Security Foundations Completion</h3>
+            <div class="metric-big">33%</div>
+            <div class="metric-note">6 of 18 items worked through. This tracks progress, not protection — you can complete the programme and still have gaps.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Lexend',sans-serif;font-size:15px;margin-bottom:14px;">Needs attention</h3>
+          <ul class="attn-list">
+            <li class="attn-item">
+              <span class="label"><span class="pill bad" style="margin-right:8px;">Gap</span>Backups haven't had a restore tested</span>
+              <a class="link" href="#" data-go="q-conditional">Review →</a>
+            </li>
+            <li class="attn-item">
+              <span class="label"><span class="pill warn" style="margin-right:8px;">Unconfirmed</span>Staff security awareness not yet answered</span>
+              <a class="link" href="#" data-go="q-simple">Review →</a>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ FOUNDATIONS LANDING ============ -->
+      <section class="screen" id="screen-foundations" aria-labelledby="f-h1">
+        <div class="eyebrow">Security Foundations</div>
+        <h1 class="page-title" id="f-h1">Your guided journey</h1>
+        <p class="page-lede">Six short stages. Answer what you know — "not sure" is always a real option. You can save and come back any time.</p>
+        <div class="stage-grid">
+          <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 1</span><span class="stage-name">Your Business</span><span class="stage-status done">✓ Complete</span></button>
+          <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 2</span><span class="stage-name">Your People &amp; Workplaces</span><span class="stage-status done">✓ Complete</span></button>
+          <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 3</span><span class="stage-name">Your Technology &amp; Data</span><span class="stage-status done">✓ Complete</span></button>
+          <button class="stage-tile" data-go="q-simple"><span class="stage-num">Stage 4</span><span class="stage-name">Your Security</span><span class="stage-status current">▶ 2 of 12 answered</span></button>
+          <button class="stage-tile" data-go="risks"><span class="stage-num">Stage 5</span><span class="stage-name">Your Risks &amp; Actions</span><span class="stage-status todo">Not started</span></button>
+          <button class="stage-tile" data-go="policy"><span class="stage-num">Stage 6</span><span class="stage-name">Your Security Policy</span><span class="stage-status todo">Not started</span></button>
+        </div>
+      </section>
+
+      <!-- ============ SIMPLE QUESTION ============ -->
+      <section class="screen" id="screen-q-simple" aria-labelledby="qs-h1">
+        <div class="progress-line">
+          <span>Your Security — question 3 of 12</span>
+          <span class="progress-bar"><span class="progress-bar-fill" style="width:25%"></span></span>
+        </div>
+        <div class="eyebrow">Staff sign-in protection</div>
+        <h1 class="page-title" id="qs-h1">How is multi-factor authentication used for staff accounts?</h1>
+        <p class="q-why">Why we ask: MFA is one of the most effective protections against stolen-password account takeover — without it, a leaked or guessed password is often enough to get in.</p>
+
+        <fieldset style="border:none;padding:0;margin:0;" role="radiogroup" aria-labelledby="qs-h1">
+          <div class="options" id="qs-options">
+            <label class="option selected"><input type="radio" name="qs" checked> <span class="opt-label">MFA required for all staff accounts</span></label>
+            <label class="option"><input type="radio" name="qs"> <span class="opt-label">MFA required for some staff/groups, not all</span></label>
+            <label class="option"><input type="radio" name="qs"> <span class="opt-label">MFA available but not enforced</span></label>
+            <label class="option"><input type="radio" name="qs"> <span class="opt-label">MFA not currently used</span></label>
+            <label class="option notsure"><input type="radio" name="qs"> <span class="opt-label">Not sure</span></label>
+          </div>
+        </fieldset>
+
+        <div class="explainer show" id="qs-explainer">All staff accounts are protected by MFA. This is the strongest answer for this question.</div>
+
+        <div class="q-actions">
+          <button class="btn ghost" data-go="foundations">← Back</button>
+          <button class="btn primary" data-go="q-conditional">Save and continue →</button>
+        </div>
+      </section>
+
+      <!-- ============ CONDITIONAL QUESTION ============ -->
+      <section class="screen" id="screen-q-conditional" aria-labelledby="qc-h1">
+        <div class="progress-line">
+          <span>Your Security — question 6 of 12</span>
+          <span class="progress-bar"><span class="progress-bar-fill" style="width:50%"></span></span>
+        </div>
+        <div class="eyebrow">Backups you can actually restore from</div>
+        <h1 class="page-title" id="qc-h1">Is important business data backed up, and has anyone tried restoring from it?</h1>
+        <p class="q-why">Why we ask: a backup nobody has tested is a hope, not a safeguard — ransomware and accidental deletion are the two most common reasons businesses need to restore.</p>
+
+        <fieldset style="border:none;padding:0;margin:0;" role="radiogroup" aria-labelledby="qc-h1">
+          <div class="options">
+            <label class="option"><input type="radio" name="qc"> <span class="opt-label">Backed up AND a restore has been tested</span></label>
+            <label class="option selected"><input type="radio" name="qc" checked> <span class="opt-label">Backed up but restore has never been tested</span></label>
+            <label class="option"><input type="radio" name="qc"> <span class="opt-label">Backed up but only partially covered</span></label>
+            <label class="option"><input type="radio" name="qc"> <span class="opt-label">Not backed up</span></label>
+            <label class="option notsure"><input type="radio" name="qc"> <span class="opt-label">Not sure</span></label>
+          </div>
+        </fieldset>
+
+        <div class="followup">
+          <label for="qc-followup">What's covered? <span style="font-weight:400;color:var(--ink-soft)">(optional, short)</span></label>
+          <input type="text" id="qc-followup" class="confirm-input" style="margin:0;max-width:100%" placeholder="e.g. Shared drive and accounting system" value="Shared drive and accounting system">
+        </div>
+
+        <div class="explainer warn show">Backups exist, but an untested restore is treated as a gap, not a pass — we'll record this honestly and suggest a test restore as a next action.</div>
+
+        <div class="q-actions">
+          <button class="btn ghost" data-go="q-simple">← Back</button>
+          <button class="btn primary" data-go="q-notsure">Save and continue →</button>
+        </div>
+      </section>
+
+      <!-- ============ NOT SURE BEHAVIOUR ============ -->
+      <section class="screen" id="screen-q-notsure" aria-labelledby="qn-h1">
+        <div class="progress-line">
+          <span>Your Security — question 9 of 12</span>
+          <span class="progress-bar"><span class="progress-bar-fill" style="width:75%"></span></span>
+        </div>
+        <div class="eyebrow">Helping staff recognise security risks</div>
+        <h1 class="page-title" id="qn-h1">Do staff get any security-awareness training?</h1>
+        <p class="q-why">Why we ask: most breaches start with a person, not a technical flaw — a little awareness goes a long way.</p>
+
+        <fieldset style="border:none;padding:0;margin:0;" role="radiogroup" aria-labelledby="qn-h1">
+          <div class="options">
+            <label class="option"><input type="radio" name="qn"> <span class="opt-label">Regular, structured awareness activity</span></label>
+            <label class="option"><input type="radio" name="qn"> <span class="opt-label">Occasional/informal</span></label>
+            <label class="option"><input type="radio" name="qn"> <span class="opt-label">No training provided</span></label>
+            <label class="option notsure selected"><input type="radio" name="qn" checked> <span class="opt-label">Not sure</span></label>
+          </div>
+        </fieldset>
+
+        <div class="explainer warn show" style="background:var(--surface-sunken);color:var(--ink-soft)">We'll mark this as <strong>not yet confirmed</strong> rather than guess — you can come back to it any time. This is just as valid an answer as any other; honesty here helps more than a confident guess.</div>
+
+        <div class="q-actions">
+          <button class="btn ghost" data-go="q-conditional">← Back</button>
+          <button class="btn primary" data-go="stage-complete">Save and continue →</button>
+        </div>
+      </section>
+
+      <!-- ============ STAGE COMPLETE ============ -->
+      <section class="screen" id="screen-stage-complete" aria-labelledby="sc-h1">
+        <div class="complete-wrap">
+          <div class="complete-icon">✓</div>
+          <h1 class="page-title" id="sc-h1" style="margin-bottom:10px;">Your Security — done for now</h1>
+          <p class="page-lede" style="margin:0 auto 26px;">We've worked out <strong>5 risks</strong> and some recommended actions from your answers.</p>
+          <button class="btn primary" data-go="risks">See your risks and actions →</button>
+        </div>
+      </section>
+
+      <!-- ============ RISKS & ACTIONS ============ -->
+      <section class="screen" id="screen-risks" aria-labelledby="r-h1">
+        <div class="eyebrow">Stage 5 of 6</div>
+        <h1 class="page-title" id="r-h1">Your Risks &amp; Actions</h1>
+        <p class="page-lede">What's happening now, and what we recommend next. Reviewing a risk doesn't resolve it — the action does.</p>
+
+        <div class="card risk-card">
+          <div class="risk-sev high" aria-hidden="true"></div>
+          <div class="risk-body">
+            <div class="risk-title">Backup restore not verified</div>
+            <div class="risk-meta">From: Backups (your answer) · Impact: Moderate · Likelihood: Possible</div>
+            <p style="font-size:14px;margin:0 0 4px;">If backups were needed in an emergency, it isn't confirmed they would actually restore successfully.</p>
+            <div class="risk-section-label">Recommended action</div>
+            <div class="risk-action">Schedule and carry out a test restore of your backups.</div>
+          </div>
+        </div>
+
+        <div class="card risk-card">
+          <div class="risk-sev med" aria-hidden="true"></div>
+          <div class="risk-body">
+            <div class="risk-title">Awareness training gap (unconfirmed)</div>
+            <div class="risk-meta">From: Staff awareness (not yet confirmed) · Impact: Moderate · Likelihood: Possible</div>
+            <p style="font-size:14px;margin:0 0 4px;">Without confirmed awareness activity, staff may be more susceptible to phishing and social engineering.</p>
+            <div class="risk-section-label">Recommended action</div>
+            <div class="risk-action">Confirm current practice, then introduce regular awareness activity if needed.</div>
+          </div>
+        </div>
+
+        <div class="q-actions" style="margin-top:22px;">
+          <button class="btn ghost" data-go="stage-complete">← Back</button>
+          <button class="btn primary" data-go="policy">Continue to your policy →</button>
+        </div>
+      </section>
+
+      <!-- ============ POLICY ============ -->
+      <section class="screen" id="screen-policy" aria-labelledby="p-h1">
+        <div class="eyebrow">Stage 6 of 6</div>
+        <h1 class="page-title" id="p-h1">Your Security Policy</h1>
+        <p class="page-lede">Built from what you've confirmed so far. Nothing here claims more than what's actually been established.</p>
+
+        <div class="policy-doc">
+          <h2>Thornfield Bookkeeping Ltd — Information Security Policy (draft preview)</h2>
+          <div class="policy-section">
+            <span class="truth-tag norm">Commitment</span>
+            <p style="margin:8px 0 0;">This policy applies to all staff, contractors and systems used to carry out the organisation's work.</p>
+          </div>
+          <div class="policy-section">
+            <span class="truth-tag fact">Confirmed</span>
+            <p style="margin:8px 0 0;">Multi-factor authentication is required for all staff accounts.</p>
+          </div>
+          <div class="policy-section">
+            <span class="truth-tag gap">Gap — action needed</span>
+            <p style="margin:8px 0 0;">A test restore of backups has not yet been carried out. This is an identified action, not yet complete.</p>
+          </div>
+          <div class="policy-section">
+            <span class="truth-tag gap">Not yet confirmed</span>
+            <p style="margin:8px 0 0;">Whether staff receive security-awareness activity has not yet been confirmed.</p>
+          </div>
+          <div class="policy-actions">
+            <button class="btn ghost" data-go="q-simple">← Return to a question</button>
+            <button class="btn">Flag for review</button>
+            <button class="btn primary" disabled title="Disabled while gaps remain unconfirmed — illustrative only" style="opacity:.55;cursor:not-allowed;">Approve (example state)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ DEV TOOLS ============ -->
+      <section class="screen" id="screen-dev-tools" aria-labelledby="d-h1">
+        <div class="eyebrow">Development tools</div>
+        <h1 class="page-title" id="d-h1">Reset test organisation</h1>
+        <div class="dev-warning">
+          <span class="tag">DEV ONLY</span>
+          <p style="margin:0 0 10px;"><strong>This is a development-only tool.</strong> It only works for this one synthetic test organisation, and only in a development environment — it does not exist at all elsewhere.</p>
+          <p style="margin:0;">Resetting <strong>Thornfield Bookkeeping Ltd</strong> will permanently remove every synthetic answer, asset, risk, evidence item (including files), remediation action, policy and questionnaire response recorded for it. Your account, this organisation's identity and your membership are preserved.</p>
+        </div>
+        <label for="confirm-reset" style="font-size:13.5px;font-weight:600;display:block;margin-bottom:6px;">Type <code>RESET</code> to confirm:</label>
+        <input type="text" id="confirm-reset" class="confirm-input" placeholder="RESET">
+        <div>
+          <button class="btn" style="background:var(--warn);border-color:var(--warn);color:#fff;">Reset test organisation</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  var links = document.querySelectorAll('[data-go]');
+  var screens = document.querySelectorAll('.screen');
+  var titles = {
+    home: ['Home', 'Design prototype — not connected to real data'],
+    foundations: ['Security Foundations', 'Stage overview'],
+    'q-simple': ['Your Security', 'Question 3 of 12 — a straightforward answer'],
+    'q-conditional': ['Your Security', 'Question 6 of 12 — with a short bounded follow-up'],
+    'q-notsure': ['Your Security', 'Question 9 of 12 — "Not sure" selected'],
+    'stage-complete': ['Your Security', 'Stage complete'],
+    risks: ['Your Risks & Actions', 'What is happening now, and what to do next'],
+    policy: ['Your Security Policy', 'Preview, built from confirmed facts'],
+    'dev-tools': ['DEV · Test tools', 'Visible only in development environments']
+  };
+
+  function go(id) {
+    screens.forEach(function (s) { s.classList.toggle('active', s.id === 'screen-' + id); });
+    document.querySelectorAll('.nav-link').forEach(function (l) {
+      l.classList.toggle('active', l.getAttribute('data-go') === id);
+    });
+    var t = titles[id];
+    if (t) {
+      document.getElementById('topbar-title').textContent = t[0];
+      document.getElementById('topbar-sub').textContent = t[1];
+    }
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('hamburger').setAttribute('aria-expanded', 'false');
+    document.getElementById('main-content').focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  }
+
+  links.forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      go(el.getAttribute('data-go'));
+    });
+  });
+
+  // option selection within question screens (visual only, prototype)
+  document.querySelectorAll('.options').forEach(function (group) {
+    group.querySelectorAll('.option').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        group.querySelectorAll('.option').forEach(function (o) { o.classList.remove('selected'); });
+        opt.classList.add('selected');
+        var radio = opt.querySelector('input[type=radio]');
+        if (radio) radio.checked = true;
+      });
+    });
+  });
+
+  var hamburger = document.getElementById('hamburger');
+  var sidebar = document.getElementById('sidebar');
+  hamburger.addEventListener('click', function () {
+    var open = sidebar.classList.toggle('open');
+    hamburger.setAttribute('aria-expanded', String(open));
+  });
+
+})();
+</script>
