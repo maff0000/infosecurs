@@ -155,26 +155,47 @@ vulnerabilities. Exactly 3 lines changed in each of `requirements.txt` and
 `requirements-dev.txt` (the one `pyjwt[crypto]==...` entry and its two
 hashes) — no other package moved.
 
+### Dependency security bump: `django-allauth` / `oauthlib` (WI0.1, 2026-10-01)
+
+Direct dependency `django-allauth[socialaccount]` bumped in
+`requirements.in`: `==65.19.4` → `==65.19.6`. This closes the §"Pip-audit
+suppression discipline" oauthlib exception above — `65.19.6` changes
+`django-allauth`'s own `socialaccount`/`idp-oidc` extras' constraint from
+`oauthlib<4,>=3.3.0` to `oauthlib<5,>=4.0.0`, so the resolver is now
+required to install the genuinely fixed `oauthlib==4.0.0` rather than
+merely permitted to.
+
+`pip-compile --generate-hashes` (no `--upgrade-package` flag — the direct
+version bump alone forces allauth and its now-incompatible `oauthlib` pin
+to re-resolve) was run against both `.in` files in the same pinned-digest
+container. **Exactly two package version lines changed in each of
+`requirements.txt` and `requirements-dev.txt`**: `django-allauth`
+(`65.19.4`→`65.19.6`) and `oauthlib` (`3.3.1`→`4.0.0`, its hashes
+included). `pyjwt` and every other dependency were unaffected.
+
 ### Pip-audit suppression discipline
 
-`security/dependencies` (`.github/workflows/security.yml`) runs `pip-audit
--r requirements.txt --ignore-vuln CVE-2026-49265` — exactly one advisory
-ignored, matching `pip-audit`'s own reported `id` field for that finding
-(oauthlib's PKCE `code_verifier` timing-comparison issue, GHSA-xpv3-w29h-
-x7cv). This is a temporary, reachability-based risk acceptance, not a
-statement that the finding is safe in general — see
-`docs/evidence/SECURITY-REMEDIATION-2026-10-01.md` for the full reachability
-evidence and review triggers. **Note (corrected by independent audit,
-2026-10-01):** `oauthlib`'s only fixed release, `4.0.0`, was outside
-`django-allauth`'s own `oauthlib<4,>=3.3.0` constraint at the version
-installed here (`65.19.4`) and still at `65.19.5` — but `django-
-allauth==65.19.6` (released 2026-09-30) already *requires*
-`oauthlib>=4.0.0`. A compatible upgrade path now exists; this remediation
-does not adopt it (that is a separate, untested dependency upgrade, out of
-this bounded dispatch's scope) but the evidence document's review-trigger
-condition for it has already fired and is flagged there rather than
-deferred to the 30-day window. No other advisory is, or should be, ignored
-by this flag.
+**Current state (WI0.1, 2026-10-01): no suppression is active.**
+`security/dependencies` (`.github/workflows/security.yml`) runs plain
+`pip-audit -r requirements.txt`, no `--ignore-vuln` flag. `django-allauth`
+is pinned to `65.19.6` (direct dependency, `requirements.in`), which
+requires the genuinely fixed `oauthlib>=4.0.0` — confirmed installed at
+exactly `oauthlib==4.0.0` in the accepted lock.
+
+**History, preserved for audit continuity (no longer the active
+control):** earlier the same day, this job briefly ran `pip-audit -r
+requirements.txt --ignore-vuln CVE-2026-49265` — one temporary,
+reachability-based risk acceptance for oauthlib's PKCE `code_verifier`
+timing-comparison issue (GHSA-xpv3-w29h-x7cv), while the installed
+`django-allauth==65.19.4`/`65.19.5` constrained `oauthlib<4`. A fresh
+independent audit of that state found `django-allauth==65.19.6` (released
+2026-09-30) already required the fixed `oauthlib>=4.0.0`, so Central
+Architecture authorised closing the exception immediately rather than
+carrying it to a later review date. See
+`docs/evidence/SECURITY-REMEDIATION-2026-10-01.md` §2 (the original
+risk-acceptance record, kept verbatim) and §7 (the closing action and
+verification) for the full history. No advisory is, or should be, ignored
+by this flag today.
 
 ## GitHub Actions — pinned to commit SHA, version kept as a comment
 
