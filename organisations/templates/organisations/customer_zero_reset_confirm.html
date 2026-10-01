@@ -1,0 +1,47 @@
+{% extends "application_shell.html" %}
+
+{% block title %}DEV &middot; Reset test organisation — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Reset test organisation</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<div class="summary-card dev-tools-card">
+    <p>
+        <strong>This is a development-only tool.</strong> It is reachable only because this
+        environment has explicitly opted in to it, and only for this one fixture
+        organisation - it is structurally impossible to use on any other organisation.
+    </p>
+    <p>
+        Resetting <strong>{{ organisation.name }}</strong> will <strong>permanently remove</strong>
+        every synthetic security baseline answer, key asset, risk, evidence item (including
+        its uploaded files), remediation action, policy, questionnaire response and activity
+        history recorded for this organisation.
+    </p>
+    <p>
+        Your account, this organisation's identity, your membership, and your governance role
+        assignments are preserved.
+    </p>
+    <p><strong>This action cannot be undone.</strong> Completing it will also sign you out -
+        you will need to log in again afterwards.</p>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <p>
+            <label for="id_confirmation">Type <code>RESET</code> (exactly, case-sensitive) to confirm:</label><br>
+            <input type="text"
+                   id="id_confirmation"
+                   name="confirmation"
+                   autocomplete="off"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   required>
+        </p>
+        <button type="submit" class="button button--primary">Reset test organisation</button>
+    </form>
+</div>
+{% endblock %}

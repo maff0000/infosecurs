@@ -32,4 +32,22 @@
     <p>Describe where staff work - home, office, shared/coworking space, or a mix.</p>
     <a class="button button--primary" href="{% url 'workplace:list' organisation.id %}">Open workplace</a>
 </div>
+
+{% if customer_zero_reset_enabled %}
+    {# M008A (docs/evidence/M008A-RESET-DELETION-MANIFEST.md): a small, #}
+    {# separately-conditioned section - never a new ProductArea/nav entry #}
+    {# (this is a dev tool, not a product feature). Visibility here checks #}
+    {# the exact same `customer_zero_reset_enabled` the view computed from #}
+    {# `settings.CUSTOMER_ZERO_RESET_ENABLED` - never relied on solely #}
+    {# because the URL itself would 404 if reached directly. #}
+    <div class="summary-card dev-tools-card">
+        <h2>DEV &middot; Test tools</h2>
+        <p>
+            Development-only tools for this fixture organisation. Not available in any
+            other environment.
+        </p>
+        <a class="button button--secondary"
+           href="{% url 'organisations:customer_zero_reset' organisation.id %}">Reset test organisation</a>
+    </div>
+{% endif %}
 {% endblock %}

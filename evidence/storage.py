@@ -26,6 +26,7 @@ AI_GATEWAY_BASE_URL precedent in this codebase.
 import codecs
 import hashlib
 import os
+import shutil
 import uuid
 
 from config.env import require_env
@@ -229,3 +230,43 @@ def evidence_file_path(organisation_id, stored_filename):
             "Resolved evidence path escaped the organisation's storage directory."
         )
     return candidate
+
+
+def delete_organisation_evidence_directory(organisation_id):
+    """
+    Remove the WHOLE evidence storage directory for one organisation
+    (M008A dev-only reset - docs/evidence/M008A-RESET-DELETION-MANIFEST.md).
+
+    Reuses the exact same containment pattern `evidence_file_path` already
+    uses - `os.path.realpath` plus `os.path.commonpath` against the
+    storage root, re-verified here rather than trusted from any caller -
+    before any removal happens. `organisation_id` is deliberately not
+    typed to a real `Organisation`/`uuid.UUID` here, so this containment
+    check is directly unit-testable against a deliberately malicious,
+    path-traversal-shaped input without needing a real Organisation row at
+    all.
+
+    Called only AFTER the DB transaction that deletes this organisation's
+    `EvidenceItem` rows has already committed (PID §A4: the database and
+    the filesystem are "not one atomic resource") - this function never
+    touches the database itself.
+
+    Idempotent/retryable (PID §A4): if the directory does not exist at
+    all - already removed by an earlier attempt, or the organisation never
+    had any evidence files - this is a safe no-op, never an error. Returns
+    `True` if a directory was actually removed, `False` if there was
+    nothing to remove.
+    """
+    root = os.path.realpath(evidence_storage_root())
+    org_dir = os.path.realpath(os.path.join(root, str(organisation_id)))
+
+    if org_dir == root or os.path.commonpath([root, org_dir]) != root:
+        raise EvidenceValidationError(
+            "Resolved evidence directory escaped the storage root; refusing to delete."
+        )
+
+    if not os.path.isdir(org_dir):
+        return False
+
+    shutil.rmtree(org_dir)
+    return True

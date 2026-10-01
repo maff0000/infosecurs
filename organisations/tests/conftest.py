@@ -1,5 +1,8 @@
+import io
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import Client
 
 from organisations.models import Organisation, OrganisationMembership
@@ -73,4 +76,64 @@ def client_b(user_b, member_b):
     """See `client_a`'s docstring - the same independent-Client fix."""
     c = Client()
     c.force_login(user_b)
+    return c
+
+
+@pytest.fixture(autouse=True)
+def evidence_storage_root(tmp_path, monkeypatch):
+    """
+    M008A: every organisations test gets its own throwaway
+    EVIDENCE_STORAGE_ROOT, mirroring evidence/tests/conftest.py's own
+    identically-named autouse fixture 1:1 - needed here because the M008A
+    reset-service/reset-view tests in this package create real evidence
+    files on disk. Autouse and harmless for every other, pre-existing test
+    in this package that never touches evidence storage at all.
+    """
+    root = tmp_path / "evidence-storage"
+    root.mkdir()
+    monkeypatch.setenv("EVIDENCE_STORAGE_ROOT", str(root))
+    return root
+
+
+@pytest.fixture
+def customer_zero_bootstrap(db, monkeypatch):
+    """
+    M008A (docs/evidence/M008A-RESET-DELETION-MANIFEST.md): bootstraps a
+    genuine Customer Zero fixture organisation via the REAL
+    `create_customer_zero` management command - not a hand-rolled
+    equivalent - so `CustomerZeroFixture`, the Owner `OrganisationMembership`,
+    and the Account Holder's `OrganisationPerson` + all three
+    `GovernanceRoleAssignment` rows all exist exactly as a real bootstrap
+    would leave them. Mirrors the exact pattern already established in
+    `organisations/tests/test_bootstrap.py`'s `TestCreateCustomerZeroGovernanceBootstrap`.
+
+    Returns `(user, organisation)`.
+    """
+    username = "cz_reset_fixture_user"
+    monkeypatch.setenv("CUSTOMER_ZERO_USERNAME", username)
+    monkeypatch.setenv("CUSTOMER_ZERO_EMAIL", f"{username}@example.test")
+    monkeypatch.setenv("CUSTOMER_ZERO_PASSWORD", "a-synthetic-test-password-12345")
+    monkeypatch.setenv("CUSTOMER_ZERO_ORGANISATION_NAME", "CZ Reset Fixture Synthetic Org")
+    call_command("create_customer_zero", stdout=io.StringIO())
+
+    user = get_user_model().objects.get(username=username)
+    organisation = Organisation.objects.get(name="CZ Reset Fixture Synthetic Org")
+    return user, organisation
+
+
+@pytest.fixture
+def customer_zero_user(customer_zero_bootstrap):
+    return customer_zero_bootstrap[0]
+
+
+@pytest.fixture
+def customer_zero_org(customer_zero_bootstrap):
+    return customer_zero_bootstrap[1]
+
+
+@pytest.fixture
+def customer_zero_client(customer_zero_user):
+    """Independent `Client()` - see `client_a`'s docstring for why."""
+    c = Client()
+    c.force_login(customer_zero_user)
     return c
