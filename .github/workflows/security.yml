@@ -43,8 +43,15 @@ jobs:
       # Pinned tool version, not "whatever pip-audit ships today".
       - run: pip install --no-cache-dir pip-audit==2.10.1
 
+      # Exactly one authorised, temporary advisory suppression (Central
+      # Architecture risk acceptance, 2026-10-01) - CVE-2026-49265 /
+      # GHSA-xpv3-w29h-x7cv (oauthlib's PKCE code_verifier timing
+      # comparison, server/authorization-grant-type code Infosecurs never
+      # loads - see docs/evidence/SECURITY-REMEDIATION-2026-10-01.md for
+      # the full reachability evidence and review triggers). No other
+      # advisory is or should be ignored here.
       - name: pip-audit (application dependencies)
-        run: pip-audit -r requirements.txt
+        run: pip-audit -r requirements.txt --ignore-vuln CVE-2026-49265
 
   sast:
     name: security/sast

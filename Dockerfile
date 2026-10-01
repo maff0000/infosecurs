@@ -6,6 +6,29 @@
 # uncontrolled upgrade baked into every build.
 FROM python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
+# TEMPORARY, exact-version-pinned security overlay (Central Architecture
+# authorisation, 2026-09-30/10-01 - see docs/delivery/BUILD-REPRODUCIBILITY.md
+# "Temporary exact-version security overlay" section and
+# docs/evidence/SECURITY-REMEDIATION-2026-10-01.md for the full CVE/Trivy
+# evidence). The pinned base-image digest above has not yet been rebuilt
+# upstream with Debian's patched packages (confirmed by pulling the current
+# `python:3.12.14-slim-trixie` tag fresh on 2026-09-30/10-01: it still ships
+# the unpatched versions below), so no new digest exists to re-pin to. This
+# is NOT `apt-get upgrade` (floating, non-deterministic, deliberately
+# removed 2026-09-22) - it names exactly four packages and exactly one
+# target version each; if any exact version is ever unavailable, `apt-get
+# install pkg=version` fails the build closed rather than silently
+# installing something else. Remove this entire RUN step (reverting to the
+# single FROM line above) the next time this Dockerfile's base-image digest
+# is deliberately re-pinned to one that already carries these fixes.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        openssl=3.5.7-1~deb13u3 \
+        libssl3t64=3.5.7-1~deb13u3 \
+        openssl-provider-legacy=3.5.7-1~deb13u3 \
+        libpcre2-8-0=10.46-1~deb13u3 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Container/source identity (M006 Round 6, PID §15/§K). Standard OCI labels,
 # not a bespoke metadata service - "what Git SHA produced this running
 # image?" is answered mechanically via `docker inspect`, never a trusted
