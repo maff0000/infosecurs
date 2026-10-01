@@ -164,11 +164,17 @@ ignored, matching `pip-audit`'s own reported `id` field for that finding
 x7cv). This is a temporary, reachability-based risk acceptance, not a
 statement that the finding is safe in general — see
 `docs/evidence/SECURITY-REMEDIATION-2026-10-01.md` for the full reachability
-evidence, the review triggers, and why no compatible upgrade path exists
-today (`oauthlib`'s only fixed release, `4.0.0`, is outside `django-
-allauth`'s own `oauthlib<4,>=3.3.0` constraint, true even on allauth's
-current latest release). No other advisory is, or should be, ignored by
-this flag.
+evidence and review triggers. **Note (corrected by independent audit,
+2026-10-01):** `oauthlib`'s only fixed release, `4.0.0`, was outside
+`django-allauth`'s own `oauthlib<4,>=3.3.0` constraint at the version
+installed here (`65.19.4`) and still at `65.19.5` — but `django-
+allauth==65.19.6` (released 2026-09-30) already *requires*
+`oauthlib>=4.0.0`. A compatible upgrade path now exists; this remediation
+does not adopt it (that is a separate, untested dependency upgrade, out of
+this bounded dispatch's scope) but the evidence document's review-trigger
+condition for it has already fired and is flagged there rather than
+deferred to the 30-day window. No other advisory is, or should be, ignored
+by this flag.
 
 ## GitHub Actions — pinned to commit SHA, version kept as a comment
 

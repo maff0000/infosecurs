@@ -88,12 +88,31 @@ capability. No change to M007's product behaviour.
    **authorization-server** (grant-type/token-issuance) machinery.
 4. **Fixed upstream version:** `4.0.0` (oauthlib's only fixed release — no
    `3.x` backport exists; checked all published releases on PyPI).
-5. **Dependency constraint blocks the fix:** `django-allauth==65.19.4`'s
-   `socialaccount`/`idp-oidc` extras both declare `oauthlib<4,>=3.3.0`
-   (checked directly against the package's PyPI metadata). This constraint
-   is unchanged even on allauth's current latest release (`65.19.5`,
-   checked the same way) — there is presently no allauth release that
-   permits `oauthlib>=4`.
+5. **Dependency constraint blocked the fix at the installed version — but
+   this is now stale, corrected by independent audit:** `django-
+   allauth==65.19.4`'s `socialaccount`/`idp-oidc` extras both declare
+   `oauthlib<4,>=3.3.0` (checked directly against the package's PyPI
+   metadata), and this was still true as of `65.19.5`. **A fresh independent
+   audit (same day as this remediation) found that `django-allauth==65.19.6`
+   — released 2026-09-30, before this remediation's own effective date —
+   changes both extras' constraint to `oauthlib<5,>=4.0.0`, i.e. it now
+   *requires* the fixed `oauthlib==4.0.0` rather than forbidding it.** This
+   PR does **not** upgrade `django-allauth` to `65.19.6` — that is a
+   separate, untested dependency upgrade outside this remediation's
+   authorised scope (Central Architecture: "Do not upgrade django-allauth
+   merely because 65.19.5 exists unless there is a separately demonstrated
+   reason" — one now exists, but adopting it is a product/architecture
+   decision for Central Architecture, not something decided unilaterally
+   inside this bounded dispatch). The practical effect: the "immediately,
+   if django-allauth publishes a release permitting oauthlib>=4" review
+   trigger below has **already fired** as of this PR's merge, not at some
+   future date — flagged explicitly to Central Architecture rather than
+   silently left for the 30-day window to catch. This correction does not
+   change the reachability finding below (independently reconfirmed
+   unreachable regardless of which allauth/oauthlib pairing is installed);
+   it only means the "no compatible upgrade path exists today" framing
+   originally used to justify deferral was already inaccurate at the time
+   this document was first written.
 6. **Infosecurs's actual usage is OAuth2/OIDC social-login CLIENT only:**
    `requirements.in` installs `django-allauth[socialaccount]==65.19.4` for
    federated customer sign-in via Google/Microsoft (see that file's own
@@ -136,7 +155,10 @@ exactly this finding, nothing else).
 **Review triggers (whichever comes first):**
 - No later than **30 days after merge** (by 2026-10-31).
 - Immediately, if `django-allauth` publishes a release permitting
-  `oauthlib>=4`.
+  `oauthlib>=4`. **Already satisfied at merge time — see the correction in
+  point 5 above: `django-allauth==65.19.6` (released 2026-09-30) requires
+  `oauthlib>=4.0.0`. This is reported to Central Architecture as part of
+  this remediation's own handoff, not deferred to the 30-day window.**
 - Immediately, if `oauthlib` publishes a compatible `3.x` backport of this
   fix.
 - Immediately, if Infosecurs ever enables an OAuth/OIDC identity-provider /
@@ -219,3 +241,37 @@ branch.
   diff is confined to `Dockerfile`, `requirements.txt`, `requirements-
   dev.txt`, `.github/workflows/security.yml`,
   `docs/delivery/BUILD-REPRODUCIBILITY.md`, and this evidence file.
+
+## 6. Fresh independent Auditor (2026-10-01)
+
+A fresh, zero-context auditor (no access to this author's reasoning, only
+this PR/commit and its own instructions) independently re-verified all
+three of Central Architecture's required review points, each against the
+real build/scan/repository state directly, not this document's prose:
+
+- **§1/§1b apt overlay exact-version bounding — CONFIRMED SAFE.**
+  Independently rebuilt the image, confirmed all four package versions via
+  `dpkg -l`, independently reran Trivy (0 CRITICAL/HIGH, matching this
+  document's claim), and additionally proved the fail-closed behaviour
+  directly: deliberately requested a non-existent version string in a
+  scratch copy of the Dockerfile and confirmed the build genuinely fails
+  (`apt-get` exit 100), not a silent fallback.
+- **§2 OAuthLib reachability — CONFIRMED SAFE**, verified three
+  independent ways beyond this document's own grep-based claim: a static
+  grep of the installed `allauth` package and Infosecurs's own app code: a
+  live `sys.modules` dump after full `django.setup()` (`oauthlib`/`idp`
+  appear nowhere); and a full URL-resolver walk (zero `oidc`/`idp` routes).
+  **Also found the point-5/review-trigger staleness corrected above** — the
+  auditor caught this independently; the correction in this document
+  reflects the auditor's finding, not the reverse.
+- **§4 pip-audit suppression blast radius — CONFIRMED SAFE.** Independently
+  reran `pip-audit -f json` against this exact commit's lockfiles (both
+  `requirements.txt` and, for completeness, `requirements-dev.txt`):
+  exactly one vulnerability across all resolved dependencies
+  (`oauthlib`/`CVE-2026-49265`), confirmed the single `--ignore-vuln`
+  produces GREEN, and confirmed `pyjwt==2.15.1` is genuinely fixed (`vulns:
+  []`) rather than being the thing the ignore flag touches.
+
+No other concern was raised. The auditor's one correction (allauth
+65.19.6/§5 above) has been incorporated into this document; it does not
+change any of the three safety verdicts.
