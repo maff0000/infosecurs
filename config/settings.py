@@ -21,6 +21,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DJANGO_ENV = require_env_choice("DJANGO_ENV", ("development", "test", "production"))
 DEBUG = DJANGO_ENV == "development"
 
+# M008A dev-only Customer Zero reset
+# (docs/evidence/M008A-RESET-DELETION-MANIFEST.md, PID §A2.1/§A2.5):
+# "DEBUG alone is not sufficient" is a non-negotiable - this constant
+# requires BOTH DJANGO_ENV == "development" AND a second, explicit opt-in
+# environment flag before the dev-only reset tool is reachable at all.
+# DEBUG is derived from DJANGO_ENV alone (above), so checking DEBUG here
+# instead would collapse back to a single-condition gate - this constant
+# is deliberately its own, separately-computed boolean, never a re-read of
+# DEBUG. See organisations.reset_service and organisations.views.
+# customer_zero_reset for where this is checked FIRST, before any other
+# authorization logic, returning a genuine 404 (never 403, never a
+# redirect) for both GET and POST when False.
+CUSTOMER_ZERO_RESET_ENABLED = DJANGO_ENV == "development" and optional_env(
+    "INFOSECURS_ENABLE_CUSTOMER_ZERO_RESET", "false"
+).lower() == "true"
+
 # ---------------------------------------------------------------------------
 # Core
 # ---------------------------------------------------------------------------

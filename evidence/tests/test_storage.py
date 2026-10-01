@@ -169,3 +169,79 @@ class TestEvidenceFilePath:
         """
         with pytest.raises(EvidenceValidationError):
             storage.evidence_file_path(org_a.id, malicious_stored_filename)
+
+
+class TestDeleteOrganisationEvidenceDirectory:
+    """
+    M008A (docs/evidence/M008A-RESET-DELETION-MANIFEST.md): the new
+    containment-checked whole-directory deletion helper the dev-only reset
+    uses. Unit-tested directly here, independently of the reset service
+    itself and independently of any real Organisation row - the function
+    does not require one.
+    """
+
+    def test_removes_an_existing_organisation_directory(self, org_a, evidence_storage_root):
+        upload = _upload(MINIMAL_PDF, "a.pdf")
+        storage.store_uploaded_file(org_a.id, upload, "pdf")
+        org_dir = os.path.join(str(evidence_storage_root), str(org_a.id))
+        assert os.path.isdir(org_dir)
+
+        removed = storage.delete_organisation_evidence_directory(org_a.id)
+
+        assert removed is True
+        assert not os.path.exists(org_dir)
+
+    def test_idempotent_when_the_directory_does_not_exist(self, org_a):
+        """Safe no-op, never an error - required for a reset to be
+        safely retryable/repeatable (PID §A4)."""
+        removed_first = storage.delete_organisation_evidence_directory(org_a.id)
+        removed_second = storage.delete_organisation_evidence_directory(org_a.id)
+        assert removed_first is False
+        assert removed_second is False
+
+    def test_never_touches_a_different_organisations_directory(
+        self, org_a, org_b, evidence_storage_root
+    ):
+        storage.store_uploaded_file(org_a.id, _upload(MINIMAL_PDF, "a.pdf"), "pdf")
+        storage.store_uploaded_file(org_b.id, _upload(MINIMAL_PDF, "b.pdf"), "pdf")
+        org_b_dir = os.path.join(str(evidence_storage_root), str(org_b.id))
+
+        storage.delete_organisation_evidence_directory(org_a.id)
+
+        assert os.path.isdir(org_b_dir)
+        assert len(os.listdir(org_b_dir)) == 1
+
+    @pytest.mark.parametrize(
+        "malicious_organisation_id",
+        [
+            "../../../../etc",
+            "..",
+            "",
+            "/etc/passwd",
+        ],
+    )
+    def test_refuses_a_path_traversal_shaped_organisation_id(
+        self, evidence_storage_root, malicious_organisation_id
+    ):
+        """
+        `delete_organisation_evidence_directory` is deliberately not typed
+        to a real `Organisation`/`uuid.UUID` - this proves the containment
+        check itself refuses to resolve outside the storage root (or onto
+        the root itself) for a deliberately malicious/out-of-root input,
+        exactly like `evidence_file_path`'s own equivalent test above.
+        Nothing under the real storage root is ever removed by any of
+        these calls.
+        """
+        before = set(os.listdir(str(evidence_storage_root)))
+        with pytest.raises(EvidenceValidationError):
+            storage.delete_organisation_evidence_directory(malicious_organisation_id)
+        after = set(os.listdir(str(evidence_storage_root)))
+        assert before == after
+
+    def test_refuses_to_delete_the_storage_root_itself(self, evidence_storage_root):
+        """An organisation id that resolves to exactly the storage root
+        (the empty-string case) must never result in the root itself
+        being removed."""
+        with pytest.raises(EvidenceValidationError):
+            storage.delete_organisation_evidence_directory("")
+        assert os.path.isdir(str(evidence_storage_root))

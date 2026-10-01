@@ -1,7 +1,10 @@
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.db import transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -19,7 +22,17 @@ from entitlements.session import Invalid, get_validated_context
 from entitlements.tiers import TIER_PAUSED
 
 from organisations.forms import OrganisationCreateForm, OrganisationProfileForm
-from organisations.models import AuditEvent, Organisation, OrganisationMembership, OrganisationProfile
+from organisations.models import (
+    AuditEvent,
+    CustomerZeroFixture,
+    Organisation,
+    OrganisationMembership,
+    OrganisationProfile,
+)
+from organisations.reset_service import (
+    ResetFilesystemError,
+    reset_customer_zero_organisation,
+)
 from security_baseline.models import ANSWER_CHOICES
 
 # ---------------------------------------------------------------------------
@@ -308,7 +321,19 @@ def organisation_hub(request, organisation_id):
     return render(
         request,
         "organisations/organisation_hub.html",
-        {"organisation": organisation},
+        {
+            "organisation": organisation,
+            # M008A: the DEV tools section is visible only when BOTH the
+            # settings-level gate is on AND this particular organisation is
+            # the trusted fixture - computed here, not just relied on via
+            # "the URL happens to be unreachable" (the dispatch's own
+            # explicit requirement: a template conditional showing/hiding a
+            # link must check the same setting the view itself checks).
+            "customer_zero_reset_enabled": (
+                settings.CUSTOMER_ZERO_RESET_ENABLED
+                and CustomerZeroFixture.objects.filter(organisation=organisation).exists()
+            ),
+        },
     )
 
 
@@ -346,4 +371,121 @@ def organisation_profile(request, organisation_id):
         request,
         "organisations/profile_form.html",
         {"organisation": organisation, "form": form, "is_new": is_new},
+    )
+
+
+# ---------------------------------------------------------------------------
+# M008A (docs/evidence/M008A-RESET-DELETION-MANIFEST.md) - dev-only Customer
+# Zero reset. Deliberately NOT decorated with `@require_capability()`: that
+# decorator resolves a `ProductArea`/capability code for the route, and
+# this is a dev-tools surface, not a commercial product area - the PID
+# dispatch is explicit that no new `ProductArea`/capability should be
+# invented just to force a fourth authority layer that doesn't naturally
+# exist here. The three real authority layers checked below are exactly
+# the dispatch's own framing:
+#   1. The environment gate (settings.CUSTOMER_ZERO_RESET_ENABLED) -
+#      checked FIRST, before any other authorization logic, and fails
+#      closed with a genuine 404 (never 403, never a redirect) for BOTH
+#      GET and POST.
+#   2. The CustomerZeroFixture identity check - the one thing that makes
+#      an organisation eligible for this feature at all, re-checked again,
+#      independently, inside `reset_customer_zero_organisation` itself
+#      (defence in depth - this view's own check is never the only guard).
+#   3. Ordinary tenant-owner membership, via the same
+#      `get_member_organisation_or_404` every other organisation-scoped
+#      view in this codebase already uses - no reset-specific membership
+#      logic.
+# A fail-closed/tampered `infosecurs_context` (PID §6.4, M007) is still
+# handled explicitly below, via the exact same `entitlements.session.
+# get_validated_context` call `entitlements.decorators.require_capability`
+# itself uses for this one piece - reused directly rather than
+# re-implemented, without pulling in that decorator's unrelated
+# capability/tier/active-organisation-alignment machinery, which has no
+# natural meaning for a route with no capability code.
+# ---------------------------------------------------------------------------
+@login_required
+def customer_zero_reset(request, organisation_id):
+    """
+    GET renders a confirmation screen; it never deletes anything - there is
+    no code path here where a GET request reaches
+    `reset_customer_zero_organisation`. POST validates a literal, typed
+    `RESET` confirmation (case-sensitive) plus Django's own CSRF protection
+    (this view is never exempted from it) before calling the service
+    function.
+
+    On a successful reset, calls Django's own `logout(request)` (PID §8's
+    Central Architecture instruction: "reset succeeds -> session destroyed
+    -> customer returned to login") - a full session destroy, not merely
+    `entitlements.session.issue_context`'s key-rotation - then redirects to
+    the login page. `logout()` only ever touches the current request's own
+    session (Django's own implementation - `request.session.flush()`), so
+    every other user's session is completely unaffected by construction.
+    """
+    # 1. Environment gate - checked first, before anything else, and
+    # fails closed as an ordinary 404 regardless of method.
+    if not settings.CUSTOMER_ZERO_RESET_ENABLED:
+        raise Http404
+
+    # M007 fail-closed session-validation path (PID §6.4), reused as-is -
+    # see this section's module-level comment above for why this is not a
+    # reset-specific check.
+    context = get_validated_context(request)
+    if isinstance(context, Invalid):
+        return redirect_to_login(request.get_full_path())
+
+    # Ordinary tenant-owner membership - the same helper, same Http404
+    # convention, every other organisation-scoped view in this codebase
+    # already uses.
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+
+    # The real safety-critical check: this organisation must be the
+    # trusted, synthetic Customer Zero fixture. An absent fixture relation
+    # renders EXACTLY like "not a member"/"doesn't exist" - a plain 404,
+    # never a 403 (a 403 would leak "this organisation exists but isn't
+    # the fixture" to an authenticated member of some other, real
+    # organisation).
+    if not CustomerZeroFixture.objects.filter(organisation=organisation).exists():
+        raise Http404
+
+    if request.method == "POST":
+        confirmation = request.POST.get("confirmation", "")
+        if confirmation != "RESET":
+            messages.error(
+                request,
+                "Type RESET exactly (case-sensitive) to confirm. Nothing was deleted.",
+            )
+            return render(
+                request,
+                "organisations/customer_zero_reset_confirm.html",
+                {"organisation": organisation},
+            )
+
+        try:
+            reset_customer_zero_organisation(organisation, performed_by=request.user)
+        except ResetFilesystemError:
+            # PID §A4: the DB transaction already committed successfully
+            # at this point - the organisation's data IS reset - but the
+            # separate evidence-directory filesystem cleanup step did not
+            # fully succeed. Never report this as a clean success: no
+            # logout, no redirect to login, a clear on-screen error
+            # instead, and the reset is safely retryable (idempotent).
+            messages.error(
+                request,
+                "The organisation's data was reset, but cleaning up its stored "
+                "evidence files did not fully succeed. Re-run the reset to retry "
+                "the file cleanup - the database state is already consistent.",
+            )
+            return render(
+                request,
+                "organisations/customer_zero_reset_confirm.html",
+                {"organisation": organisation},
+            )
+
+        logout(request)
+        return redirect("login")
+
+    return render(
+        request,
+        "organisations/customer_zero_reset_confirm.html",
+        {"organisation": organisation},
     )
