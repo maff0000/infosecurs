@@ -1,0 +1,58 @@
+# M008D — Information Security Policy: Truthful Professional Output from Structured Foundations
+
+**Parent:** M008. **Status:** POLICY SPECIFICATION/EXAMPLES FIRST; Product Authority approval mandatory before renderer/generation changes.  
+**Existing authoritative implementation:** `policy.grounding.build_policy_grounding_payload` uses bounded structured tenant truth; `policy.services.generate_policy_draft` currently makes one bounded `LiteLLMGateway` generation call, persists a `PolicyVersion`; `PolicyVersion` stores sections, warnings, generation source, prompt version, approval/review metadata and enforces immutable protected fields when approved/superseded; `policy.pdf` uses ReportLab with stable page counting; eight `ALLOWED_SECTION_KEYS` have shared labels. Old `policy.forms.PolicyVersionEditForm` exposes one big textarea per section. Preserve these hard-won controls.
+
+## D1. Observed issue versus hypothesis
+
+Matt reports that the policy generated in first-pass testing was *not the document he expected*. No actual output, annotated PDF or target reference was provided in this handoff. Therefore no one may claim it was specifically too short, vague, verbose, AI-like, inaccurate or incomplete without reviewing the artefact. Design work MUST obtain the current synthetic example (or re-create an equivalent using documented selections), document concrete differences and show improved samples before implementing a replacement. This is a quality and product-methodology gate, not permission to re-prompt blindly.
+
+## D2. What the customer should receive
+
+An Information Security Policy appropriate to a small UK organisation: readable, professionally structured, proportionate, explicitly owned and reviewable, with clearly distinguished *organisational commitments*, *current confirmed practices* and *identified gaps/actions*. It must be credible when shown to staff/customers without pretending to certify compliance. Proposal: retain M004's compact 2–4 page target unless Matt expressly approves another length after seeing examples; don't force length by hiding warnings or dropping facts. No ISO 27001 or Cyber Essentials conformance claims from a questionnaire tick alone.
+
+### Proposed stable section structure — reuse existing eight keys wherever possible
+
+| Existing key | Human-facing content requirement |
+|---|---|
+| `purpose_and_scope` | Organisation scope, reason for policy, whom it applies to; avoid invented subsidiaries/geographies. |
+| `responsibilities_and_governance` | Accountable roles and escalation responsibilities from actually assigned governance; unknown owners disclosed. |
+| `access_and_authentication` | Required authentication/access principles; current MFA coverage stated only if confirmed; missing controls clearly separated. |
+| `devices_protection_and_updates` | Expected device protection, encryption and updates; no fabricated managed-device tooling. |
+| `information_handling_and_backup` | Handling principles, backup responsibilities, tested-restoration distinction. |
+| `workplace_and_remote_working` | Only applicable workplace/remote access standards; don't assume office/site or VPN. |
+| `security_incidents_and_reporting` | How incidents should be reported; differentiate established reporting route versus route needing adoption. |
+| `review_approval_and_document_control` | Owner/authoriser, version, approval mode/date, review date, distribution commitments (not evidence of training). |
+
+## D3. Versioned policy composition pipeline
+
+1. **Only verified structured input.** Read organisation/profile, governance roles, workplace types/counts, 12 baseline canonical statuses and approved selection-detail codes, security-state evidence assurance labels and confirmed risks/remediation as *tenant-scoped, minimised* projections. The M006 prompt-injection G1 prohibition on forwarding narrative/customer notes remains absolute. No LLM reads raw customer descriptions.
+2. **Deterministic clause selection by default.** Versioned curated clauses in Git, with stable IDs and parameters, decide applicable policy commitments based on confirmed facts; deliberate conditional combinations are reviewed. Avoid copy-paste templates for every possible customer or a new arbitrary rules DSL. The application assembles the approved section set and uses constrained placeholders for validated identifiers. Unknown branch yields safe neutral policy language plus conspicuous actionable warning, never plausible-sounding certainty.
+3. **Truth language classification.** Label each output clause as one of `NORMATIVE_REQUIREMENT` (what organisation commits to do), `CURRENT_CONFIRMED_PRACTICE` (what customer confirmed is happening), or `GAP_OR_FUTURE_ACTION` (what needs implementation). A policy requiring everyone to use MFA must not simultaneously say everybody *already* does when baseline is PARTIAL. Policy existence/approval must not change any baseline answer or evidence assurance label.
+4. **Non-default AI exception path.** Normal baseline policy generation should require **zero model calls** if complete curated clause coverage exists. A future narrowly scoped AI drafting exception needs separate explicit Product Authority authorisation, structured-only grounding, versioned prompt, bounded token budget and mandatory proof that app-owned truth gating still applies. Preserve existing M004/M006 live AI harnesses; if UI switches default to deterministic generation, keep a separately scoped regression pathway for legacy AI semantics until approved retirement (not part of this PID).
+5. **Provenance.** Store source methodology/template version and selected clause IDs or an immutable generation manifest for each `PolicyVersion`, plus a contemporaneous snapshot of fact statuses **and the displayed organisation name** relevant to wording (today the PDF renderer reads the live `organisation.name`, so an old PDF could otherwise change after rename; close this gap without rewriting approved rows). Existing enum `PolicyVersion.generation_source` has `ai` and `manual` only. Add a truthful `template`/`deterministic` member with an additive backward-compatible migration if that is the chosen mechanism; never misrepresent template output as AI-generated or manually-authored. Existing `prompt_version` stays appropriate to AI versions, template version stored separately.
+6. **Immutability.** Reuse PolicyDocument/PolicyVersion/approval flows and existing ReportLab renderer, adjust only where necessary. Old approved versions and PDFs must reproduce unchanged after subsequent organisation changes. A new policy after changes is a new draft/version, never an in-place rewrite. Keep `PolicyVersion.save` safeguards, tenant-scoped downloads, approved-history semantics and required authoriser review.
+7. **Warnings.** Keep deterministic, testable review-warning derivation. Every NO/PARTIAL/UNKNOWN or stale/conflicting evidence relevant to policy gets transparent treatment without conflating unverified responses with proven failures. No warning is silently dropped to hit the page limit; optional detailed actions may be moved into a clearly titled attached schedule with explicit Product Authority consent.
+
+## D4. Review experience: no customer narrative editor
+
+Foundation-tier policy page shows a **policy preview** with section headings and plain-language facts, a compact warning/action summary, source status where appropriate, next review date and buttons: **Return to question**, **Flag for review** (structured reason category), **Approve** if authorised, **Download approved policy**. No per-section textarea for Foundation customer. If Matt needs specialist editorial override later, treat it as a separately authorised practitioner-only, auditable controlled revision mechanism outside the standard Foundations flow; do not expose a hidden textarea or write-through endpoint that accepts arbitrary prose for Foundation users. Proper approval mode/authoriser restrictions remain exactly as M004.
+
+## D5. Design checkpoint examples and rubric
+
+Before any generation change, produce **two complete rendered sample PDFs** based on synthetic reviewed answer matrices, not vague prose in a design meeting: (A) remote 12-person M365 company with staff-MFA partial, admin-MFA yes, backups untested and awareness absent; (B) office-first Google company with most controls yes, missing incident-reporting route and evidence unverified. Include a third all-UNKNOWN draft *preview* demonstrating safe handling of ignorance (do not auto-approve). For each line of factual assertion present a `clause_id → canonical source/selection → assertion classification` provenance matrix. If supplied, compare the actual current offending sample with the proposed one and record what Product Authority specifically disliked. Show lengths/page breaks, readability, how missing controls are described, and how a manager can adopt the policy without translating security jargon.
+
+**Product Authority review rubric:** factual accuracy; no unsupported “implemented”, “certified”, “compliant”, named vendors/people, claimed training/audits/tests; distinguishes commitment from present state; practical coverage of eight sections; company-specific proportionality; unambiguous responsibilities; readable formatting and version control; useful handling of gaps; short actionable review; download actually opens; remains correct when old version re-downloaded after state changed. Matt must explicitly accept representative examples and whether 2–4 pages is right **before** build.
+
+## D6. Required tests
+
+- Golden deterministic text sections/PDF cases for A, B, C + matrix variations across all 12 statuses and categories; confirm same inputs/template version produce same clauses and equivalent artifact content (allow documented PDF metadata differences), bounded page count and no truncation.
+- Tested counterexamples: staff-MFA PARTIAL with admin MFA YES; backups PRESENT but restore UNTESTED; no incident route but policy prescribes one; ISO status UNKNOWN vs CERTIFIED without supporting evidence. None becomes a fabricated “existing” claim. No automatic verification/evidence improvement when policy approved.
+- Approval flow direct/external, authoriser rights, wrong-tenant version ID, CSRF, old-version invariance, review-date handling, incomplete/unknown facts, missing clause mapping, denied direct POST to old section-editor by Foundation tier.
+- No policy output uses untrusted raw baseline note/organisation description/risk title as authority. Test HTML injection, PDF escaping, prompt-injection-shaped legacy stored notes and safe identifiers.
+- Generation instrumentation: deterministic default 0 AI calls, meaningful failure diagnostics, no hidden model calls. All six established fake/live AI evaluations remain GREEN when run on the final M008 candidate; any prompt/grounding change is a separate architectural approval requirement.
+- Browser preview at 375/768/1280 and PDF inspected as rendered pages. Full M001–M007 regression, backup/restore/fresh install, independent Auditor.
+
+## D7. Stop conditions and non-goals
+
+STOP if the desired policy content cannot be inferred from available Product Authority feedback; request sample/rubric review through the planned design gate, not a code guess. STOP if template clauses claim current control state without canonical facts, if generation requires raw customer prose, if an immutable policy is overwritten, or if review/approval is bypassed. No external certification, supplier questionnaire export, policy-distribution/training automation, fully custom clause authoring, new PDF pipeline, document editor, bulk questionnaire processing or contract templates in M008D.
