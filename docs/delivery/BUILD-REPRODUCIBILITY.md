@@ -45,6 +45,67 @@ its own. If a future CVE appears in this exact digest, the fix is a
 deliberate re-pin (new tag, new digest, this file updated) — never an
 uncontrolled upgrade baked back into the build.
 
+### Temporary exact-version security overlay (Central Architecture amendment, 2026-10-01)
+
+The prohibition above remains the rule. This is the one narrow, authorised
+exception to it, not a reopening of it:
+
+> When the immutable upstream base-image digest lags a published security
+> fix, Central Architecture may authorise a bounded exact-version-pinned
+> security overlay for explicitly named packages. This is not a general apt
+> upgrade. The selected versions must be explicit and fail closed if
+> unavailable. The overlay is temporary and should be removed when a newly
+> accepted upstream base-image digest incorporates the fixes.
+
+**Why a base-image re-pin was not possible this time:** on 2026-09-30/10-01,
+Trivy found 7 HIGH findings across 3 CVEs (CVE-2026-75804, CVE-2026-84782,
+CVE-2026-103111) against the pinned digest's OS packages (`openssl`,
+`libssl3t64`, `openssl-provider-legacy` at `3.5.7-1~deb13u2`; `libpcre2-8-0`
+at `10.46-1~deb13u2`). Debian's `trixie-security` apt repository already
+carries every fixed version, but a fresh `docker pull
+python:3.12.14-slim-trixie` on the same dates still resolved to an image
+shipping the unpatched builds — upstream has not yet rebuilt this tag
+against the patched Debian packages, so there was no new digest to re-pin
+to. (CVE-2026-103111/`libpcre2-8-0` was found by a second, later Trivy
+rescan during the same remediation dispatch, after the first three packages
+were already fixed — not present in the initial 2026-09-30 scan.)
+
+**The overlay:** `Dockerfile`'s `FROM` line is unchanged
+(`sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9`,
+same as the table above). Immediately after it, one `RUN apt-get update &&
+apt-get install --only-upgrade <pkg>=<exact-version> ... && rm -rf
+/var/lib/apt/lists/*` step names exactly four packages and exactly one
+target version each:
+
+| Package | Was | Now (exact pin) |
+|---|---|---|
+| `openssl` | `3.5.7-1~deb13u2` | `3.5.7-1~deb13u3` |
+| `libssl3t64` | `3.5.7-1~deb13u2` | `3.5.7-1~deb13u3` |
+| `openssl-provider-legacy` | `3.5.7-1~deb13u2` | `3.5.7-1~deb13u3` |
+| `libpcre2-8-0` | `10.46-1~deb13u2` | `10.46-1~deb13u3` |
+
+`apt-get install pkg=version` fails the build closed if any exact version
+is not resolvable in the configured repositories — there is no silent
+fallback to "whatever's current." No other OS package is touched.
+
+**Before/after Trivy (`aquasec/trivy:0.70.0`, `--severity CRITICAL,HIGH
+--ignore-unfixed`):**
+
+- Before (pinned digest, no overlay): 6 HIGH, 0 CRITICAL (`openssl`,
+  `libssl3t64`, `openssl-provider-legacy` × {CVE-2026-75804,
+  CVE-2026-84782}).
+- After openssl/libssl3t64/openssl-provider-legacy fixed, before
+  `libpcre2-8-0` fixed: 1 HIGH (`libpcre2-8-0`, CVE-2026-103111).
+- After all four packages fixed: **0 CRITICAL/HIGH.**
+
+**Obligation:** remove this overlay entirely the next time this
+`Dockerfile`'s base-image digest is deliberately re-pinned to one that
+already carries `openssl 3.5.7-1~deb13u3`, `libpcre2-8-0 10.46-1~deb13u3`,
+or later — re-check at that time whether the overlay is still necessary
+before keeping it. See `docs/evidence/SECURITY-REMEDIATION-2026-10-01.md`
+for the full dispatch evidence (build log, package-version proof, CVE
+detail).
+
 ## Python dependency lock
 
 Mechanism: `pip-tools` (`pip-compile`, `--generate-hashes`), run inside a
@@ -73,6 +134,47 @@ requirements-dev.in   -> requirements-dev.txt    (pip-compile --generate-hashes)
 - To change a dependency: edit the relevant `.in` file, regenerate the
   matching `.txt` with `pip-compile --generate-hashes` inside a container
   built from the currently-accepted Python digest, commit both.
+
+### Dependency security bump: `pyjwt` (2026-10-01 remediation)
+
+`pyjwt` is not a direct dependency in either `.in` file — it arrives
+transitively via `django-allauth[socialaccount]`'s own
+`pyjwt[crypto]>=2.0,<3` constraint. CVE-2026-101918 (GHSA-42vr-xj54-vc7v, an
+unauthenticated `RecursionError` DoS in `PyJWKClient.get_signing_key_
+from_jwt`'s pre-verification payload parse) affected the then-locked
+`2.14.0`, fixed upstream at `2.15.0`.
+
+No `.in` file edit was needed or made: `pip-compile --generate-hashes
+--upgrade-package pyjwt` (same pinned-digest container the lock is always
+generated in) was run against both `requirements.in` and
+`requirements-dev.in` and the resolver naturally selected `pyjwt[crypto]
+==2.15.1` — the actual current PyPI release (not `2.15.0` exactly), still
+within `django-allauth==65.19.4`'s `>=2.0,<3` range. Independently confirmed
+via the OSV advisory database that `2.15.1` carries zero known
+vulnerabilities. Exactly 3 lines changed in each of `requirements.txt` and
+`requirements-dev.txt` (the one `pyjwt[crypto]==...` entry and its two
+hashes) — no other package moved.
+
+### Pip-audit suppression discipline
+
+`security/dependencies` (`.github/workflows/security.yml`) runs `pip-audit
+-r requirements.txt --ignore-vuln CVE-2026-49265` — exactly one advisory
+ignored, matching `pip-audit`'s own reported `id` field for that finding
+(oauthlib's PKCE `code_verifier` timing-comparison issue, GHSA-xpv3-w29h-
+x7cv). This is a temporary, reachability-based risk acceptance, not a
+statement that the finding is safe in general — see
+`docs/evidence/SECURITY-REMEDIATION-2026-10-01.md` for the full reachability
+evidence and review triggers. **Note (corrected by independent audit,
+2026-10-01):** `oauthlib`'s only fixed release, `4.0.0`, was outside
+`django-allauth`'s own `oauthlib<4,>=3.3.0` constraint at the version
+installed here (`65.19.4`) and still at `65.19.5` — but `django-
+allauth==65.19.6` (released 2026-09-30) already *requires*
+`oauthlib>=4.0.0`. A compatible upgrade path now exists; this remediation
+does not adopt it (that is a separate, untested dependency upgrade, out of
+this bounded dispatch's scope) but the evidence document's review-trigger
+condition for it has already fired and is flagged there rather than
+deferred to the 30-day window. No other advisory is, or should be, ignored
+by this flag.
 
 ## GitHub Actions — pinned to commit SHA, version kept as a comment
 
