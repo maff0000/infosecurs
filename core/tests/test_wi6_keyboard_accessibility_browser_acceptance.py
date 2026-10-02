@@ -2,7 +2,7 @@
 WI6 (docs/pids/M007-DASHBOARD-SHELL-ENTITLEMENTS-FOUNDATION-METRICS.md §19/
 §28) - real-browser keyboard/accessibility acceptance for the new shell and
 WI5's new interactive elements (metric card action links, Needs Attention
-"click here" links, Foundations row action links).
+destination-specific links, Foundations row action links).
 
 Real Playwright keyboard events (`page.keyboard.press`) and
 `document.activeElement` focus tracking throughout - never a static markup/
@@ -201,7 +201,15 @@ def test_tab_order_reaches_every_new_interactive_element_and_logout(live_server)
             # job above, not this desktop-order test's.
             assert reached(lambda s: "shell-nav__link" in s["cls"]), "sidebar links not reachable via Tab"
             assert reached(lambda s: "button" in s["cls"] and s["tag"] == "A"), "metric card action link not reachable via Tab"
-            assert reached(lambda s: s["text"] == "click here"), "Needs Attention link not reachable via Tab"
+            _needs_attention_link_texts = {
+                "Go to Security",
+                "Go to Foundations",
+                "Go to Security Baseline",
+                "Go to Policy",
+            }
+            assert reached(lambda s: s["text"] in _needs_attention_link_texts), (
+                "Needs Attention link not reachable via Tab"
+            )
             assert reached(lambda s: s["text"] == "Log out"), "logout button not reachable via Tab"
 
             foundations_url = f"{live_server.url}{reverse('organisations:foundations', args=[organisation.id])}"

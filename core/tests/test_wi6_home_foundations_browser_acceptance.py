@@ -202,13 +202,21 @@ def test_home_monthly_tier_at_all_three_pid28_widths(live_server):
                 for i in range(lines.count()):
                     line = lines.nth(i)
                     anchors = line.locator("a")
-                    # PID §14.1 - exactly one <a>, and its own text is
-                    # exactly "click here" - the rest of the line is never
-                    # itself a link.
+                    # PID §14.1 - exactly one <a>, and its own text is a
+                    # short, destination-specific phrase (M008-WI5 replaced
+                    # the literal "click here" wording with one of these -
+                    # organisations.views._NEEDS_ATTENTION_LINK_PHRASES) -
+                    # the rest of the line is never itself a link.
                     assert anchors.count() == 1
-                    assert anchors.first.inner_text().strip() == "click here"
+                    link_text = anchors.first.inner_text().strip()
+                    assert link_text in {
+                        "Go to Security",
+                        "Go to Foundations",
+                        "Go to Security Baseline",
+                        "Go to Policy",
+                    }, f"unexpected Needs Attention link text: {link_text!r}"
                     full_text = line.inner_text()
-                    assert full_text.strip() != "click here", (
+                    assert full_text.strip() != link_text, (
                         "the whole Needs Attention line must not collapse "
                         "to just the link text - there must be real "
                         "non-link wording before it"
