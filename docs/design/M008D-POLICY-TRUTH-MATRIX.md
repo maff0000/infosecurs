@@ -1,11 +1,12 @@
 # M008D — Policy Clause-to-Source Truth Matrix (Revision 2)
 
-**Status:** DESIGN ARTEFACT — supersedes `M008D-POLICY-TRUTH-MATRIX.md`
-(Revision 1) to match the NORMATIVE/implementation-status split
-(`M008D-POLICY-ARCHITECTURE-v2.md`) and option-level provenance
-(Central Architecture §4). Two tables: the fixed normative clauses (same
-across every organisation, in the distributable PDF) and the
-implementation-status rows (keyed to exact `option_code`, shown only in
+**Status:** DESIGN ARTEFACT — this file's own Revision 1 content (as
+merged in PR #84) is superseded by the NORMATIVE/implementation-status
+split documented in `docs/design/M008D-POLICY-ARCHITECTURE.md` and
+option-level provenance (Central Architecture §4). Two tables: the fixed
+normative clauses (same across every organisation, in the distributable
+PDF) and the implementation-status rows (keyed to exact `option_code`,
+shown only in
 the in-product review screen, never the PDF).
 
 ## Table 1 — Normative clauses (distributable PDF)
