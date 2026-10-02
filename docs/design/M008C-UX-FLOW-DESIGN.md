@@ -31,6 +31,13 @@ computed from `entitlements.metrics` exactly as today.
 
 ## 2. Conditional questioning map
 
+**[Revision 2 correction]** The two NOT_APPLICABLE-gating rows below
+were corrected by Central Architecture — `staff_count`, cloud-provider
+selection, and office-working status alone are no longer sufficient
+authority for any NOT_APPLICABLE gate. See
+`docs/design/M008B-QUESTION-CATALOGUE.md` §0 for the two new dedicated
+structured facts this requires.
+
 Governed, versioned branching driven by already-structured facts — not a
 generic workflow engine (per PID's own explicit instruction). Each rule
 below reads one or more existing/profile fields and changes which
@@ -38,10 +45,10 @@ question or option set is shown, never which canonical fact is stored.
 
 | Upstream fact | Downstream effect |
 |---|---|
-| `OrganisationProfile.working_model == "office"` | `remote_access_control`'s NOT_APPLICABLE option becomes available (§M008B control 12) |
-| `OrganisationProfile.primary_cloud_provider` is a real provider AND working model doesn't imply local storage | `device_encryption`'s NOT_APPLICABLE option becomes available (§M008B control 5) |
-| `OrganisationProfile.staff_count == 1` | `joiner_mover_leaver`, `privileged_access_separation`, `security_awareness_training` each gain a NOT_APPLICABLE option (sole-trader case) |
-| `OrganisationProfile.endpoint_management` | Changes `endpoint_protection`'s offered option set (company-managed-only businesses never see the "BYOD doesn't" option) |
+| `OrganisationProfile.has_remote_or_offsite_access == "no"` (new field, explicitly confirmed — never inferred from `working_model`) | `remote_access_control`'s NOT_APPLICABLE option becomes available (§M008B control 12) |
+| `OrganisationProfile.people_with_system_access_count == 1` (new field) **and** an explicit confirmation checkbox at answer time | `joiner_mover_leaver`'s NOT_APPLICABLE option becomes available (§M008B control 7) — `staff_count` is never consulted for this gate |
+| — | `device_encryption`, `endpoint_protection`, `privileged_access_separation`, `security_awareness_training` have **no NOT_APPLICABLE option under any condition** — withdrawn entirely per Central Architecture's correction |
+| `OrganisationProfile.endpoint_management` | Changes `endpoint_protection`'s offered option set (company-managed-only businesses never see the "BYOD doesn't" option) — option-set conditioning, unaffected by the NOT_APPLICABLE correction above |
 | `OrganisationProfile.productivity_platform` (Microsoft 365 / Google Workspace / Other) | Changes only the *explanatory help text* under `email_phishing_protection` and `mfa_user_accounts` — never the options, never the underlying methodology (PID §3's own explicit instruction: "platform-specific explanatory guidance may differ without changing underlying methodology") |
 | `OrganisationProfile.develops_hosts_own_software` (boolean) | If `False`: no software-development-specific questions are ever presented anywhere in the journey — there are none in the current 12-control catalogue today, so this rule has no visible effect yet, but is recorded here as a standing rule for any future control addition, per PID §3's "no internally developed software → software-development questions should not be asked" example |
 | `OrganisationProfile.handles_payment_card_data` / `handles_special_category_data` | Does not change Stage 4's question set today (no PCI/special-category-specific baseline control exists yet); recorded as a structural fact already captured, available to a future control without re-asking |
@@ -65,11 +72,16 @@ plain language, before the question itself:
 2. **Why they're being asked** — the "why it matters" line from the
    catalogue (§M008B), one sentence, always visible, never hidden behind
    a tooltip only.
-3. **How much is left** — "X of 12 security questions answered" within
-   Stage 4 specifically (a stage-local count, separate from both the
-   stage indicator and the 18-item completion figure — three genuinely
-   different numbers, each clearly labelled so none is mistaken for
-   another).
+3. **How much is left** — **[Revision 2 correction, replacing "X of 12
+   questions answered"]** a REVIEWED/confirmed pair: "12 of 12 reviewed
+   · 3 still need confirmation" (Central Architecture's own exact
+   wording). "Reviewed" counts any deliberate selection, including "Not
+   sure"; the second number counts only non-UNKNOWN resolutions. Never a
+   bare green "Complete" badge while any UNKNOWN remains. This pair is
+   still separate from both the stage indicator and the 18-item
+   completion figure — now genuinely **three** different numbers (stage
+   position, stage-local reviewed/confirmed, and 18-item completion),
+   never conflated. See §6 below for the full specification.
 4. **What the answer means** — the short, deterministic explainer text
    from M008B §B5 ("MFA protects administrator accounts, but ordinary
    staff accounts are not all covered") appears immediately after
@@ -138,7 +150,41 @@ actual gap's own plain-language description.
 PAUSED-tier Home remains deliberately minimal (no metric calls), unchanged
 from M007.
 
-## 6. Technical/architecture boundary (unchanged from M007/M008 master PID)
+## 6. Stage-local progress semantics — REVIEWED, not "answered" [Revision 2, new]
+
+- **Stage-local count uses "reviewed":** every one of the 12 controls
+  the customer has made a deliberate selection on — including "Not
+  sure" — counts as **reviewed**. An unvisited question does not.
+- **A second, separate count tracks confirmation:** of the reviewed
+  questions, how many resolved to a deliberate YES/PARTIAL/NO/
+  NOT_APPLICABLE answer (i.e. **not** UNKNOWN) is shown alongside, never
+  merged into one number.
+- **Exact UX copy:** `12 of 12 reviewed · 3 still need confirmation` —
+  Central Architecture's own example, adopted verbatim. A bare green
+  "Complete" badge is only ever shown once all 12 are reviewed **and**
+  zero are UNKNOWN; otherwise the two-number form above is shown.
+
+## 7. Risk presentation — confirmed vs. needing confirmation [Revision 2, new]
+
+- **Two explicit groups, visually and textually separated** on the
+  Risks & Actions screen:
+  - **Confirmed risks** — scenario rows whose triggering control
+    answer(s) resolved to NO or PARTIAL (a real, established gap).
+  - **Items still needing confirmation** — scenario rows whose
+    triggering control answer(s) are UNKNOWN (the existing
+    `risk_register.scenario_engine`'s own "missing/UNKNOWN treated as a
+    trigger for applicability" rule is unchanged — only the
+    *presentation* groups these separately now).
+- **Exact headline copy:** `3 security risks identified · 2 things
+  still need confirming` — Central Architecture's own example, adopted
+  verbatim.
+- **UNKNOWN != NO preserved explicitly in copy:** an "items needing
+  confirmation" row never uses risk-confirmed language ("this is
+  happening") — it uses honest uncertainty language ("we don't yet know
+  whether..."), and its own recommended action is "confirm the
+  underlying question," never a technical remediation action.
+
+## 8. Technical/architecture boundary (unchanged from M007/M008 master PID)
 
 Single server-rendered Django flow. No SPA. GETs never mutate. Every POST
 still goes through `require_capability`-guarded, CSRF-protected,

@@ -13,26 +13,31 @@ requirement, downstream dependencies, and any AI dependency removed.
 
 ## 1. `organisations.OrganisationProfileForm.description`
 
+**[Revision 2 correction]** Revision 1 proposed a sector choice list
+**plus** a bounded short text label ("what you do, in a few words").
+Central Architecture's correction pass removed the text label entirely
+— the row below reflects the corrected design.
+
 - **Route:** `organisations:profile`
 - **Why it violates:** open narrative business description.
-- **Replacement interaction:** finite sector/business-type choice list +
-  short bounded free-text "what you do, in a few words" (max ~60 chars,
-  a label not a description) — see M008B §B3 Business.
+- **Replacement interaction:** a finite sector choice list only — no
+  text label of any kind. See `docs/design/M008B-STAGES-1-3-CATALOGUE.md`
+  Stage 1.2 for the exact 12-option list.
 - **New canonical destination:** a new typed `OrganisationProfile.sector`
-  enum field (additive migration) + the existing `description` field
-  repurposed as the bounded short label (max_length tightened via
-  `clean_description`, not a new column).
-- **Old field retained for history:** Yes — `description` itself is
-  reused, not dropped; existing long values become read-only on this one
-  organisation until the customer re-saves (no forced truncation).
-- **Legacy values visible/read-only:** Yes, shown as-is until re-saved.
+  enum field (additive migration). The existing `description` column is
+  **retired from the Foundation form entirely** — not repurposed into a
+  shorter text field.
+- **Old field retained for history:** Yes — the `description` column
+  stays on the model; existing values become read-only (never editable
+  again via the Foundation form).
+- **Legacy values visible/read-only:** Yes, shown as-is.
 - **Migration requirement:** one additive migration (`sector` field,
   default UNKNOWN); no backfill guess at existing customers' sector
   (none exist — Beta has no real customers yet).
 - **Downstream dependencies:** `policy.grounding.build_policy_grounding_payload`
   reads `OrganisationProfile` fields — must add `sector` to its allowed
-  projection list once approved; `description`'s existing inclusion stays,
-  now semantically a short label rather than free prose.
+  projection list once approved; `description` is dropped from that
+  projection (it no longer carries meaningful content going forward).
 - **AI dependency removed:** none (this field was never sent to any AI
   prompt as grounding — confirmed by WI0 inventory; `commercial_security_driver`
   below is the one that was).
@@ -92,25 +97,29 @@ requirement, downstream dependencies, and any AI dependency removed.
 
 ## 4. `evidence._EvidenceCommonFieldsMixin.description`
 
+**[Revision 2 correction]** Revision 1 proposed a short bounded "what
+this shows" label replacing the textarea. Central Architecture's
+correction removed this text field entirely — the row below reflects
+the corrected design.
+
 - **Route:** `evidence:upload`, `evidence:add_reference`
 - **Why it violates:** open narrative description alongside a file/URL
   that is itself the legitimate exception.
-- **Replacement interaction:** a short, bounded "what this shows" label
-  (max ~80 chars) replacing the multi-line textarea — the file/URL
-  carries the actual content, the label is just a human-readable index
-  entry, not a narrative.
-- **New canonical destination:** same `description` column, tightened to
-  a single-line `CharField`-rendered widget (no column type change
-  needed — Django's `TextField` can render as a single-line input; the
-  DB column itself doesn't need to shrink).
-- **Old field retained for history:** Yes.
-- **Legacy values visible/read-only:** Yes, shown as-is (existing longer
-  values are not truncated on display, only new input is bounded going
-  forward).
-- **Migration requirement:** none (widget-only change).
+- **Replacement interaction:** **no label field at all.** The evidence
+  item's display text is derived automatically from already-structured
+  facts captured at upload/link time — its `kind` (file/reference), the
+  linked control's area (once `evidence:link_control` is used), and the
+  `original_filename` (e.g. "PDF evidence for Multi-factor authentication
+  (staff) — mfa-screenshot.pdf"). No customer-typed text of any kind.
+- **New canonical destination:** none — the `description` column is
+  **retired from the Foundation form entirely**, not repurposed.
+- **Old field retained for history:** Yes, column stays; existing legacy
+  values read-only.
+- **Legacy values visible/read-only:** Yes, shown as-is.
+- **Migration requirement:** none.
 - **Downstream dependencies:** `evidence.link_services`, `security_state`'s
-  read-only aggregation layer — neither depends on `description`'s length
-  or structure, confirmed no break.
+  read-only aggregation layer — neither depends on `description` at all,
+  confirmed no break.
 - **AI dependency removed:** none.
 
 ## 5. `evidence.ControlEvidenceLinkForm.rationale`
@@ -220,6 +229,11 @@ repeated field-by-field; see item 6 for the full structure.
 
 ## 10. `remediation.RemediationActionForm.description`
 
+**[Revision 2 correction]** Revision 1 proposed the scenario's
+deterministic default, "editable only to a bounded label-length
+override." Central Architecture's correction removed the override
+entirely — the row below reflects the corrected design.
+
 - **Route:** `remediation:create`, `remediation:create_from_risk`,
   `remediation:edit`
 - **Why it violates:** open-ended action description, explicitly named
@@ -227,13 +241,15 @@ repeated field-by-field; see item 6 for the full structure.
   control/scenario... not an open-ended form").
 - **Replacement interaction:** a curated action-template list, one per
   risk scenario (e.g. for `endpoint_device_encryption_loss_theft`: "Enable
-  full-disk encryption" — the scenario's own `suggested_treatment`,
-  already deterministic text), selectable and optionally customised via
-  a short bounded label, not an open description.
-- **New canonical destination:** same `description` column, now
-  populated by default from the matched scenario's `suggested_treatment`
-  (deterministic default), editable only to a bounded label-length
-  override, not arbitrary length.
+  full-disk encryption" — the scenario's own `suggested_treatment`). The
+  scenario's text is used **verbatim, non-editable**. A customer may
+  still choose a different treatment-category (Accept / Mitigate via
+  this action / Mitigate via a different already-created action /
+  Transfer — a finite choice, unchanged from Row 9's own proposal) but
+  may not retype or relabel the action's description.
+- **New canonical destination:** same `description` column, populated
+  entirely programmatically from the matched scenario's
+  `suggested_treatment` — **no customer-editable override of any kind.**
 - **Old field retained for history:** Yes.
 - **Legacy values visible/read-only:** Yes.
 - **Migration requirement:** none required.
@@ -242,31 +258,34 @@ repeated field-by-field; see item 6 for the full structure.
 
 ## 11. `security_baseline.BaselineAssessmentForm.note__<question_key>`
 
+**[Revision 2 correction]** Revision 1 proposed replacing the note with
+structured conditional follow-ups including two bounded free-text
+fields ("Which groups?", "What's covered?"). Central Architecture's
+correction removed both of those specific follow-ups — the row below
+reflects the corrected design.
+
 - **Route:** `security_baseline:baseline`
 - **Why it violates:** **the primary, named target** — the per-question
   free-text note, already flagged in the form's own module docstring as
   "the customer narrative field to retire from Foundation-facing UI."
-- **Replacement interaction:** entirely replaced by the structured
-  conditional follow-up questions defined per-control in M008B §1-12
-  above (e.g. the bounded "Which groups?"/"What's not covered?" short
-  identifiers) — there is no general-purpose note field in the new
-  design at all; every piece of nuance a customer previously might have
-  put in free text now has its own named, bounded, versioned follow-up
-  question instead.
+- **Replacement interaction:** entirely replaced by more granular
+  predefined `option_code`s per control (see
+  `docs/design/M008B-QUESTION-CATALOGUE.md`, Revision 2) — e.g.
+  `BACKUPS_RESTORE_UNTESTED` vs. `BACKUPS_COVERAGE_PARTIAL` carry the
+  distinguishing fact a free-text follow-up used to capture. **No
+  general-purpose or per-control free-text follow-up exists anywhere in
+  the Revision 2 design.**
 - **New canonical destination:** the new per-control `AnswerSelectionDetail`-
-  style provenance table proposed in M008B §B4 (selected option code +
-  any bounded follow-up value), never a second source of truth for
-  `BaselineAnswer.answer` itself.
+  style provenance table (M008B §0: `control_key`, `option_code`,
+  `derived_answer`, `methodology_version`) — never a second source of
+  truth for `BaselineAnswer.answer` itself, and never a free-text value.
 - **Old field retained for history:** Yes — `BaselineAnswer.note` stays
   as a column; existing values display read-only on the control's detail
   view, explicitly labelled "earlier note (no longer editable)."
-  stays as a column; existing values display read-only on the control's
-  detail view, explicitly labelled "earlier note (no longer editable)."
 - **Legacy values visible/read-only:** Yes.
 - **Migration requirement:** none required for the column itself (no
   schema change needed to retire the *form field* — the new
-  `AnswerSelectionDetail` model is itself a new, additive migration, per
-  M008B §B4.1).
+  `AnswerSelectionDetail` model is itself a new, additive migration).
 - **Downstream dependencies:** confirmed via WI0/M008A recon —
   `entitlements.metrics` never reads `BaselineAnswer.note`, only
   `.answer`; no functional dependency breaks.
