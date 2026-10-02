@@ -14,6 +14,7 @@ from django.urls import reverse
 
 from key_assets.models import KeyAsset
 from risk_register.models import Risk
+from risk_register.risk_choices import TREATMENT_MITIGATE_SUGGESTED
 
 MAX_ASSET_NAME_LENGTH = KeyAsset._meta.get_field("name").max_length
 
@@ -195,19 +196,18 @@ class TestRiskEditView:
     def test_edit_updates_a_draft_risk(self, client_a, org_a):
         risk = Risk.objects.create(
             organisation=org_a, title="Original title", threat="t", vulnerability="v",
-            impact=2, likelihood=2, rationale="r", proposed_treatment="p",
+            impact=2, likelihood=2, rationale="impact_2_limited_scope",
+            proposed_treatment=TREATMENT_MITIGATE_SUGGESTED,
             status=Risk.STATUS_DRAFT_AI_SUGGESTED, source=Risk.SOURCE_AI,
         )
         response = client_a.post(
             reverse("risk_register:edit", args=[org_a.id, risk.id]),
             {
                 "title": "Edited title",
-                "threat": "edited threat",
-                "vulnerability": "edited vulnerability",
                 "impact": "5",
                 "likelihood": "5",
-                "rationale": "edited rationale",
-                "proposed_treatment": "edited treatment",
+                "rationale": "impact_5_existential_disruption",
+                "proposed_treatment": TREATMENT_MITIGATE_SUGGESTED,
             },
         )
         assert response.status_code == 302
@@ -215,21 +215,50 @@ class TestRiskEditView:
         assert risk.title == "Edited title"
         assert risk.impact == 5
         assert risk.likelihood == 5
+        assert risk.rationale == "impact_5_existential_disruption"
         assert risk.status == Risk.STATUS_DRAFT_AI_SUGGESTED
+        # threat/vulnerability are no longer editable via this form at all
+        # (M008-FREE-TEXT-REPLACEMENT-REGISTER.md rows 6-7) - unchanged.
+        assert risk.threat == "t"
+        assert risk.vulnerability == "v"
+
+    def test_threat_and_vulnerability_are_not_editable_fields_on_this_form(self, client_a, org_a):
+        risk = Risk.objects.create(
+            organisation=org_a, title="Original title", threat="t", vulnerability="v",
+            impact=2, likelihood=2, rationale="impact_2_limited_scope",
+            proposed_treatment=TREATMENT_MITIGATE_SUGGESTED,
+            status=Risk.STATUS_DRAFT_AI_SUGGESTED, source=Risk.SOURCE_AI,
+        )
+        client_a.post(
+            reverse("risk_register:edit", args=[org_a.id, risk.id]),
+            {
+                "title": "Original title",
+                "threat": "a forged, never-saved threat value",
+                "vulnerability": "a forged, never-saved vulnerability value",
+                "impact": "2",
+                "likelihood": "2",
+                "rationale": "impact_2_limited_scope",
+                "proposed_treatment": TREATMENT_MITIGATE_SUGGESTED,
+            },
+        )
+        risk.refresh_from_db()
+        assert risk.threat == "t"
+        assert risk.vulnerability == "v"
 
     def test_cannot_edit_a_confirmed_risk(self, client_a, org_a, user_a):
         risk = Risk.objects.create(
             organisation=org_a, title="Confirmed title", threat="t", vulnerability="v",
-            impact=2, likelihood=2, rationale="r", proposed_treatment="p",
+            impact=2, likelihood=2, rationale="impact_2_limited_scope",
+            proposed_treatment=TREATMENT_MITIGATE_SUGGESTED,
             status=Risk.STATUS_CONFIRMED, source=Risk.SOURCE_AI, confirmed_by=user_a,
         )
         response = client_a.post(
             reverse("risk_register:edit", args=[org_a.id, risk.id]),
             {
                 "title": "Hijacked title",
-                "threat": "t", "vulnerability": "v",
                 "impact": "5", "likelihood": "5",
-                "rationale": "r", "proposed_treatment": "p",
+                "rationale": "impact_5_existential_disruption",
+                "proposed_treatment": TREATMENT_MITIGATE_SUGGESTED,
             },
             follow=True,
         )

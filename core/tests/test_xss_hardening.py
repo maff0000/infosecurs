@@ -157,12 +157,24 @@ class TestEvidenceTitleAndDescriptionXSS:
 
 
 class TestRemediationTextXSS:
-    def test_title_and_description_are_escaped_on_detail(self, client_a, org_a):
+    """
+    M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10 (M008C-WI3 dispatch):
+    `description` is no longer a customer-editable field on
+    `RemediationActionForm` at all - a no-risk action's description is
+    always programmatically blank, and a from-risk action's description is
+    the matched scenario's own deterministic, methodology-owned text
+    (never customer-authored). There is therefore no longer a second
+    customer-text field on this form to exercise `_ATTR_BREAKOUT_PAYLOAD`
+    through - `title` remains the only one, and both payloads are proven
+    against it below instead (still two distinct hostile shapes exercised,
+    per this module's own docstring).
+    """
+
+    def test_title_is_escaped_on_detail(self, client_a, org_a):
         response = client_a.post(
             reverse("remediation:create", args=[org_a.id]),
             data={
                 "title": _SCRIPT_PAYLOAD,
-                "description": _ATTR_BREAKOUT_PAYLOAD,
                 "priority": RemediationAction.PRIORITY_MEDIUM,
                 "control_key": "",
                 "key_asset": "",
@@ -177,9 +189,54 @@ class TestRemediationTextXSS:
 
         detail = client_a.get(reverse("remediation:detail", args=[org_a.id, action.id]))
         _assert_hostile_text_is_escaped(detail.content, plain_html_escaped=_SCRIPT_PAYLOAD_ESCAPED)
+
+    def test_title_with_attribute_breakout_shape_is_escaped_on_detail(self, client_a, org_a):
+        response = client_a.post(
+            reverse("remediation:create", args=[org_a.id]),
+            data={
+                "title": _ATTR_BREAKOUT_PAYLOAD,
+                "priority": RemediationAction.PRIORITY_MEDIUM,
+                "control_key": "",
+                "key_asset": "",
+                "assigned_to": "",
+                "target_date": "",
+            },
+            follow=True,
+        )
+        assert response.status_code == 200
+        action = RemediationAction.objects.get(organisation=org_a)
+        assert action.title == _ATTR_BREAKOUT_PAYLOAD
+
+        detail = client_a.get(reverse("remediation:detail", args=[org_a.id, action.id]))
         _assert_hostile_text_is_escaped(
             detail.content, plain_html_escaped=_ATTR_BREAKOUT_PAYLOAD_ESCAPED
         )
+
+    def test_description_is_never_customer_controlled_so_has_nothing_to_escape(
+        self, client_a, org_a
+    ):
+        """
+        A forged "description" POST value is silently ignored (no such
+        form field) - proven in detail by
+        `remediation.tests.test_form_free_text_removed`; this is just the
+        XSS-module-local confirmation that the created action's
+        description is blank, not the hostile payload, for a no-risk
+        action.
+        """
+        client_a.post(
+            reverse("remediation:create", args=[org_a.id]),
+            data={
+                "title": "Ordinary title",
+                "description": _ATTR_BREAKOUT_PAYLOAD,
+                "priority": RemediationAction.PRIORITY_MEDIUM,
+                "control_key": "",
+                "key_asset": "",
+                "assigned_to": "",
+                "target_date": "",
+            },
+        )
+        action = RemediationAction.objects.get(organisation=org_a)
+        assert action.description == ""
 
 
 class TestPolicyEditXSS:

@@ -9,12 +9,19 @@ uses (not a second, parallel logging system). These tests prove
 `risk_register.views.risk_edit`/`risk_dismiss` do that, with the right
 delta/metadata shape, only when something actually changed, transactionally
 coherent with the underlying save (PID §17), and tenant-scoped.
+
+M008C-WI3 update: `threat`/`vulnerability` are no longer editable via
+`risk_register:edit` at all (M008-FREE-TEXT-REPLACEMENT-REGISTER.md rows
+6-7) - removed from `_edit_payload`/`_RISK_EDIT_DELTA_FIELDS` coverage
+below. `rationale`/`proposed_treatment` are now closed-form codes (rows
+8-9, `risk_register.risk_choices`) rather than free text.
 """
 import pytest
 from django.urls import reverse
 
 from activity.models import ActivityEvent
 from risk_register.models import Risk
+from risk_register.risk_choices import TREATMENT_MITIGATE_SUGGESTED
 
 
 def _draft_risk(org, **overrides):
@@ -25,8 +32,8 @@ def _draft_risk(org, **overrides):
         vulnerability="Original vulnerability",
         impact=2,
         likelihood=2,
-        rationale="Original rationale",
-        proposed_treatment="Original treatment",
+        rationale="impact_2_limited_scope",
+        proposed_treatment=TREATMENT_MITIGATE_SUGGESTED,
         status=Risk.STATUS_DRAFT_AI_SUGGESTED,
         source=Risk.SOURCE_AI,
     )
@@ -37,12 +44,10 @@ def _draft_risk(org, **overrides):
 def _edit_payload(**overrides):
     payload = {
         "title": "Original title",
-        "threat": "Original threat",
-        "vulnerability": "Original vulnerability",
         "impact": "2",
         "likelihood": "2",
-        "rationale": "Original rationale",
-        "proposed_treatment": "Original treatment",
+        "rationale": "impact_2_limited_scope",
+        "proposed_treatment": TREATMENT_MITIGATE_SUGGESTED,
     }
     payload.update(overrides)
     return payload
@@ -57,7 +62,7 @@ class TestRiskEditActivityCapture:
 
         response = client_a.post(
             reverse("risk_register:edit", args=[org_a.id, risk.id]),
-            _edit_payload(vulnerability="Changed vulnerability", impact="4"),
+            _edit_payload(impact="4"),
         )
         assert response.status_code == 302
 
@@ -70,11 +75,10 @@ class TestRiskEditActivityCapture:
         assert event.related_object_type == "risk"
         assert event.related_object_id == str(risk.id)
         assert event.metadata == {
-            "vulnerability": {"previous": "Original vulnerability", "new": "Changed vulnerability"},
             "impact": {"previous": 2, "new": 4},
         }
         # Unchanged fields must not appear in the delta at all.
-        for untouched in ("title", "threat", "likelihood", "rationale", "proposed_treatment"):
+        for untouched in ("title", "likelihood", "rationale", "proposed_treatment"):
             assert untouched not in event.metadata
 
     def test_edit_with_no_actual_changes_creates_no_event(self, client_a, org_a):

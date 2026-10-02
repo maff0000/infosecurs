@@ -20,9 +20,9 @@
 <div class="form-card">
     {% if risk %}
         <p class="form-card__intro">
-            Creating an action from risk <strong>{{ risk.title }}</strong>. Title and description are pre-filled
-            from its proposed treatment — review and edit before saving. This does not change the risk itself;
-            it creates a new, separately-tracked action linked back to it.
+            Creating an action from risk <strong>{{ risk.title }}</strong>. Title is pre-filled; the description
+            below is the scenario's own suggested treatment, used verbatim and not editable. This does not change
+            the risk itself; it creates a new, separately-tracked action linked back to it.
         </p>
     {% elif is_new %}
         <p class="form-card__intro">A new action starts <strong>Open</strong>.</p>
@@ -31,6 +31,23 @@
             Editing does not change this action's status. Use the status buttons on the action page to move it
             through its lifecycle.
         </p>
+    {% endif %}
+    {# M008C-WI3 (register row 10): `description` is no longer a form
+       field - shown read-only here, never a Textarea. For a brand-new,
+       no-risk action there is nothing to derive it from yet, so nothing is
+       shown at all (it will save as blank). #}
+    {% if risk %}
+        <div class="field">
+            <label>Description</label>
+            <p class="field__help">Not editable - the matched scenario's own suggested treatment, used verbatim.</p>
+            <p>{{ description_preview }}</p>
+        </div>
+    {% elif action and action.description %}
+        <div class="field">
+            <label>Description</label>
+            <p class="field__help">Not editable here.</p>
+            <p>{{ action.description }}</p>
+        </div>
     {% endif %}
     <form method="post" novalidate>
         {% csrf_token %}

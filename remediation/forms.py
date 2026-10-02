@@ -34,6 +34,26 @@ class RemediationActionForm(forms.ModelForm):
     """
     Create/edit form for a RemediationAction (PID §6.5, §13).
 
+    M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10 (M008C-WI3 dispatch):
+    `description` is REMOVED from this form entirely - no Textarea, no
+    replacement free-text field of any kind. It is now populated
+    PROGRAMMATICALLY, never through this form:
+
+    - created from a risk (`remediation.views.action_create_from_risk`):
+      the matched `risk_register.methodology` scenario's own
+      `suggested_treatment` text, verbatim, non-editable;
+    - created with no risk at all
+      (`remediation.views.action_create`): left blank (`""`) - there is no
+      scenario to derive curated text from, and this dispatch's judgement
+      call (documented in its report) is that a freestanding action with
+      no description is a safe, honest default (title/priority/control/
+      asset/assignment/target-date already give it real identity) rather
+      than inventing a new generic-action-category catalogue for an edge
+      case the PID left open;
+    - `remediation:edit`: never touched - whatever `description` already
+      holds (scenario text, or blank) stays exactly as created; the
+      template shows it read-only.
+
     Deliberately does NOT expose `status`, `risk`, `created_by`,
     `completed_by` or `completed_at` - those are only ever set by the
     dedicated create-from-risk / status-transition views
@@ -57,7 +77,6 @@ class RemediationActionForm(forms.ModelForm):
         model = RemediationAction
         fields = [
             "title",
-            "description",
             "priority",
             "control_key",
             "key_asset",
@@ -70,7 +89,6 @@ class RemediationActionForm(forms.ModelForm):
             "target_date": "Target date (optional)",
         }
         widgets = {
-            "description": forms.Textarea(attrs={"rows": 4}),
             "target_date": forms.DateInput(attrs={"type": "date"}),
         }
 

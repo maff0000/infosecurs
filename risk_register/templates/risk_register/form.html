@@ -17,6 +17,30 @@
         This risk is still an <strong>AI suggestion</strong>. Edit anything that isn't quite right before
         you confirm it - nothing here is part of your confirmed risk register yet.
     </p>
+    {# M008C-WI3: threat/vulnerability are no longer form fields (register
+       rows 6-7) - read-only display of whatever is already stored on this
+       risk row (the matched scenario's own wording, for a catalogue-
+       originated risk). #}
+    <div class="field">
+        <label>Threat</label>
+        <p class="field__help">Not editable - this is the matched scenario's own wording.</p>
+        <p>{{ risk.threat }}</p>
+    </div>
+    <div class="field">
+        <label>Vulnerability / control gap</label>
+        <p class="field__help">Not editable - this is the matched scenario's own wording.</p>
+        <p>{{ risk.vulnerability }}</p>
+    </div>
+    {% if risk_scenario %}
+        <div class="field">
+            <label>Suggested treatment</label>
+            <p class="field__help">
+                The deterministic, scenario-derived suggestion - select "Mitigate via the suggested
+                treatment" below to go with this.
+            </p>
+            <p>{{ risk_scenario.suggested_treatment }}</p>
+        </div>
+    {% endif %}
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}

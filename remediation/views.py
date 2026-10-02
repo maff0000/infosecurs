@@ -28,6 +28,7 @@ from remediation import services
 from remediation.forms import ActionEvidenceAttachForm, RemediationActionForm
 from remediation.models import RemediationAction
 from remediation.services import RemediationServiceError
+from risk_register.methodology import CATALOGUE_BY_ID
 from risk_register.models import Risk
 
 
@@ -83,6 +84,12 @@ def action_create(request, organisation_id):
             action = form.save(commit=False)
             action.organisation = organisation
             action.created_by = request.user
+            # M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10: no risk/
+            # scenario to derive curated text from on this general,
+            # no-risk path - left blank rather than reintroducing any
+            # customer-typed free text (see RemediationActionForm's own
+            # docstring for this dispatch's documented judgement call).
+            action.description = ""
             with transaction.atomic():
                 action.save()
                 record_event(
@@ -107,22 +114,52 @@ def action_create(request, organisation_id):
     )
 
 
+def _scenario_description_for(risk) -> str:
+    """
+    The curated, verbatim, non-editable action description for an action
+    created from `risk` (M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10):
+    the matched `risk_register.methodology` scenario's own
+    `suggested_treatment` text - NOT `risk.proposed_treatment` (that column
+    now stores a closed-form treatment-CATEGORY code, per row 9's own
+    replacement, not the treatment text itself; reading it here post-WI3
+    would silently store a code string like "treatment_mitigate_suggested"
+    as the action's description, which this function exists to avoid).
+
+    Returns `""` if `risk.scenario_id` doesn't resolve in the current
+    catalogue (a retired scenario, or a manually-created risk with no
+    scenario at all) - the same "no scenario to derive curated text from"
+    case `action_create`'s own no-risk path hits, handled identically
+    (blank, never a fallback to open text).
+    """
+    scenario = CATALOGUE_BY_ID.get(risk.scenario_id)
+    return scenario.suggested_treatment if scenario is not None else ""
+
+
 @login_required
 @require_capability()
 def action_create_from_risk(request, organisation_id, risk_id):
     """
     Explicit "create action from risk" flow (PID §13):
 
-        Risk -> Create action -> pre-filled title/description from
-        proposed_treatment -> user reviews/edits -> Open action
+        Risk -> Create action -> description verbatim from the matched
+        scenario's suggested_treatment -> user reviews/edits title etc. ->
+        Open action
 
     Creation only happens on an explicit POST that the user reviewed via
     this real form - never automatically for every risk (PID §13
     "Creation is explicit").
+
+    M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10: `description` is no
+    longer a form field at all (see `RemediationActionForm`'s own
+    docstring) - it is set programmatically, verbatim, from
+    `_scenario_description_for(risk)` on every save below, regardless of
+    anything a POST body claims for a "description" key (there is no such
+    form field left to even bind it to).
     """
     organisation = get_member_organisation_or_404(request.user, organisation_id)
     request.session["current_organisation_id"] = str(organisation.id)
     risk = get_object_or_404(Risk, id=risk_id, organisation=organisation)
+    description = _scenario_description_for(risk)
 
     if request.method == "POST":
         form = RemediationActionForm(request.POST, organisation=organisation)
@@ -131,6 +168,7 @@ def action_create_from_risk(request, organisation_id, risk_id):
             action.organisation = organisation
             action.risk = risk
             action.created_by = request.user
+            action.description = description
             with transaction.atomic():
                 action.save()
                 record_event(
@@ -152,9 +190,13 @@ def action_create_from_risk(request, organisation_id, risk_id):
             return redirect("remediation:detail", organisation_id=organisation.id, action_id=action.id)
         messages.error(request, "The action could not be created. Please check the errors below.")
     else:
-        # Pre-filled, not auto-created - the user still reviews/edits this
-        # form and submits it explicitly (PID §13).
-        initial = {"title": risk.title, "description": risk.proposed_treatment}
+        # Pre-filled, not auto-created - the user still reviews/edits
+        # title/priority/control/asset/assignment and submits this form
+        # explicitly (PID §13). `description` is shown read-only on the
+        # template (see remediation/templates/remediation/form.html), not
+        # as an initial form value - there is no form field for it any
+        # more to pre-fill.
+        initial = {"title": risk.title}
         if risk.key_asset_id:
             initial["key_asset"] = risk.key_asset_id
         form = RemediationActionForm(initial=initial, organisation=organisation)
@@ -162,7 +204,13 @@ def action_create_from_risk(request, organisation_id, risk_id):
     return render(
         request,
         "remediation/form.html",
-        {"organisation": organisation, "form": form, "is_new": True, "risk": risk},
+        {
+            "organisation": organisation,
+            "form": form,
+            "is_new": True,
+            "risk": risk,
+            "description_preview": description,
+        },
     )
 
 

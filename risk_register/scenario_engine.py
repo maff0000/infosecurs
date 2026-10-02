@@ -93,8 +93,10 @@ structurally (the dedup lookup runs before every create).
 """
 from __future__ import annotations
 
+from typing import List, Optional
+
 from key_assets.models import KeyAsset
-from risk_register.methodology import CATALOGUE, VARIANT_NO
+from risk_register.methodology import CATALOGUE, CATALOGUE_BY_ID, VARIANT_NO
 from risk_register.models import Risk
 from security_baseline.models import ANSWER_UNKNOWN, BaselineAssessment
 
@@ -276,6 +278,68 @@ def _build_rationale(scenario, key_asset, control_key: str, resolved_state: str)
     )
 
 
+def current_trigger_variant(risk: Risk) -> Optional[str]:
+    """M008C-WI3: the "never trust a stale snapshot" re-derivation a Stage 5
+    "Your Risks & Actions" screen needs - mirrors the discipline
+    `security_baseline.stage4.offered_options` already uses for its own
+    live re-derivation.
+
+    Re-resolves `risk`'s matched methodology scenario against the
+    organisation's CURRENT canonical `BaselineAnswer` states for that
+    scenario's `control_keys` - never anything cached on the `Risk` row
+    itself (`risk.vulnerability`/`.consequence`/`.assumptions` were correct
+    at instantiation time, but the organisation's baseline answers may have
+    changed since).
+
+    Returns `scenario.wording_for(...)`'s `variant` ('no' or 'unknown') for
+    whichever control currently wins (see `_resolve_trigger`'s own "worst
+    applicable variant wins" rule), or `None` if either:
+
+      - `risk.scenario_id` does not resolve in the current
+        `risk_register.methodology.CATALOGUE_BY_ID` at all (a scenario was
+        retired, or this is a non-catalogue/manually-created risk); or
+      - the scenario no longer applies to the organisation's CURRENT facts
+        at all (every relevant control now answers `yes`/`not_applicable`
+        - the triggering control was answered since this risk was
+          generated).
+
+    `None` deliberately means "exclude this risk from both the confirmed
+    and needing-confirmation groups" to its one caller
+    (`risk_register.views.foundations_risks_actions`) - a risk whose
+    trigger has resolved away is no longer a live risk; it is never
+    misclassified as "confirmed" merely because it still exists as a
+    `Risk` row.
+    """
+    scenario = CATALOGUE_BY_ID.get(risk.scenario_id)
+    if scenario is None:
+        return None
+    control_answers = _canonical_control_answers(risk.organisation)
+    trigger = _resolve_trigger(scenario, control_answers)
+    if trigger is None:
+        return None
+    _, resolved_state = trigger
+    return scenario.wording_for(resolved_state).variant
+
+
+def current_unconfirmed_control_keys(risk: Risk) -> List[str]:
+    """M008C-WI3: the public counterpart to `current_trigger_variant` a
+    Stage 5 screen needs for its "needing confirmation" group - which of
+    `risk`'s scenario's relevant `control_keys` are STILL `unknown` against
+    the organisation's CURRENT canonical baseline answers, right now (not
+    whatever `risk.assumptions` recorded at instantiation time, which can
+    go stale exactly like the rest of the row - see
+    `current_trigger_variant`'s own docstring).
+
+    Returns `[]` if `risk.scenario_id` does not resolve in the current
+    catalogue (nothing to re-derive).
+    """
+    scenario = CATALOGUE_BY_ID.get(risk.scenario_id)
+    if scenario is None:
+        return []
+    control_answers = _canonical_control_answers(risk.organisation)
+    return _unconfirmed_control_keys(scenario, control_answers)
+
+
 def instantiate_risks_for_organisation(organisation) -> list:
     """Deterministically instantiate candidate `Risk` rows for
     `organisation` from its CONFIRMED `KeyAsset`s x canonical
@@ -371,4 +435,10 @@ def instantiate_risks_for_organisation(organisation) -> list:
     return created
 
 
-__all__ = ["instantiate_risks_for_organisation", "DEFAULT_IMPACT", "DEFAULT_LIKELIHOOD"]
+__all__ = [
+    "instantiate_risks_for_organisation",
+    "current_trigger_variant",
+    "current_unconfirmed_control_keys",
+    "DEFAULT_IMPACT",
+    "DEFAULT_LIKELIHOOD",
+]
