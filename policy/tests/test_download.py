@@ -20,9 +20,11 @@ class TestPolicyDownloadView:
         assert response.status_code == 404
 
     def test_approved_version_downloads_as_pdf_with_safe_headers(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 
@@ -36,9 +38,11 @@ class TestPolicyDownloadView:
         assert response.content[:5] == b"%PDF-"
 
     def test_superseded_version_remains_downloadable(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         first = make_draft_version(org_a, version_number=1)
         approve_policy_directly(first, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 
@@ -52,7 +56,8 @@ class TestPolicyDownloadView:
         assert response.content[:5] == b"%PDF-"
 
     def test_download_reflects_the_frozen_version_not_current_live_state(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         """PID §19: 'no hidden mutable live-state lookup when downloading an
         old approved version'. Construct a case where organisation state
@@ -64,6 +69,7 @@ class TestPolicyDownloadView:
         asserting directly on the (uncompressed - see policy/pdf.py)
         rendered PDF bytes, not merely on the Python object graph."""
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         frozen_marker = "FROZEN-AT-APPROVAL-6f2a1c"
         live_marker = "CHANGED-AFTER-APPROVAL-9d84be"
         version = make_draft_version(

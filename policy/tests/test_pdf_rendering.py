@@ -162,9 +162,11 @@ def _realistic_sections() -> list:
 @pytest.mark.django_db
 class TestPdfPageCountRealisticPolicy:
     def test_realistic_length_policy_renders_two_to_four_pages(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         # I1 fix: review_warnings are now actually rendered, so
         # approve_policy_directly's own real recompute (`_finalise_
         # approval` -> `compute_current_review_warnings`) would otherwise
@@ -195,8 +197,11 @@ class TestPdfPageCountMechanismDetectsViolations:
     number for the one realistic fixture above."""
 
     def test_a_deliberately_too_short_policy_is_detected_as_under_two_pages(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
+        assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         # I1 fix: keep the baseline clean (see the identical comment on
         # test_realistic_length_policy_renders_two_to_four_pages above) so
         # this near-empty-content fixture isn't inflated by a real
@@ -207,7 +212,6 @@ class TestPdfPageCountMechanismDetectsViolations:
             title="Too Short Ltd Policy",
             sections=[{"section_key": "purpose_and_scope", "content": "One short sentence."}],
         )
-        assign_policy_authoriser(org_a, person_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 
         _pdf_bytes, page_count = render_policy_pdf(version, org_a)
@@ -215,8 +219,11 @@ class TestPdfPageCountMechanismDetectsViolations:
         assert not (2 <= page_count <= 4)
 
     def test_a_deliberately_too_long_policy_is_detected_as_over_four_pages(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
+        assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         # I1 fix: keep the baseline clean (see the identical comment above).
         # Not load-bearing for THIS direction (already far over 4 pages on
         # content alone), kept for consistency/isolation with its sibling
@@ -230,7 +237,6 @@ class TestPdfPageCountMechanismDetectsViolations:
             {"section_key": key, "content": long_paragraph} for key in ALLOWED_SECTION_KEYS
         ]
         version = make_draft_version(org_a, title="Too Long Ltd Policy", sections=sections)
-        assign_policy_authoriser(org_a, person_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 
         _pdf_bytes, page_count = render_policy_pdf(version, org_a)
@@ -246,9 +252,11 @@ class TestPdfPageCountIsolatedBetweenCalls:
     correct count, not a count contaminated by the previous call."""
 
     def test_repeated_calls_do_not_leak_page_counts_between_each_other(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         # I1 fix: keep the baseline clean (see the identical comment on
         # TestPdfPageCountRealisticPolicy above) - this test's own point is
         # isolation of the page COUNTER between calls, not warnings.
@@ -408,7 +416,8 @@ class TestReviewWarningsRepresentativeSet:
 @pytest.mark.django_db
 class TestReviewWarningsMaximumRealisticBaselineSet:
     def test_every_catalogue_control_unresolved_renders_every_warning_with_no_truncation(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         """Central Architecture's own worst-case instruction: construct
         the real maximum-realistic scenario (every current
@@ -419,6 +428,7 @@ class TestReviewWarningsMaximumRealisticBaselineSet:
         cases), not a synthetic warnings list - and report the real page
         count honestly rather than forcing a fit."""
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answers(org_a, CATALOGUE_KEYS, ANSWER_UNKNOWN, actor=user_a)
 
         approved_v1 = make_draft_version(
@@ -497,7 +507,8 @@ class TestReviewWarningsEscaping:
 @pytest.mark.django_db
 class TestReviewWarningsHistoricalIntegrity:
     def test_superseded_versions_pdf_renders_its_own_frozen_warnings_never_current_state(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         """Directly proves the "PDF is an artefact of the approved
         historical version, not current live state" invariant (Central
@@ -509,6 +520,7 @@ class TestReviewWarningsHistoricalIntegrity:
         original, frozen warning set unchanged - never today's current
         warning state."""
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         gap_control = CATALOGUE_KEYS[0]
         _set_answers(org_a, [gap_control], ANSWER_UNKNOWN, actor=user_a)
 

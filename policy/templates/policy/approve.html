@@ -36,6 +36,39 @@
         </p>
     {% endif %}
 
+    {# M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6 condition 5):
+       the exact, adopted-verbatim statement - a persistent statement on the
+       confirmation step itself, never only a tooltip. #}
+    <p class="form-card__intro">
+        <strong>{{ approval_does_not_certify_statement }}</strong>
+    </p>
+
+    {# §6 condition 4: any remaining UNKNOWN control must be visible here, at the moment of
+       approval - never hidden behind a separate page. #}
+    <section class="form-section">
+        <h2 class="form-section__heading">Implementation status</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Control</th>
+                    <th>Current state</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in implementation_status_rows %}
+                    <tr>
+                        <td>{{ row.control_key }}</td>
+                        <td>{{ row.current_state_text }}</td>
+                        <td>{{ row.action_text }}</td>
+                        <td>{{ row.status }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
     {% if current_review_warnings %}
         <section class="form-section">
             <h2 class="form-section__heading">Current review warnings</h2>

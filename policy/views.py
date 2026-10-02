@@ -22,9 +22,12 @@ from activity.services import record_event
 from ai_platform.policy_orchestration import PolicyGenerationFailed
 
 from policy.forms import PolicyApprovalConfirmForm, PolicyVersionEditForm, section_field_name
+from policy.clause_library import APPROVAL_DOES_NOT_CERTIFY_COMPLIANCE_STATEMENT
+from policy.implementation_status import implementation_status_for_organisation
 from policy.models import PolicyVersion
 from policy.pdf import render_policy_pdf
 from policy.presentation import approval_summary
+from policy.readiness import policy_readiness
 from policy.services import (
     PolicyLifecycleError,
     approve_policy_directly,
@@ -32,6 +35,7 @@ from policy.services import (
     create_new_draft_from_approved,
     default_next_review_date,
     generate_policy_draft,
+    generate_policy_draft_deterministic,
     get_policy_authoriser,
     record_external_policy_approval,
 )
@@ -123,6 +127,30 @@ def policy_generate(request, organisation_id):
 
 @login_required
 @require_capability()
+def policy_generate_deterministic(request, organisation_id):
+    """
+    M008D-WI4 - the new, zero-AI DEFAULT draft-generation action. Mirrors
+    `policy_generate`'s own POST-only/redirect shape exactly (same
+    tenant-scoping, same session bookkeeping, same success-message-then-
+    redirect-to-detail flow) - the only difference is which service
+    function is called, and that this path cannot fail the way an AI call
+    can (`generate_policy_draft_deterministic` makes no external call, so
+    there is no `PolicyGenerationFailed` to catch here).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+
+    generate_policy_draft_deterministic(organisation, actor=request.user)
+
+    messages.success(request, "A new draft Information Security Policy has been generated.")
+    return redirect("policy:detail", organisation_id=organisation.id)
+
+
+@login_required
+@require_capability()
 def policy_version_detail(request, organisation_id, version_id):
     """One specific `PolicyVersion`'s full content, plus the actions
     available to this user for this version's current status (edit/
@@ -135,6 +163,16 @@ def policy_version_detail(request, organisation_id, version_id):
     authoriser, can_approve_directly, can_record_external = _approval_eligibility(
         organisation, request.user
     )
+    # M008D-WI4: the Implementation status projection is a LIVE read
+    # (policy.implementation_status's own "never persisted" discipline) -
+    # shown here, alongside the policy preview, but never passed to
+    # `render_policy_pdf` (policy.pdf never receives it - see that
+    # module's own docstring for why there is no live-state lookup
+    # possible inside PDF rendering at all). `readiness` lets the template
+    # show WHY the approve button is hidden, specifically, when this
+    # version is still a draft and not yet ready for approval - the
+    # actual approve views below re-check this themselves regardless of
+    # what this template renders (never trusted from here alone).
     return render(
         request,
         "policy/version_detail.html",
@@ -147,6 +185,8 @@ def policy_version_detail(request, organisation_id, version_id):
             "approval_summary": approval_summary(version)
             if version.status in (PolicyVersion.STATUS_APPROVED, PolicyVersion.STATUS_SUPERSEDED)
             else None,
+            "implementation_status_rows": implementation_status_for_organisation(organisation),
+            "readiness": policy_readiness(organisation),
         },
     )
 
@@ -325,6 +365,22 @@ def _approve(request, organisation_id, version_id, *, mode):
             "policy:version_detail", organisation_id=organisation.id, version_id=version.id
         )
 
+    # M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6): the
+    # friendlier, specific-reasons check - checked AFTER authoriser
+    # eligibility above (a non-authoriser should see "you are not the
+    # assigned Policy Authoriser", not an unrelated readiness message) but
+    # still re-checked server-side before accepting a POST, never trusted
+    # from the template/URL alone. `policy.services._finalise_approval`
+    # is the final, authoritative backstop regardless of what happens
+    # here.
+    readiness = policy_readiness(organisation)
+    if not readiness.is_ready:
+        for reason in readiness.blocking_reasons:
+            messages.error(request, reason)
+        return redirect(
+            "policy:version_detail", organisation_id=organisation.id, version_id=version.id
+        )
+
     if request.method == "POST":
         form = PolicyApprovalConfirmForm(request.POST)
         if form.is_valid():
@@ -368,6 +424,12 @@ def _approve(request, organisation_id, version_id, *, mode):
     # over a GET-time write.
     current_review_warnings = compute_current_review_warnings(version)
 
+    # M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6 condition 4):
+    # any remaining UNKNOWN control must be visible in the implementation-
+    # status section AT THE MOMENT OF APPROVAL, not hidden behind a
+    # separate page the customer might never visit - so this confirmation
+    # step shows the same live `implementation_status_for_organisation`
+    # projection `policy_version_detail` shows, not merely a link to it.
     return render(
         request,
         "policy/approve.html",
@@ -378,6 +440,8 @@ def _approve(request, organisation_id, version_id, *, mode):
             "mode": mode,
             "policy_authoriser": authoriser,
             "current_review_warnings": current_review_warnings,
+            "implementation_status_rows": implementation_status_for_organisation(organisation),
+            "approval_does_not_certify_statement": APPROVAL_DOES_NOT_CERTIFY_COMPLIANCE_STATEMENT,
         },
     )
 
@@ -474,6 +538,7 @@ def policy_download(request, organisation_id, version_id):
 __all__ = [
     "policy_detail",
     "policy_generate",
+    "policy_generate_deterministic",
     "policy_version_detail",
     "policy_edit",
     "policy_approve_direct",

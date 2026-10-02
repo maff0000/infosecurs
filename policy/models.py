@@ -88,9 +88,21 @@ class PolicyVersion(models.Model):
     # `EVENT_POLICY_DRAFT_GENERATED` (an AI-specific event, see that
     # event's own docstring in activity/models.py) for a manual copy.
     GENERATION_SOURCE_MANUAL = "manual"
+    # Added by M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md): the
+    # new, zero-AI DEFAULT generation path (`policy.services.
+    # generate_policy_draft_deterministic`) builds every section from
+    # `policy.clause_library`'s fixed, versioned normative clause set -
+    # never an LLM call. A deterministic draft is never tagged `ai` (no
+    # `ai_invocation_record`, no real `resolved_model`) and never tagged
+    # `manual` either (it was not copied from a previous approved version
+    # - `create_new_draft_from_approved`'s own case) - it needed its own,
+    # third, honest value so `PolicyVersion.generation_source` never lies
+    # about which path actually produced a given draft.
+    GENERATION_SOURCE_DETERMINISTIC = "deterministic"
     GENERATION_SOURCE_CHOICES = [
         (GENERATION_SOURCE_AI, "AI generated"),
         (GENERATION_SOURCE_MANUAL, "Manually created (copied from a previous version)"),
+        (GENERATION_SOURCE_DETERMINISTIC, "Deterministic (template-based)"),
     ]
 
     APPROVAL_MODE_DIRECT = "direct"
