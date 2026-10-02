@@ -645,9 +645,18 @@ def record_external_policy_approval(
 def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVersion:
     """
     PID §15 "later create a new draft/version without overwriting the
-    previously approved version" / PID §16's only path to changing an
-    approved policy's content (there is no direct-edit-in-place path for a
-    non-draft version - see `policy.views.policy_edit`'s draft-only gate).
+    previously approved version". This function itself is NOT retired by
+    M008-WI6 Finding A (dell-debian Auditor, 2026-10-02) - only the
+    free-text section editor it used to feed (`policy.views.policy_edit`/
+    `PolicyVersionEditForm`/`policy:version_edit`, all now removed - see
+    `policy/forms.py`'s module docstring) is. This function has other
+    legitimate, non-HTTP-reachable callers left (fixture/test scaffolding
+    - see `core/management/commands/seed_backup_restore_fixture.py` and
+    this app's own test suite) that only ever pass hardcoded, non-customer
+    content, never a path for arbitrary customer-authored prose to reach
+    `sections`. `policy.views.policy_new_draft` (the HTTP view) no longer
+    calls this function at all - it calls
+    `generate_policy_draft_deterministic` instead.
 
     `version` (the source) must currently be `status=approved` - raises
     `PolicyLifecycleError` otherwise (e.g. refusing to "fork" a draft or a
@@ -659,11 +668,11 @@ def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVe
     The new `PolicyVersion` is a PLAIN COPY of `version`'s `title`/
     `sections` - not a reference of any kind - `sections=list(...)` copies
     the outer list, and each element is itself a fresh dict, not the same
-    object `version.sections` holds, so subsequent edits to the new draft
-    (via `policy.views.policy_edit`) can never mutate `version`'s own
-    persisted content; independently, `PolicyVersion.save()`'s own
-    immutability guard would also reject any such mutation attempt against
-    the source row directly.
+    object `version.sections` holds, so a caller mutating the new draft's
+    own `sections` directly can never mutate `version`'s own persisted
+    content; independently, `PolicyVersion.save()`'s own immutability
+    guard would also reject any such mutation attempt against the source
+    row directly.
 
     H3 correction (M006-AUDIT-0003 finding H3): `review_warnings` is NOT
     copied from `version` (the source approved row's own warnings may be

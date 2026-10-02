@@ -11,20 +11,31 @@ even if the page-counting mechanism were silently broken (e.g. always
 returning a hardcoded "3") - these deliberately-too-short/too-long cases
 are what rules that out.
 
-I1 fix (M006-AUDIT-0004, `docs/evidence/M006-AUDIT-0004.md`): the classes
-from `TestReviewWarningsZero` onward cover Central Architecture's own
-required cases for `review_warnings` actually appearing in the rendered
-PDF - zero/one/a representative 6-10 set/the maximum realistic current
-`security_baseline.catalogue` set/escaping/historical integrity across
-supersession. The four pre-existing page-count tests above were updated
-to give their organisation a clean baseline (`_set_answers(..., ANSWER_
-YES, ...)`) before approval, purely so `approve_policy_directly`'s own
-existing real recompute (`_finalise_approval` -> `compute_current_review_
-warnings`, H3 correction, unchanged here) does not inject this
-organisation's real deterministic warnings into a fixture that was never
-about warnings - this is a necessary and correct implication of I1 finally
-making review_warnings visible in the PDF, not a change to the H3
-recompute behaviour itself.
+M008-WI6 Finding B remediation (dell-debian Auditor, 2026-10-02)
+SUPERSEDES the former M006-AUDIT-0004 "I1 fix" tests this file used to
+carry from `TestReviewWarningsZero` onward. The I1 fix made
+`review_warnings` actually render into the distributable PDF; a fresh
+M008-WI6 Auditor proved live that this directly violates the master PID's
+own binding rule (`docs/pids/M008-FOUNDATIONS-EXPERIENCE-REDESIGN.md`
+§3.6: "Current state, proposed commitment and gap must remain separate,
+even in polished language or a PDF") - it leaks current-state/gap
+disclosure into the exact same PDF M008D-WI4's own
+`implementation_status_rows` mechanism was carefully built to never
+reach. `policy.pdf._build_flowables` no longer renders `review_warnings`
+at all. The classes from `TestReviewWarningsNeverAppearInPdf` onward
+replace the old "I1 fix" ones and prove the OPPOSITE outcome: review-
+warning content, in any quantity/shape, never appears anywhere in the
+extracted PDF text - zero/one/a representative 6-10 set/the maximum
+realistic current `security_baseline.catalogue` set/hostile-script-shaped
+text/historical integrity across supersession. `review_warnings` remains
+visible IN-PRODUCT ONLY (`version_detail.html`/`approve.html` - unchanged,
+out of this file's scope). The four pre-existing page-count tests above
+still give their organisation a clean baseline (`_set_answers(...,
+ANSWER_YES, ...)`) before approval purely so `approve_policy_directly`'s
+own real recompute does not inject this organisation's real deterministic
+warnings into a fixture that was never about warnings - unrelated to, and
+unaffected by, this fix (that content was never going to reach the PDF
+either way now).
 """
 import datetime
 import io
@@ -340,8 +351,18 @@ class TestReviewWarningsZero:
 
 
 @pytest.mark.django_db
-class TestReviewWarningsOne:
-    def test_single_warning_subject_and_detail_appear_before_section_content(
+class TestReviewWarningsNeverAppearInPdf:
+    """
+    M008-WI6 Finding B remediation (dell-debian Auditor, 2026-10-02) - the
+    Auditor's own technique, reproduced as a permanent regression suite:
+    generate a real PDF for a version with non-empty `review_warnings`,
+    pypdf-extract its text, and assert NONE of the review-warning text
+    appears anywhere in the extracted bytes, regardless of how many/which
+    controls are unresolved, whether the content is hostile-script-shaped,
+    or whether the version has since been superseded.
+    """
+
+    def test_single_warning_subject_and_detail_never_appear_in_pdf_text(
         self, org_a, person_a, assign_policy_authoriser, make_draft_version
     ):
         assign_policy_authoriser(org_a, person_a)
@@ -365,22 +386,18 @@ class TestReviewWarningsOne:
         pdf_bytes, _page_count = render_policy_pdf(version, org_a)
         text = _normalize_ws(_extract_text(pdf_bytes))
 
-        assert "Review warnings / items requiring attention" in text
-        assert "Multi-factor authentication (admin) - mfa_privileged_accounts" in text
-        assert "Canonical current state: Not sure (Not confirmed)." in text
-        # Central Architecture: rendered BEFORE the main policy sections.
-        assert text.index("Review warnings / items requiring attention") < text.index(
-            "Purpose section body text."
-        )
+        assert "Review warnings" not in text
+        assert "items requiring attention" not in text
+        assert "Multi-factor authentication (admin) - mfa_privileged_accounts" not in text
+        assert "Canonical current state" not in text
+        # The normative section content is unaffected by this fix.
+        assert "Purpose section body text." in text
 
-
-@pytest.mark.django_db
-class TestReviewWarningsRepresentativeSet:
-    def test_six_to_ten_warnings_all_present_none_silently_dropped(
+    def test_representative_warning_set_entirely_absent_from_pdf_text(
         self, org_a, person_a, assign_policy_authoriser, make_draft_version
     ):
         assign_policy_authoriser(org_a, person_a)
-        warning_keys = CATALOGUE_KEYS[:8]  # 8 - within the required 6-10 range
+        warning_keys = CATALOGUE_KEYS[:8]  # 8 - within the old 6-10 representative range
         warnings = [
             {
                 "subject": f"Representative area {i} - {key}",
@@ -397,36 +414,35 @@ class TestReviewWarningsRepresentativeSet:
             review_warnings=warnings,
         )
 
-        pdf_bytes, page_count = render_policy_pdf(version, org_a)
+        pdf_bytes, _page_count = render_policy_pdf(version, org_a)
         text = _normalize_ws(_extract_text(pdf_bytes))
 
         assert pdf_bytes[:5] == b"%PDF-"
         for warning in warnings:
-            assert warning["subject"] in text, f"warning subject {warning['subject']!r} missing from rendered PDF"
-            assert warning["detail"] in text, f"warning detail {warning['detail']!r} missing from rendered PDF"
+            assert warning["subject"] not in text, (
+                f"warning subject {warning['subject']!r} leaked into the PDF - "
+                "review_warnings must never reach the distributable PDF"
+            )
+            assert warning["detail"] not in text, (
+                f"warning detail {warning['detail']!r} leaked into the PDF - "
+                "review_warnings must never reach the distributable PDF"
+            )
+        # Every normative section's own content is still present and
+        # unaffected by this fix.
+        for key in ALLOWED_SECTION_KEYS:
+            assert _REALISTIC_SECTION_CONTENT[key][:40] in text
 
-        # Captured and reported (this dispatch's own report quotes the
-        # actual number observed here), not silently asserted away either
-        # direction - see this file's module docstring / the dispatch
-        # report for the real result and its disposition against the
-        # existing 2-4 page target.
-        print(f"[I1 REPORT] 8-warning representative-set + realistic 8-section policy page count = {page_count}")
-
-
-@pytest.mark.django_db
-class TestReviewWarningsMaximumRealisticBaselineSet:
-    def test_every_catalogue_control_unresolved_renders_every_warning_with_no_truncation(
+    def test_maximum_realistic_baseline_warning_set_still_entirely_absent(
         self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
         satisfy_policy_readiness,
     ):
-        """Central Architecture's own worst-case instruction: construct
-        the real maximum-realistic scenario (every current
+        """Central Architecture's own worst case (every current
         `security_baseline.catalogue.CATALOGUE` control simultaneously
-        unresolved) via the real service path
+        unresolved), built via the real service path
         (`create_new_draft_from_approved` -> `approve_policy_directly`,
         exactly like `policy/tests/test_h3_review_warnings.py`'s own real
-        cases), not a synthetic warnings list - and report the real page
-        count honestly rather than forcing a fit."""
+        cases) - proving the opposite outcome from the old I1 test: even
+        the maximum realistic warning set leaks nothing into the PDF."""
         assign_policy_authoriser(org_a, person_a)
         satisfy_policy_readiness(org_a, user_a)
         _set_answers(org_a, CATALOGUE_KEYS, ANSWER_UNKNOWN, actor=user_a)
@@ -454,24 +470,15 @@ class TestReviewWarningsMaximumRealisticBaselineSet:
 
         assert pdf_bytes[:5] == b"%PDF-"
         for warning in approved.review_warnings:
-            assert warning["subject"] in text, f"warning subject {warning['subject']!r} missing - silent drop"
-            assert warning["detail"] in text, f"warning detail {warning['detail']!r} missing - silent drop"
-
-        # Honest report, per Central Architecture's own explicit
-        # instruction: "If the real approved Beta policy can no longer
-        # remain within four pages with its warnings included, report that
-        # rather than silently deleting disclosure." No forcing of a fit
-        # here (content/margins/styles are unchanged from the rest of this
-        # module) - see this dispatch's own report for the real number.
+            assert warning["subject"] not in text, f"warning subject {warning['subject']!r} leaked into the PDF"
+            assert warning["detail"] not in text, f"warning detail {warning['detail']!r} leaked into the PDF"
         print(
-            f"[I1 REPORT] maximum-realistic-baseline-warning-set "
-            f"({len(CATALOGUE_KEYS)} warnings) + realistic 8-section policy page count = {page_count}"
+            f"[M008-WI6 Finding B REPORT] maximum-realistic-baseline-warning-set "
+            f"({len(CATALOGUE_KEYS)} warnings, now correctly excluded from the PDF) + "
+            f"realistic 8-section policy page count = {page_count}"
         )
 
-
-@pytest.mark.django_db
-class TestReviewWarningsEscaping:
-    def test_hostile_script_shaped_warning_text_renders_as_inert_plain_text(
+    def test_hostile_script_shaped_warning_text_is_simply_absent_not_merely_escaped(
         self, org_a, person_a, assign_policy_authoriser, make_draft_version
     ):
         assign_policy_authoriser(org_a, person_a)
@@ -487,38 +494,28 @@ class TestReviewWarningsEscaping:
 
         pdf_bytes, _page_count = render_policy_pdf(version, org_a)
 
-        # A PDF has no live script-execution model the way a browser does,
-        # but confirm the same escape() discipline used for every other
-        # piece of customer/AI-supplied text in this module is genuinely
-        # applied: the document still parses as a well-formed PDF (a raw,
-        # unescaped literal string containing an unbalanced/unescaped `(`
-        # or `)` would corrupt the surrounding content-stream syntax), and
-        # the hostile text comes back as inert extracted text, not markup
-        # that altered the document structure.
         assert pdf_bytes[:5] == b"%PDF-"
         reader = PdfReader(io.BytesIO(pdf_bytes))
-        assert len(reader.pages) >= 1  # parses cleanly - structure was not corrupted
+        assert len(reader.pages) >= 1  # parses cleanly
         text = _normalize_ws(_extract_text(pdf_bytes))
 
-        assert hostile_subject in text
-        assert hostile_detail in text
+        assert hostile_subject not in text
+        assert hostile_detail not in text
+        assert "subject-xss" not in text
 
-
-@pytest.mark.django_db
-class TestReviewWarningsHistoricalIntegrity:
-    def test_superseded_versions_pdf_renders_its_own_frozen_warnings_never_current_state(
+    def test_superseded_versions_pdf_never_renders_review_warnings_at_all(
         self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
         satisfy_policy_readiness,
     ):
-        """Directly proves the "PDF is an artefact of the approved
-        historical version, not current live state" invariant (Central
-        Architecture's own instruction) for the PDF artefact specifically -
-        approve a version with warnings, generate its PDF, then change
-        canonical state and create+approve a NEW draft from it (the real
-        product action that supersedes it), and confirm regenerating the
-        PDF for the ORIGINAL, now-superseded version still renders its own
-        original, frozen warning set unchanged - never today's current
-        warning state."""
+        """Historical-integrity angle, inverted for Finding B: a
+        superseded version's PDF must never render review_warnings either
+        - confirming the fix applies uniformly to every PolicyVersion
+        status `render_policy_pdf` is ever called against (PID §19's own
+        "approved or superseded" download eligibility), not merely the
+        currently-approved one. `review_warnings` itself is still
+        persisted and untouched by supersession (unchanged H3 behaviour,
+        out of this fix's scope) - only its PDF rendering is checked
+        here."""
         assign_policy_authoriser(org_a, person_a)
         satisfy_policy_readiness(org_a, user_a)
         gap_control = CATALOGUE_KEYS[0]
@@ -535,46 +532,19 @@ class TestReviewWarningsHistoricalIntegrity:
         assert frozen_warnings != []
         assert any(gap_control in w["subject"] for w in frozen_warnings)
 
-        original_pdf_bytes, _pc1 = render_policy_pdf(approved_v2, org_a)
-        original_text = _normalize_ws(_extract_text(original_pdf_bytes))
-        for warning in frozen_warnings:
-            assert warning["subject"] in original_text
-            assert warning["detail"] in original_text
-
-        # Canonical state changes AFTER this version is already approved -
-        # the control that drove the frozen warning above is now resolved.
-        _set_answers(org_a, [gap_control], ANSWER_YES, actor=user_a)
-
-        # The real product action that supersedes v2: a new draft is
-        # created (against CURRENT state) and approved.
         draft_v3 = create_new_draft_from_approved(approved_v2, actor=user_a)
-        approved_v3 = approve_policy_directly(
+        approve_policy_directly(
             draft_v3, actor=user_a, next_review_date=datetime.date(2028, 1, 1)
         )
-        assert not any(gap_control in w["subject"] for w in approved_v3.review_warnings)
-
         approved_v2.refresh_from_db()
         assert approved_v2.status == PolicyVersion.STATUS_SUPERSEDED
         assert approved_v2.review_warnings == frozen_warnings  # untouched by supersession
 
-        # Regenerate the PDF for the ORIGINAL (now superseded) version -
-        # must still render its own original frozen warning, never
-        # today's now-resolved state. (Not asserting the full rendered
-        # text is byte/text-identical to `original_text`: `status`/
-        # `get_status_display()` legitimately changed from "Approved" to
-        # "Superseded" by the real supersession above - that field is NOT
-        # one of `PROTECTED_WHILE_APPROVED_FIELDS` and is correctly
-        # expected to differ. review_warnings is the field this invariant
-        # is actually about, and it is checked explicitly below, plus
-        # already confirmed unchanged at the DB level above.)
-        regenerated_pdf_bytes, _pc2 = render_policy_pdf(approved_v2, org_a)
-        regenerated_text = _normalize_ws(_extract_text(regenerated_pdf_bytes))
+        # Even though review_warnings is still persisted on this frozen
+        # row (in-product display elsewhere still uses it), its PDF
+        # rendering must never include any of this content.
+        pdf_bytes, _pc = render_policy_pdf(approved_v2, org_a)
+        text = _normalize_ws(_extract_text(pdf_bytes))
         for warning in frozen_warnings:
-            assert warning["subject"] in regenerated_text
-            assert warning["detail"] in regenerated_text
-        # And never today's current (now-resolved) state's own warning
-        # text for this control.
-        assert not any(
-            "not fully confirmed" in w["detail"] and gap_control in w["subject"]
-            for w in approved_v3.review_warnings
-        )
+            assert warning["subject"] not in text
+            assert warning["detail"] not in text

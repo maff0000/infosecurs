@@ -2,10 +2,13 @@
 Release-blocking tenant isolation tests (PID §23, §26 "Policy lifecycle" /
 "Policy grounding" - m004-2a-policy-foundation + m004-2b-policy-lifecycle
 dispatches). Two synthetic organisations, two users each a member of
-exactly one, proving organisation A cannot view/generate/edit/approve/
-download organisation B's policy draft, and that a foreign/manipulated
-organisation id or version id in the URL is an ordinary 404 - never a path
-to another organisation's policy.
+exactly one, proving organisation A cannot view/generate/approve/
+download/generate-a-new-draft-for organisation B's policy draft, and that
+a foreign/manipulated organisation id or version id in the URL is an
+ordinary 404 - never a path to another organisation's policy. (The
+free-text section editor this docstring used to also name here,
+`policy:version_edit`, no longer exists at all - M008-WI6 Finding A, see
+`policy/tests/test_edit.py`.)
 """
 import datetime
 import uuid
@@ -13,7 +16,6 @@ import uuid
 import pytest
 from django.urls import reverse
 
-from activity.models import ActivityEvent
 from ai_platform.models import AIInvocationRecord
 from ai_platform.testing import FakePolicyGateway
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
@@ -87,22 +89,14 @@ class TestPolicyLifecycleTenantIsolation:
         response = client_b.get(reverse("policy:version_detail", args=[org_a.id, version.id]))
         assert response.status_code == 404
 
-    def test_member_cannot_edit_other_organisations_draft(self, client_b, org_a):
-        version = self._org_a_version(org_a)
-        response = client_b.post(
-            reverse("policy:version_edit", args=[org_a.id, version.id]),
-            data={
-                "title": "hijacked",
-                "next_review_date": "",
-                "section__purpose_and_scope": "hijacked content",
-            },
-        )
-        assert response.status_code == 404
-        version.refresh_from_db()
-        assert version.title == "Org A ISP"
-        assert not ActivityEvent.objects.filter(
-            organisation=org_a, event_type=ActivityEvent.EVENT_POLICY_DRAFT_EDITED
-        ).exists()
+    # M008-WI6 Finding A: `policy:version_edit` no longer exists at all
+    # (see `policy/tests/test_edit.py`'s own
+    # `TestFreeTextSectionEditorIsUnreachable` for the regression proof) -
+    # there is nothing left for a tenant-isolation test to exercise on
+    # that specific route; the former
+    # `test_member_cannot_edit_other_organisations_draft` test here is
+    # removed along with it, not merely left pointing at a dead
+    # `reverse()` call.
 
     def test_member_cannot_approve_other_organisations_draft_directly(
         self, client_b, org_a, user_a

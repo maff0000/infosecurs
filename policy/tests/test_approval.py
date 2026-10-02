@@ -395,10 +395,19 @@ class TestApprovalViews:
         shown_messages = [str(m) for m in response.context["messages"]]
         assert any("Only a draft policy version can be approved" in m for m in shown_messages)
 
-    def test_new_draft_view_redirects_to_edit_the_new_version(
+    def test_new_draft_view_generates_a_deterministic_draft_and_redirects_to_version_detail(
         self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
         satisfy_policy_readiness,
     ):
+        """M008-WI6 Finding A remediation: `policy:version_new_draft` no
+        longer calls `create_new_draft_from_approved` + redirects into the
+        now-retired free-text editor - it calls
+        `generate_policy_draft_deterministic` (zero-AI) and redirects to
+        the ordinary read-only version-detail page. See
+        `policy/tests/test_edit.py::TestGenerateNewDraftReplacesCreateAndEdit`
+        for the dedicated regression coverage of this change; this test
+        keeps the original "the HTTP view does the right thing end to end"
+        shape the pre-existing test here had."""
         assign_policy_authoriser(org_a, person_a)
         satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
@@ -413,8 +422,9 @@ class TestApprovalViews:
             organisation=org_a, status=PolicyVersion.STATUS_DRAFT
         )
         assert response.url == reverse(
-            "policy:version_edit", args=[org_a.id, new_draft.id]
+            "policy:version_detail", args=[org_a.id, new_draft.id]
         )
+        assert new_draft.generation_source == PolicyVersion.GENERATION_SOURCE_DETERMINISTIC
 
     def test_new_draft_view_rejects_get(self, client_a, org_a, make_draft_version):
         version = make_draft_version(org_a, status=PolicyVersion.STATUS_APPROVED)

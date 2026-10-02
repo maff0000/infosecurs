@@ -11,32 +11,25 @@ silently drops it, so the raw HTML carries a value but the computed DOM
 user. These tests assert the widget's rendered `value=` attribute is
 always exact ISO `YYYY-MM-DD`, independent of `LANGUAGE_CODE`, which is
 what an HTML5 date input actually requires to round-trip.
+
+M008-WI6 Finding A (dell-debian Auditor, 2026-10-02): the former
+`PolicyVersionEditForm` coverage below was removed along with that form
+itself (see `policy/forms.py`'s module docstring) - only
+`PolicyApprovalConfirmForm`'s own identical ISO-date-rendering concern
+remains, since that form is unaffected by Finding A.
 """
 import datetime
 import re
 
 import pytest
 
-from policy.forms import PolicyApprovalConfirmForm, PolicyVersionEditForm
+from policy.forms import PolicyApprovalConfirmForm
 
 ISO_DATE_VALUE_RE = re.compile(r'name="next_review_date"[^>]*value="(\d{4}-\d{2}-\d{2})"')
 
 
 @pytest.mark.django_db
 class TestNextReviewDateWidgetRendersIsoFormat:
-    def test_policy_version_edit_form_initial_value_renders_iso(self):
-        form = PolicyVersionEditForm(
-            initial={"title": "Org Policy", "next_review_date": datetime.date(2027, 9, 23)},
-            section_keys=[],
-        )
-        rendered = str(form["next_review_date"])
-        match = ISO_DATE_VALUE_RE.search(rendered)
-        assert match is not None, rendered
-        assert match.group(1) == "2027-09-23"
-        # Never the en-gb locale-formatted DD/MM/YYYY rendering the bug
-        # produced.
-        assert "23/09/2027" not in rendered
-
     def test_policy_approval_confirm_form_initial_value_renders_iso(self):
         form = PolicyApprovalConfirmForm(initial={"next_review_date": datetime.date(2027, 1, 5)})
         rendered = str(form["next_review_date"])
@@ -49,10 +42,7 @@ class TestNextReviewDateWidgetRendersIsoFormat:
         # Simulates re-rendering an invalid-for-other-reasons submission:
         # the widget must still redisplay whatever the user submitted in
         # the same ISO format it was submitted in.
-        form = PolicyVersionEditForm(
-            data={"title": "", "next_review_date": "2027-09-23"},
-            section_keys=[],
-        )
+        form = PolicyApprovalConfirmForm(data={"next_review_date": "2027-09-23"})
         rendered = str(form["next_review_date"])
         match = ISO_DATE_VALUE_RE.search(rendered)
         assert match is not None, rendered

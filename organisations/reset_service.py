@@ -27,8 +27,12 @@ Three defence-in-depth steps run, in this order, every single call:
      single row is deleted.
   3. Only once both checks pass: the actual deletes, inside one
      `transaction.atomic()` block, respecting the manifest's one
-     documented ordering constraint (`GovernanceRoleAssignment` before
-     `OrganisationPerson`, both scoped to non-Account-Holder rows only).
+     documented ordering constraint (`GovernanceRoleAssignment` deleted
+     before `OrganisationPerson`) - then the Account Holder's 3
+     governance roles are unconditionally re-established via
+     `governance.services.ensure_account_holder_person` (M008-WI6 Finding
+     C - see the inline comment at that call site for the full reasoning
+     on why this is now unconditional rather than exclusion-based).
 
 Filesystem cleanup (the evidence directory) is a SEPARATE resource,
 touched only after the DB transaction above has already committed
@@ -47,6 +51,7 @@ from ai_platform.models import AIInvocationRecord
 from evidence.models import ControlEvidenceLink, EvidenceItem
 from evidence.storage import delete_organisation_evidence_directory
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
+from governance.services import ensure_account_holder_person
 from key_assets.models import KeyAsset
 from organisations.models import AuditEvent, CustomerZeroFixture, Organisation, OrganisationProfile
 from policy.models import PolicyDocument, PolicyVersion
@@ -270,25 +275,60 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
         organisation = Organisation.objects.select_for_update().get(pk=organisation.pk)
 
         # The manifest's one real ordering constraint: every
-        # GovernanceRoleAssignment for this organisation EXCEPT the
-        # Account Holder's own 3 must be deleted before every
-        # OrganisationPerson for this organisation EXCEPT the Account
-        # Holder's own row - deleting a non-Account-Holder
+        # GovernanceRoleAssignment for this organisation must be deleted
+        # before every OrganisationPerson for this organisation EXCEPT the
+        # Account Holder's own row - deleting a non-Account-Holder
         # OrganisationPerson while a GovernanceRoleAssignment still
         # PROTECTs it would raise ProtectedError.
         account_holder_person = OrganisationPerson.objects.filter(
             organisation=organisation, user__isnull=False
         ).first()
 
-        role_assignments = GovernanceRoleAssignment.objects.filter(organisation=organisation)
-        if account_holder_person is not None:
-            role_assignments = role_assignments.exclude(person=account_holder_person)
-        deleted_counts["governance.GovernanceRoleAssignment"] = role_assignments.delete()[0]
+        # M008-WI6 Finding C (dell-debian Auditor, 2026-10-02): a fresh
+        # Auditor proved live that the Account Holder's 3 governance roles
+        # do NOT survive a reset intact if they were reassigned away (or
+        # even just partially reassigned) through ordinary product use
+        # before the reset - the manifest's own PRESERVE classification for
+        # these 3 rows assumed they would always still be held by the
+        # Account Holder at reset time, which is not guaranteed.
+        #
+        # Fix: delete EVERY GovernanceRoleAssignment for this organisation
+        # unconditionally (no longer excluding whatever subset the Account
+        # Holder happens to currently hold), then unconditionally call
+        # `governance.services.ensure_account_holder_person` below, after
+        # the OrganisationPerson deletion. That function's own role-
+        # defaulting step only runs "if no role assignments exist yet for
+        # this organisation at all" (see its own docstring) - deleting
+        # every row here first guarantees that precondition is ALWAYS met,
+        # so its idempotent bootstrap path deterministically re-creates
+        # exactly 3 fresh GovernanceRoleAssignment rows, all pointing at
+        # the Account Holder's own OrganisationPerson, regardless of
+        # whether the roles were reassigned away entirely, partially, or
+        # not at all before this reset ran. This reclassifies these 3 rows
+        # from the manifest's literal "PRESERVE" bucket to its own
+        # "RECREATE/ENSURE" bucket ("must exist in a specific state after
+        # reset, re-derived via the same idempotent bootstrap path, not
+        # hand-written") - which is what they actually are, and reuses
+        # `ensure_account_holder_person` exactly as-is, never
+        # reimplementing its logic.
+        deleted_counts["governance.GovernanceRoleAssignment"] = (
+            GovernanceRoleAssignment.objects.filter(organisation=organisation).delete()[0]
+        )
 
         people = OrganisationPerson.objects.filter(organisation=organisation)
         if account_holder_person is not None:
             people = people.exclude(pk=account_holder_person.pk)
         deleted_counts["governance.OrganisationPerson"] = people.delete()[0]
+
+        # Re-establish the Account Holder's 3 governance roles now that
+        # every GovernanceRoleAssignment for this organisation has been
+        # removed above - see the comment block immediately above for why
+        # this call's own idempotent "no role assignments exist yet"
+        # branch is guaranteed to fire every time. `account_holder_person`
+        # should always exist (it is the fixture's own PRESERVE row), but
+        # this stays defensive rather than assuming it.
+        if account_holder_person is not None and account_holder_person.user_id is not None:
+            ensure_account_holder_person(organisation, account_holder_person.user)
 
         # No further ordering constraint exists anywhere else in the
         # organisation-rooted FK graph (manifest's own conclusion) - every

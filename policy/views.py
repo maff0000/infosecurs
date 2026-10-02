@@ -1,8 +1,14 @@
 """
 Policy lifecycle views (M004 PID §3.9-19 - m004-2a-policy-foundation +
 m004-2b-policy-lifecycle dispatches): draft generation/read-only view
-(2a), plus the section-based editor, the direct/external approval flow,
-new-draft-from-approved, and the approved-artefact PDF download (2b).
+(2a), the direct/external approval flow, new-draft generation, and the
+approved-artefact PDF download (2b).
+
+M008-WI6 Finding A (dell-debian Auditor, 2026-10-02): the former
+section-based free-text draft editor (`policy_edit`/`PolicyVersionEditForm`
+/`policy:version_edit`) is REMOVED - see `policy/forms.py`'s module
+docstring for the full reasoning. `policy_new_draft` below no longer
+redirects into it.
 """
 from __future__ import annotations
 
@@ -10,18 +16,15 @@ from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
 from entitlements.decorators import require_capability
 from organisations.views import get_member_organisation_or_404
 
-from activity.models import ActivityEvent
-from activity.services import record_event
 from ai_platform.policy_orchestration import PolicyGenerationFailed
 
-from policy.forms import PolicyApprovalConfirmForm, PolicyVersionEditForm, section_field_name
+from policy.forms import PolicyApprovalConfirmForm
 from policy.clause_library import APPROVAL_DOES_NOT_CERTIFY_COMPLIANCE_STATEMENT
 from policy.implementation_status import implementation_status_for_organisation
 from policy.models import PolicyVersion
@@ -32,7 +35,6 @@ from policy.services import (
     PolicyLifecycleError,
     approve_policy_directly,
     compute_current_review_warnings,
-    create_new_draft_from_approved,
     default_next_review_date,
     generate_policy_draft,
     generate_policy_draft_deterministic,
@@ -153,8 +155,8 @@ def policy_generate_deterministic(request, organisation_id):
 @require_capability()
 def policy_version_detail(request, organisation_id, version_id):
     """One specific `PolicyVersion`'s full content, plus the actions
-    available to this user for this version's current status (edit/
-    approve-direct/approve-external/new-draft/download)."""
+    available to this user for this version's current status
+    (approve-direct/approve-external/generate-new-draft/download)."""
     organisation, version = _get_member_policy_version_or_404(
         request.user, organisation_id, version_id
     )
@@ -187,131 +189,6 @@ def policy_version_detail(request, organisation_id, version_id):
             else None,
             "implementation_status_rows": implementation_status_for_organisation(organisation),
             "readiness": policy_readiness(organisation),
-        },
-    )
-
-
-@login_required
-@require_capability()
-def policy_edit(request, organisation_id, version_id):
-    """
-    Section-based draft editor (PID §16). Only a `status=draft` version may
-    be edited - gated here at the view layer for a clear user-facing
-    redirect/message (the model's `ImmutablePolicyVersionError` remains the
-    defence-in-depth backstop if this check is ever bypassed - see
-    `policy/tests/test_edit.py` for an HTTP-level proof of both layers).
-    """
-    organisation, version = _get_member_policy_version_or_404(
-        request.user, organisation_id, version_id
-    )
-    request.session["current_organisation_id"] = str(organisation.id)
-
-    if version.status != PolicyVersion.STATUS_DRAFT:
-        messages.error(request, "Only a draft policy version can be edited.")
-        return redirect(
-            "policy:version_detail", organisation_id=organisation.id, version_id=version.id
-        )
-
-    # Only the sections this version actually contains are editable here
-    # (PolicyVersionEditForm's own docstring: a content editor, not a
-    # section add/remove tool), already reduced to ALLOWED_SECTION_KEYS
-    # order by the form itself.
-    editable_section_keys = [entry["section_key"] for entry in version.sections]
-
-    if request.method == "POST":
-        form = PolicyVersionEditForm(request.POST, section_keys=editable_section_keys)
-
-        # Snapshot every "previous" value needed for the Learning Signal
-        # Capture delta from `version` RIGHT NOW, before this form's
-        # cleaned_data is ever read or applied - see PolicyVersionEditForm's
-        # own docstring for why this form structurally cannot mutate
-        # `version` as a side effect of is_valid() (it is not a ModelForm
-        # bound to an instance), and why this snapshot-first discipline is
-        # still applied anyway, matching risk_register.views.risk_edit's
-        # comment on the same lesson.
-        previous_title = version.title
-        previous_next_review_date = version.next_review_date
-        previous_section_content = {
-            entry["section_key"]: entry["content"] for entry in version.sections
-        }
-
-        if form.is_valid():
-            new_title = form.cleaned_data["title"]
-            new_next_review_date = form.cleaned_data.get("next_review_date")
-
-            new_sections = []
-            changed_sections = []
-            for entry in version.sections:
-                key = entry["section_key"]
-                if key in form.section_keys:
-                    new_content = form.cleaned_data[section_field_name(key)]
-                else:
-                    new_content = entry["content"]
-                if new_content != previous_section_content.get(key):
-                    changed_sections.append(key)
-                new_sections.append({"section_key": key, "content": new_content})
-
-            title_changed = new_title != previous_title
-            next_review_date_changed = new_next_review_date != previous_next_review_date
-
-            if changed_sections or title_changed or next_review_date_changed:
-                with transaction.atomic():
-                    version.title = new_title
-                    version.next_review_date = new_next_review_date
-                    version.sections = new_sections
-                    version.save(
-                        update_fields=["title", "next_review_date", "sections", "updated_at"]
-                    )
-                    # Metadata is the changed-fields delta ONLY (PID §16:
-                    # "activity events need not duplicate large policy
-                    # text") - never the section content itself.
-                    record_event(
-                        organisation,
-                        ActivityEvent.EVENT_POLICY_DRAFT_EDITED,
-                        actor=request.user,
-                        related_object_type="policy_version",
-                        related_object_id=str(version.id),
-                        metadata={
-                            "changed_sections": changed_sections,
-                            "title_changed": title_changed,
-                            "next_review_date_changed": next_review_date_changed,
-                        },
-                    )
-                messages.success(request, "Draft policy updated.")
-            else:
-                messages.success(request, "No changes were made.")
-            return redirect(
-                "policy:version_detail", organisation_id=organisation.id, version_id=version.id
-            )
-        messages.error(request, "The draft could not be saved. Please check the errors below.")
-    else:
-        initial = {"title": version.title, "next_review_date": version.next_review_date}
-        for entry in version.sections:
-            if entry["section_key"] in editable_section_keys:
-                initial[section_field_name(entry["section_key"])] = entry["content"]
-        form = PolicyVersionEditForm(initial=initial, section_keys=editable_section_keys)
-
-    # H3 correction (M006-AUDIT-0003): editing policy prose must never
-    # itself be a source of review warnings (canonical security state
-    # remains the sole authority - see `policy.services` module docstring),
-    # and this POST path above deliberately never touches
-    # `version.review_warnings` at all. This GET-time preview mirrors the
-    # approval-confirmation page's own preview (`compute_current_review_warnings`)
-    # purely so the customer editing a draft sees live-current warnings
-    # here too, not a stale edit-time/generation-time snapshot - the
-    # eventual approved version's own warnings are still guaranteed correct
-    # independently by `_finalise_approval`'s own recompute regardless of
-    # what is shown here.
-    current_review_warnings = compute_current_review_warnings(version)
-
-    return render(
-        request,
-        "policy/edit.html",
-        {
-            "organisation": organisation,
-            "version": version,
-            "form": form,
-            "current_review_warnings": current_review_warnings,
         },
     )
 
@@ -464,9 +341,32 @@ def policy_approve_external(request, organisation_id, version_id):
 @login_required
 @require_capability()
 def policy_new_draft(request, organisation_id, version_id):
-    """PID §15 - the only way to "edit" an approved policy's content: copy
-    it into a brand new draft version, leaving the approved version
-    untouched."""
+    """
+    PID §15 - the only remaining "I want a fresh draft to review/approve"
+    action reachable from an approved policy version.
+
+    M008-WI6 Finding A remediation (dell-debian Auditor, 2026-10-02): this
+    view previously called `policy.services.create_new_draft_from_approved`
+    (a plain copy of the approved version's own content) and redirected
+    into the now-removed free-text section editor (`policy:version_edit`)
+    - a fresh Auditor proved live that editor let arbitrary unverified
+    prose into the distributed, approved policy PDF
+    (`docs/design/M008-FREE-TEXT-REPLACEMENT-REGISTER.md` item 12: "this
+    form is retired for Foundation tier entirely, not repurposed").
+
+    This view now calls the EXISTING, already-built, zero-AI
+    `policy.services.generate_policy_draft_deterministic` (M008D-WI4)
+    instead, mirroring `policy_generate_deterministic`'s own shape - the
+    customer gets an equivalent "start a fresh draft, reflecting my
+    CURRENT Stage 1-4 facts, to review and approve" capability, composed
+    entirely from the versioned clause library, never from a textarea, and
+    redirects to the ordinary read-only `policy:version_detail` page for
+    the new draft (never to any editor). `create_new_draft_from_approved`
+    itself is NOT removed - see that function's own docstring in
+    `policy/services.py` for its other, legitimate, non-HTTP-reachable
+    callers (fixture/test scaffolding) - this view simply no longer calls
+    it.
+    """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
@@ -478,18 +378,18 @@ def policy_new_draft(request, organisation_id, version_id):
     if version.status != PolicyVersion.STATUS_APPROVED:
         messages.error(
             request,
-            "A new draft can only be created from the currently approved policy version.",
+            "A new draft can only be generated from the currently approved policy version.",
         )
         return redirect(
             "policy:version_detail", organisation_id=organisation.id, version_id=version.id
         )
 
-    new_version = create_new_draft_from_approved(version, actor=request.user)
+    new_version = generate_policy_draft_deterministic(organisation, actor=request.user)
     messages.success(
-        request, f"A new draft (version {new_version.version_number}) was created for editing."
+        request, f"A new draft (version {new_version.version_number}) was generated for review."
     )
     return redirect(
-        "policy:version_edit", organisation_id=organisation.id, version_id=new_version.id
+        "policy:version_detail", organisation_id=organisation.id, version_id=new_version.id
     )
 
 
@@ -540,7 +440,6 @@ __all__ = [
     "policy_generate",
     "policy_generate_deterministic",
     "policy_version_detail",
-    "policy_edit",
     "policy_approve_direct",
     "policy_approve_external",
     "policy_new_draft",
