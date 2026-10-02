@@ -15,15 +15,39 @@ Cyber Essentials, ISO 27001, NIST, CIS or any other formal framework (§6.1).
 module's `grounding_refs` such as `baseline.mfa_user_accounts`, per PID
 §10) - once published, a key should not be renamed; retire and add a new
 one instead if a question's meaning changes materially.
+
+M008B (docs/design/M008B-QUESTION-CATALOGUE.md, Revision 2): `CATALOGUE_
+VERSION` bumped to "2026-10-baseline-v2" per that design doc's own
+WI-ERRATA §0 correction - the existing source contract requires a version
+bump whenever question wording changes (control 1's question text below
+changed materially), even though the 12 control `key`s, `area` labels and
+weights are all exactly unchanged. The new, separately versioned
+structured-option-code layer this catalogue's questions are now presented
+through (`option_code`s, NOT_APPLICABLE re-gating, etc.) lives in
+`security_baseline.structured_catalogue` -
+`FOUNDATIONS_QUESTION_METHODOLOGY_VERSION` there answers a different
+question ("which version of the option-code scheme produced this stored
+answer") to this module's `CATALOGUE_VERSION` ("which version of the
+12-control question/weighting methodology was this answered against") -
+neither supersedes the other, both are recorded per answer (see
+`security_baseline.services.record_structured_baseline_answer`).
+
+Only control 1's `question` text actually changed in Revision 2 - the
+design doc explicitly marks controls 2/3/6 "unchanged wording" and gives
+no new question text at all for the remaining controls, so their
+`question`/`help_text` values are left exactly as before. `area` is left
+unchanged for every control, per the Revision 2 dispatch's explicit
+instruction (it is used elsewhere as an existing display label; changing
+it is out of scope here).
 """
 
-CATALOGUE_VERSION = "2026-09-baseline-v1"
+CATALOGUE_VERSION = "2026-10-baseline-v2"
 
 CATALOGUE = [
     {
         "key": "mfa_user_accounts",
         "area": "Multi-factor authentication (staff)",
-        "question": "Is multi-factor authentication (MFA) enabled for ordinary staff productivity/email accounts?",
+        "question": "How is multi-factor authentication (MFA) used for ordinary staff accounts (e.g. Microsoft 365, Google Workspace)?",
         "help_text": "Covers everyday user sign-in, e.g. Microsoft 365 or Google Workspace accounts.",
     },
     {

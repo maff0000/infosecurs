@@ -88,8 +88,18 @@ evidence expectations, completion effect.
 
 ## 1. `mfa_user_accounts` — Multi-factor authentication (staff)
 
+**[WI-ERRATA correction]** This control's "Why it matters" line was
+dropped when this document was rewritten for the correction pass.
+Restored below, verbatim from the original approved wording (git
+history `9873ca6`) — this applies to every control in this document
+below marked the same way, not a new design decision.
+
+- **Customer-facing title:** Staff sign-in protection
 - **Question:** "How is multi-factor authentication (MFA) used for
   ordinary staff accounts (e.g. Microsoft 365, Google Workspace)?"
+- **Why it matters:** "MFA is one of the single most effective
+  protections against stolen-password account takeover — without it, a
+  leaked or guessed password is often enough to get in."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -113,7 +123,12 @@ evidence expectations, completion effect.
 
 ## 2. `mfa_privileged_accounts` — Multi-factor authentication (admin)
 
-- **Question:** unchanged wording.
+- **Customer-facing title:** Admin/privileged account protection
+- **Question:** "How is multi-factor authentication used for admin/
+  privileged accounts (e.g. IT admin, cloud admin, domain admin)?"
+- **Why it matters:** "Admin accounts can change settings for everyone
+  — if one is compromised, the attacker can often disable other
+  protections too."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -129,7 +144,11 @@ evidence expectations, completion effect.
 
 ## 3. `endpoint_protection` — Endpoint protection
 
-- **Question:** unchanged wording.
+- **Customer-facing title:** Device protection
+- **Question:** "Do the devices staff use for work have anti-malware/
+  endpoint protection?"
+- **Why it matters:** "Protects against malware and ransomware that
+  could spread from an infected device into the rest of the business."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -152,6 +171,12 @@ evidence expectations, completion effect.
 
 ## 4. `patching` — Patching
 
+- **Customer-facing title:** Keeping software up to date
+- **Question:** "Are operating systems and business applications kept
+  up to date with security updates?"
+- **Why it matters:** "Unpatched software is one of the most common
+  ways attackers get in — many attacks exploit a known, already-fixed
+  flaw."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -167,6 +192,12 @@ evidence expectations, completion effect.
 
 ## 5. `device_encryption` — Device encryption
 
+- **Customer-facing title:** Protecting data if a device is lost or
+  stolen
+- **Question:** "Is full-disk encryption (e.g. BitLocker, FileVault)
+  enabled on devices that hold business data?"
+- **Why it matters:** "If a laptop is lost or stolen, encryption is
+  what stops someone simply reading the files off the drive."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -181,7 +212,12 @@ evidence expectations, completion effect.
 
 ## 6. `backups` — Backups
 
-- **Question:** unchanged wording.
+- **Customer-facing title:** Backups you can actually restore from
+- **Question:** "Is important business data backed up, and has anyone
+  actually tried restoring from that backup?"
+- **Why it matters:** "A backup nobody has tested is a hope, not a
+  safeguard — ransomware and accidental deletion are the two most
+  common reasons businesses need to restore."
 - **Options — now expanded to carry what Revision 1's free-text
   follow-up used to capture, as its own distinct, finite options:**
   | `option_code` | Label | Maps to |
@@ -205,6 +241,13 @@ evidence expectations, completion effect.
 
 ## 7. `joiner_mover_leaver` — Access removal
 
+- **Customer-facing title:** Removing access when someone leaves or
+  changes role
+- **Question:** "When someone leaves the business or changes role, is
+  their access removed or adjusted promptly?"
+- **Why it matters:** "Former staff keeping access after they leave is
+  a common, avoidable way confidential information or systems stay
+  exposed."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -228,6 +271,13 @@ evidence expectations, completion effect.
 
 ## 8. `privileged_access_separation` — Privileged access
 
+- **Customer-facing title:** Keeping admin access separate from
+  everyday accounts
+- **Question:** "Do people with admin/privileged access use a separate
+  account for admin tasks, rather than their everyday login?"
+- **Why it matters:** "If the same account does admin tasks and
+  everyday email/browsing, one phishing click can hand over
+  admin-level access."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -243,6 +293,11 @@ evidence expectations, completion effect.
 
 ## 9. `security_awareness_training` — Staff awareness
 
+- **Customer-facing title:** Helping staff recognise security risks
+- **Question:** "Do staff get any security-awareness training, such as
+  how to recognise phishing emails?"
+- **Why it matters:** "Most breaches start with a person, not a
+  technical flaw — a little awareness goes a long way."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -257,6 +312,13 @@ evidence expectations, completion effect.
 
 ## 10. `incident_reporting_route` — Incident reporting
 
+- **Customer-facing title:** Knowing who to tell if something goes
+  wrong
+- **Question:** "If a staff member suspects a security incident (e.g.
+  clicked a bad link, lost a device), do they know who to tell and
+  what happens next?"
+- **Why it matters:** "Fast reporting limits damage — a known route
+  means problems get handled in minutes, not discovered weeks later."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -272,6 +334,12 @@ evidence expectations, completion effect.
 
 ## 11. `email_phishing_protection` — Email/phishing protection
 
+- **Customer-facing title:** Protecting email from phishing and spam
+- **Question:** "Are there protections against phishing and malicious
+  email, beyond normal spam filtering?"
+- **Why it matters:** "Email remains the single most common way
+  attackers first get in — filtering reduces how many malicious
+  messages staff ever see."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|
@@ -288,6 +356,13 @@ evidence expectations, completion effect.
 
 ## 12. `remote_access_control` — Remote access
 
+- **Customer-facing title:** Controlling how systems are reached
+  remotely
+- **Question:** "Where staff work remotely or access systems away from
+  the office, is there control over how that access happens (e.g. VPN,
+  conditional access)?"
+- **Why it matters:** "Uncontrolled remote access is an easy path in if
+  a device or connection is compromised."
 - **Options:**
   | `option_code` | Label | Maps to |
   |---|---|---|

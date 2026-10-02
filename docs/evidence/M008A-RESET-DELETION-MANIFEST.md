@@ -8,6 +8,19 @@ Derived entirely from direct reads of the live model graph on canonical
 main `809014222546ddc18e5953477455adb4f11f1df9`, not inferred from the PID
 text alone.
 
+**M008B WI1 addendum (2026-10):** `security_baseline.AnswerSelectionDetail`
+(docs/design/M008B-QUESTION-CATALOGUE.md §0) added to the DELETE-classified
+table below, in the same "cascades automatically, no separate delete call
+needed" category as `BaselineAnswer` - confirmed directly: this new model
+has an FK to `BaselineAssessment` only (`on_delete=CASCADE`), deliberately
+mirroring `BaselineAnswer`'s own shape, with no direct FK to
+`Organisation` at all. Independently verified against the live, running
+model graph via `organisations.reset_service.
+_live_organisation_direct_fk_model_labels()` - `security_baseline.
+AnswerSelectionDetail` does not appear in that live set, so
+`organisations/reset_service.py`'s `EXPECTED_DELETE_DIRECT_FK_MODELS`/
+`EXPECTED_PRESERVE_DIRECT_FK_MODELS` sets required zero changes.
+
 **Classification key:** every tenant-owned model is exactly one of:
 - **PRESERVE** — bootstrap identity; the reset must never touch this row.
 - **DELETE** — synthetic business/security data; the reset must remove
@@ -38,6 +51,7 @@ text alone.
 | `organisations.AuditEvent` | `organisation` | CASCADE | no | Synthetic audit trail of profile changes for this fixture. |
 | `security_baseline.BaselineAssessment` | `organisation` (OneToOne) | CASCADE | no | Cascades to all its `BaselineAnswer` rows automatically — no separate delete call needed. |
 | `security_baseline.BaselineAnswer` | `assessment` | CASCADE | no | **Confirmed**: `entitlements/metrics.py`'s resolver reads `baseline_answers.get(question_key, ANSWER_UNKNOWN)` — a hard-delete of every row produces a lookup dict with zero entries, so every question resolves to `ANSWER_UNKNOWN`, byte-identical to "never answered." No special-casing required for the UNKNOWN-never-NO fresh-state contract. |
+| `security_baseline.AnswerSelectionDetail` **[M008B WI1 addition]** | `assessment` | CASCADE | no | Cascades via `BaselineAssessment`, exactly like `BaselineAnswer` — no direct FK to `Organisation`, so no separate delete call is needed and no ordering constraint is introduced. Holds only `option_code`/`methodology_version` provenance for a structured Stage 4 answer; resetting its parent `BaselineAssessment` removes it automatically. |
 | `workplace.Workplace` | `organisation` | CASCADE | no | |
 | `governance.OrganisationPerson` (every row except the Account Holder's) | `organisation` | CASCADE | no | Delete all rows where `user` is null or `user != <customer zero user>`. |
 | `governance.GovernanceRoleAssignment` (every assignment except the Account Holder's 3) | `organisation` | CASCADE | no | `person` FK is `PROTECT` against `OrganisationPerson` — **see the one real ordering constraint below.** |
@@ -85,7 +99,7 @@ Not a persisted per-organisation model — the *active HTTP session* for the req
 ## Totals
 
 - **7 bootstrap-identity row groups PRESERVE** (User, Organisation, CustomerZeroFixture, Membership, Account Holder's OrganisationPerson, Account Holder's 3 GovernanceRoleAssignments, the 2 global catalogues).
-- **17 app/model DELETE targets**, all CASCADE from `organisation`, one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only).
+- **17 app/model DELETE targets**, all CASCADE from `organisation`, one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only). Plus **1 further model, `security_baseline.AnswerSelectionDetail` [M008B WI1 addition]**, which cascades automatically via `BaselineAssessment` (no direct FK to `Organisation`, so it needs no separate delete call and introduces no new DIRECT-FK-to-Organisation entry in either `organisations.reset_service` guard set).
 - **1 derived app with zero persisted state** (`security_state`).
 - **1 separate filesystem resource** (evidence bytes) requiring a new containment-checked directory-deletion helper, committed only after the DB transaction succeeds.
 - **1 required session action** (`logout(request)`, not a model).

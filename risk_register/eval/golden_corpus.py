@@ -100,7 +100,11 @@ def _profile_defaults(**overrides) -> dict:
         "receives_security_questionnaires": "yes",
         "cyber_essentials_status": "not_certified",
         "iso27001_status": "unknown",
-        "commercial_security_driver": "",
+        # M008B: commercial_security_driver is now a choice-constrained
+        # CharField (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.4) -
+        # "" is no longer a real choice value, even though it doesn't
+        # crash on direct .objects.create() (no full_clean call here).
+        "commercial_security_driver": "not_sure",
     }
     base.update(overrides)
     return base
@@ -118,7 +122,12 @@ GOLDEN_CORPUS = [
             endpoint_management="byod",
             productivity_platform="microsoft_365",
             primary_cloud_provider="none",
-            commercial_security_driver="A prospective customer asked about our MFA posture.",
+            # M008B: commercial_security_driver is now a choice-
+            # constrained CharField, max_length=32 (docs/design/M008B-
+            # STAGES-1-3-CATALOGUE.md §1.4) - the old free-text value here
+            # exceeded the new column length and crashed the eval harness
+            # at the DB layer; mapped to the closest real DRIVER_* choice.
+            commercial_security_driver="customer_supplier",
         ),
         "assets": [
             {
@@ -178,7 +187,10 @@ GOLDEN_CORPUS = [
             endpoint_management="byod",
             primary_cloud_provider="azure",
             cyber_essentials_status="in_progress",
-            commercial_security_driver="Client contracts require confidentiality assurances.",
+            # M008B: see the "customer_supplier" comment above - same
+            # collateral max_length fix, mapped to the closest real
+            # DRIVER_* choice for this scenario.
+            commercial_security_driver="certification_contract",
         ),
         "assets": [
             {
@@ -212,7 +224,10 @@ GOLDEN_CORPUS = [
             primary_cloud_provider="azure",
             handles_special_category_data="yes",
             cyber_essentials_status="certified",
-            commercial_security_driver="Handles health data under a client contract.",
+            # M008B: see the "customer_supplier" comment above - same
+            # collateral max_length fix, mapped to the closest real
+            # DRIVER_* choice for this scenario.
+            commercial_security_driver="sensitive_data",
         ),
         "assets": [
             {
@@ -244,7 +259,10 @@ GOLDEN_CORPUS = [
             productivity_platform="google_workspace",
             primary_cloud_provider="aws",
             develops_hosts_own_software="yes",
-            commercial_security_driver="Enterprise prospects require a security questionnaire.",
+            # M008B: see the "customer_supplier" comment above - same
+            # collateral max_length fix, mapped to the closest real
+            # DRIVER_* choice for this scenario.
+            commercial_security_driver="customer_supplier",
         ),
         "assets": [
             {
@@ -277,7 +295,10 @@ GOLDEN_CORPUS = [
             primary_cloud_provider="azure",
             cyber_essentials_status="certified",
             iso27001_status="in_progress",
-            commercial_security_driver="Maintaining existing customer trust.",
+            # M008B: see the "customer_supplier" comment above - same
+            # collateral max_length fix, mapped to the closest real
+            # DRIVER_* choice for this scenario.
+            commercial_security_driver="general_risk",
         ),
         "assets": [
             {

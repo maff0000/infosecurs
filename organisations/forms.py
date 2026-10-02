@@ -81,7 +81,17 @@ class OrganisationProfileForm(forms.ModelForm):
         ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
-            "commercial_security_driver": forms.Textarea(attrs={"rows": 3}),
+            # M008B-WI1: commercial_security_driver changed from a free
+            # TextField to a choices-constrained CharField (the
+            # DRIVER_* options) - this stale Textarea override is
+            # removed so the field renders as the Select its new
+            # choices actually require. Leaving the override in place
+            # would have rendered a textarea for what is now a
+            # five-option enum and rejected any typed value that isn't
+            # one of the five option codes, with no indication to the
+            # customer of what to type - a live regression on the
+            # existing /organisations/<id>/profile/ page, not merely
+            # cosmetic, since that page is already reachable today.
         }
 
     def __init__(self, *args, **kwargs):

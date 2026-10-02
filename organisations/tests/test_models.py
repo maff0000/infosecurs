@@ -1,7 +1,18 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from organisations.models import UNKNOWN, AuditEvent, Organisation, OrganisationProfile
+from organisations.models import (
+    DRIVER_CUSTOMER_SUPPLIER,
+    DRIVER_NOT_SURE,
+    NO,
+    SECTOR_NOT_SURE,
+    SECTOR_TECHNOLOGY_SOFTWARE,
+    UNKNOWN,
+    YES,
+    AuditEvent,
+    Organisation,
+    OrganisationProfile,
+)
 
 
 @pytest.mark.django_db
@@ -15,6 +26,11 @@ class TestOrganisationProfileDomain:
         assert profile.handles_personal_data == UNKNOWN
         assert profile.cyber_essentials_status == UNKNOWN
         assert profile.staff_count is None  # genuinely "not confirmed", distinct from 0
+        # M008B new/corrected fields - same UNKNOWN/not-confirmed discipline.
+        assert profile.sector == SECTOR_NOT_SURE
+        assert profile.has_remote_or_offsite_access == UNKNOWN
+        assert profile.people_with_system_access_count is None
+        assert profile.commercial_security_driver == DRIVER_NOT_SURE
 
     def test_update_profile_changes_persist(self, org_a):
         profile = OrganisationProfile.objects.create(
@@ -65,6 +81,118 @@ class TestOrganisationProfileDomain:
 
     def test_required_identity_cannot_be_blank(self, org_a):
         profile = OrganisationProfile(organisation=org_a, legal_trading_name="")
+        with pytest.raises(ValidationError):
+            profile.full_clean()
+
+
+@pytest.mark.django_db
+class TestM008BOrganisationProfileFieldChanges:
+    """
+    M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md): the three new
+    additive OrganisationProfile fields (sector,
+    has_remote_or_offsite_access, people_with_system_access_count) and
+    the one corrected field (commercial_security_driver, TextField ->
+    choice-constrained CharField).
+    """
+
+    # --- sector ----------------------------------------------------------
+
+    def test_sector_accepts_a_real_choice(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            sector=SECTOR_TECHNOLOGY_SOFTWARE,
+        )
+        profile.full_clean()  # should not raise
+        profile.save()
+        assert OrganisationProfile.objects.get(pk=profile.pk).sector == SECTOR_TECHNOLOGY_SOFTWARE
+
+    def test_sector_rejects_an_arbitrary_value(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            sector="a_sector_that_was_never_defined",
+        )
+        with pytest.raises(ValidationError):
+            profile.full_clean()
+
+    # --- has_remote_or_offsite_access ------------------------------------
+
+    def test_has_remote_or_offsite_access_accepts_each_tri_state_value(self, org_a):
+        for value in (UNKNOWN, YES, NO):
+            profile = OrganisationProfile(
+                organisation=org_a,
+                legal_trading_name="Org A Synthetic Ltd",
+                has_remote_or_offsite_access=value,
+            )
+            profile.full_clean()  # should not raise
+
+    def test_has_remote_or_offsite_access_rejects_an_arbitrary_value(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            has_remote_or_offsite_access="sometimes_i_guess",
+        )
+        with pytest.raises(ValidationError):
+            profile.full_clean()
+
+    # --- people_with_system_access_count ---------------------------------
+
+    def test_people_with_system_access_count_accepts_a_non_negative_integer(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            people_with_system_access_count=1,
+        )
+        profile.full_clean()  # should not raise
+        profile.save()
+        assert (
+            OrganisationProfile.objects.get(pk=profile.pk).people_with_system_access_count == 1
+        )
+
+    def test_people_with_system_access_count_accepts_null(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            people_with_system_access_count=None,
+        )
+        profile.full_clean()  # should not raise
+
+    def test_people_with_system_access_count_rejects_negative(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            people_with_system_access_count=-1,
+        )
+        with pytest.raises(ValidationError):
+            profile.full_clean()
+
+    # --- commercial_security_driver (corrected: TextField -> choices) ----
+
+    def test_commercial_security_driver_accepts_a_real_choice(self, org_a):
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            commercial_security_driver=DRIVER_CUSTOMER_SUPPLIER,
+        )
+        profile.full_clean()  # should not raise
+        profile.save()
+        assert (
+            OrganisationProfile.objects.get(pk=profile.pk).commercial_security_driver
+            == DRIVER_CUSTOMER_SUPPLIER
+        )
+
+    def test_commercial_security_driver_rejects_previously_valid_free_text(self, org_a):
+        """
+        Before M008B this field was an open TextField - arbitrary free
+        text was valid. After the correction, full_clean/choices
+        validation must reject it: only the 5 DRIVER_* codes are valid.
+        """
+        profile = OrganisationProfile(
+            organisation=org_a,
+            legal_trading_name="Org A Synthetic Ltd",
+            commercial_security_driver="A customer asked nicely, so here we are.",
+        )
         with pytest.raises(ValidationError):
             profile.full_clean()
 

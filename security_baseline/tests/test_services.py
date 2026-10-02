@@ -18,8 +18,19 @@ import pytest
 from activity.models import ActivityEvent
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_VERSION
 from security_baseline.forms import BaselineAssessmentForm, answer_field_name, note_field_name
-from security_baseline.models import BaselineAnswer, BaselineAssessment
-from security_baseline.services import save_baseline_answers
+from security_baseline.models import (
+    ANSWER_NOT_APPLICABLE,
+    ANSWER_PARTIAL,
+    ANSWER_YES,
+    AnswerSelectionDetail,
+    BaselineAnswer,
+    BaselineAssessment,
+)
+from security_baseline.services import record_structured_baseline_answer, save_baseline_answers
+from security_baseline.structured_catalogue import (
+    FOUNDATIONS_QUESTION_METHODOLOGY_VERSION,
+    UnknownOptionCodeError,
+)
 
 
 @pytest.mark.django_db
@@ -302,4 +313,188 @@ class TestControlAnswerChangedActivityEvent:
         assert answer.answer == "yes"
         assert answer.note == "Original."
         assert self._events(org_a).count() == 1  # only the first, genuine event
+
+
+@pytest.mark.django_db
+class TestRecordStructuredBaselineAnswer:
+    """
+    security_baseline.services.record_structured_baseline_answer (M008B,
+    docs/design/M008B-QUESTION-CATALOGUE.md) - the sole write path for a
+    structured Stage 4 answer.
+    """
+
+    def test_creates_assessment_on_first_call_with_current_catalogue_version(self, org_a):
+        assert not BaselineAssessment.objects.filter(organisation=org_a).exists()
+
+        recorded = record_structured_baseline_answer(
+            org_a, "mfa_user_accounts", "MFA_USER_ALL_REQUIRED"
+        )
+
+        assert recorded.assessment.catalogue_version == CATALOGUE_VERSION
+        assert BaselineAssessment.objects.filter(organisation=org_a).count() == 1
+
+    def test_second_call_reuses_the_same_assessment_without_changing_its_catalogue_version(
+        self, org_a
+    ):
+        record_structured_baseline_answer(org_a, "mfa_user_accounts", "MFA_USER_ALL_REQUIRED")
+        assessment = BaselineAssessment.objects.get(organisation=org_a)
+        # Simulate an assessment stamped under an older catalogue version -
+        # this function must never silently overwrite it.
+        assessment.catalogue_version = "some-older-version"
+        assessment.save(update_fields=["catalogue_version"])
+
+        recorded = record_structured_baseline_answer(
+            org_a, "patching", "PATCHING_AUTOMATIC"
+        )
+
+        assert recorded.assessment.pk == assessment.pk
+        assert BaselineAssessment.objects.filter(organisation=org_a).count() == 1
+        recorded.assessment.refresh_from_db()
+        assert recorded.assessment.catalogue_version == "some-older-version"
+
+    def test_creates_the_correct_derived_baseline_answer(self, org_a):
+        recorded = record_structured_baseline_answer(
+            org_a, "backups", "BACKUPS_RESTORE_UNTESTED"
+        )
+
+        assert recorded.answer.question_key == "backups"
+        assert recorded.answer.answer == ANSWER_PARTIAL
+        answer = BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert answer.answer == ANSWER_PARTIAL
+
+    def test_creates_exactly_one_answer_selection_detail_row(self, org_a):
+        recorded = record_structured_baseline_answer(
+            org_a, "backups", "BACKUPS_RESTORE_UNTESTED"
+        )
+
+        detail = AnswerSelectionDetail.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert detail.pk == recorded.selection_detail.pk
+        assert detail.option_code == "BACKUPS_RESTORE_UNTESTED"
+        assert detail.methodology_version == FOUNDATIONS_QUESTION_METHODOLOGY_VERSION
+
+    def test_reanswering_the_same_control_updates_rather_than_duplicates(self, org_a):
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_RESTORE_UNTESTED")
+        first_answer_pk = BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        ).pk
+        first_detail_pk = AnswerSelectionDetail.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        ).pk
+
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_TESTED")
+
+        answers = BaselineAnswer.objects.filter(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        details = AnswerSelectionDetail.objects.filter(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert answers.count() == 1
+        assert details.count() == 1
+        assert answers.get().pk == first_answer_pk
+        assert answers.get().answer == ANSWER_YES
+        assert details.get().pk == first_detail_pk
+        assert details.get().option_code == "BACKUPS_TESTED"
+
+    def test_two_option_codes_sharing_a_canonical_answer_are_still_distinguishable(self, org_a):
+        """
+        BACKUPS_RESTORE_UNTESTED and BACKUPS_COVERAGE_PARTIAL both derive
+        the same canonical PARTIAL BaselineAnswer, but calling this
+        function with each in turn must leave two provably different
+        AnswerSelectionDetail.option_code values behind (sequentially, on
+        the same control - re-answering the same question).
+        """
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_RESTORE_UNTESTED")
+        first_detail = AnswerSelectionDetail.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert first_detail.option_code == "BACKUPS_RESTORE_UNTESTED"
+        first_answer = BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert first_answer.answer == ANSWER_PARTIAL
+
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_COVERAGE_PARTIAL")
+        second_detail = AnswerSelectionDetail.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert second_detail.option_code == "BACKUPS_COVERAGE_PARTIAL"
+        second_answer = BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert second_answer.answer == ANSWER_PARTIAL
+        # Same canonical BaselineAnswer.answer both times...
+        assert first_answer.answer == second_answer.answer
+        # ...but two provably different option_code values were recorded.
+        assert first_detail.option_code != second_detail.option_code
+
+    def test_not_applicable_option_derives_not_applicable_answer(self, org_a):
+        recorded = record_structured_baseline_answer(
+            org_a, "remote_access_control", "REMOTE_ACCESS_NOT_APPLICABLE"
+        )
+        assert recorded.answer.answer == ANSWER_NOT_APPLICABLE
+
+    def test_invalid_control_key_raises_and_writes_nothing(self, org_a):
+        with pytest.raises(ValueError):
+            record_structured_baseline_answer(org_a, "not_a_real_control", "ANYTHING")
+
+        assert not BaselineAssessment.objects.filter(organisation=org_a).exists()
+        assert not BaselineAnswer.objects.filter(assessment__organisation=org_a).exists()
+        assert not AnswerSelectionDetail.objects.filter(assessment__organisation=org_a).exists()
+
+    def test_invalid_option_code_raises_and_writes_nothing(self, org_a):
+        with pytest.raises(UnknownOptionCodeError):
+            record_structured_baseline_answer(
+                org_a, "mfa_user_accounts", "NOT_A_REAL_OPTION_CODE"
+            )
+
+        assert not BaselineAssessment.objects.filter(organisation=org_a).exists()
+        assert not BaselineAnswer.objects.filter(assessment__organisation=org_a).exists()
+        assert not AnswerSelectionDetail.objects.filter(assessment__organisation=org_a).exists()
+
+    def test_invalid_option_code_on_an_existing_assessment_leaves_prior_state_untouched(
+        self, org_a
+    ):
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_TESTED")
+
+        with pytest.raises(UnknownOptionCodeError):
+            record_structured_baseline_answer(
+                org_a, "patching", "NOT_A_REAL_OPTION_CODE"
+            )
+
+        # The earlier, valid "backups" answer is untouched; nothing for
+        # "patching" was written.
+        assert BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        ).answer == ANSWER_YES
+        assert not BaselineAnswer.objects.filter(
+            assessment__organisation=org_a, question_key="patching"
+        ).exists()
+        assert not AnswerSelectionDetail.objects.filter(
+            assessment__organisation=org_a, question_key="patching"
+        ).exists()
+
+    def test_does_not_touch_an_existing_note_on_the_baseline_answer(self, org_a):
+        """
+        The structured Stage 4 journey has no free-text note concept -
+        this function must never clear/overwrite an existing note left by
+        the general baseline page's own save path.
+        """
+        save_baseline_answers(
+            org_a,
+            {answer_field_name("backups"): "no", note_field_name("backups"): "Left by the general page."},
+            question_keys=["backups"],
+        )
+
+        record_structured_baseline_answer(org_a, "backups", "BACKUPS_TESTED")
+
+        answer = BaselineAnswer.objects.get(
+            assessment__organisation=org_a, question_key="backups"
+        )
+        assert answer.answer == ANSWER_YES
+        assert answer.note == "Left by the general page."
 
