@@ -54,8 +54,8 @@ class TestKeyAssetTenantIsolation:
         checks: org B must not be able to write a BaselineAnswer onto org
         A's baseline via org A's asset-detail URL.
         """
-        from security_baseline.forms import answer_field_name, note_field_name
-        from security_baseline.models import BaselineAnswer
+        from security_baseline.forms import option_field_name
+        from security_baseline.models import BaselineAssessment
 
         asset = KeyAsset.objects.create(
             organisation=org_a, name="Org A endpoint", category="endpoint", criticality="low"
@@ -63,18 +63,13 @@ class TestKeyAssetTenantIsolation:
         response = client_b.post(
             reverse("key_assets:detail", args=[org_a.id, asset.id]),
             {
-                answer_field_name("device_encryption"): "no",
-                note_field_name("device_encryption"): "Hijacked by user_b",
-                answer_field_name("endpoint_protection"): "unknown",
-                note_field_name("endpoint_protection"): "",
-                answer_field_name("patching"): "unknown",
-                note_field_name("patching"): "",
+                option_field_name("device_encryption"): "DEVICE_ENCRYPTION_NONE",
+                option_field_name("endpoint_protection"): "ENDPOINT_PROTECTION_NOT_SURE",
+                option_field_name("patching"): "PATCHING_NOT_SURE",
             },
         )
         assert response.status_code == 404
-        assert not BaselineAnswer.objects.filter(
-            question_key="device_encryption", note="Hijacked by user_b"
-        ).exists()
+        assert not BaselineAssessment.objects.filter(organisation=org_a).exists()
 
     # --- cross-tenant write negative ---------------------------------------
     def test_member_cannot_edit_other_organisations_asset(self, client_b, org_a):

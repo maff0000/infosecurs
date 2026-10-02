@@ -18,6 +18,9 @@
   .asset-detail__meta { color: var(--color-text-muted); margin: 0 0 var(--space-3) 0; }
   .risk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
   .risk-list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .asset-protection-options { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 0 var(--space-2) 0; }
+  .asset-protection-options label { display: flex; align-items: flex-start; gap: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
+  .asset-protection-explainer { background: var(--color-primary-tint); border-radius: var(--radius); padding: var(--space-2) var(--space-3); margin: 0 0 var(--space-2) 0; }
 </style>
 
 <div class="page-header">
@@ -66,31 +69,40 @@
             {% csrf_token %}
             {% for question in questions %}
                 <fieldset class="form-section">
-                    <legend>{{ question.item.area }}</legend>
+                    <legend>{{ question.item.title }}</legend>
 
-                    <div class="field {% if question.answer_field.errors %}field--error{% endif %}">
-                        <label for="{{ question.answer_field.id_for_label }}">{{ question.item.question }}</label>
-                        {% if question.item.help_text %}
-                            <p class="field__help">{{ question.item.help_text }}</p>
-                        {% endif %}
-                        {{ question.answer_field }}
-                        {% for error in question.answer_field.errors %}
+                    <div class="field {% if question.option_field.errors %}field--error{% endif %}">
+                        <p>{{ question.item.question }}</p>
+                        <p class="field__help">{{ question.item.why_it_matters }}</p>
+                        <div class="asset-protection-options">
+                            {% for radio in question.option_field %}
+                                <label>{{ radio.tag }} <span>{{ radio.choice_label }}</span></label>
+                            {% endfor %}
+                        </div>
+                        {% for error in question.option_field.errors %}
                             <p class="field__error" role="alert">{{ error }}</p>
                         {% endfor %}
                     </div>
 
-                    <div class="field {% if question.note_field.errors %}field--error{% endif %}">
-                        <label for="{{ question.note_field.id_for_label }}">Note (optional)</label>
-                        <p class="field__help">Anything that explains the answer. This is your note, not an instruction to any automated system.</p>
-                        {{ question.note_field }}
-                        {% for error in question.note_field.errors %}
-                            <p class="field__error" role="alert">{{ error }}</p>
-                        {% endfor %}
-                    </div>
+                    {% if question.confirm_field %}
+                        <div class="field">
+                            <label>
+                                {{ question.confirm_field }}
+                                {{ question.confirm_field.label }}
+                            </label>
+                            <p class="field__help">
+                                Only needed if you select "Not applicable" above - otherwise this checkbox is ignored.
+                            </p>
+                        </div>
+                    {% endif %}
+
+                    {% if question.explainer %}
+                        <p class="asset-protection-explainer">{{ question.explainer }}</p>
+                    {% endif %}
                 </fieldset>
             {% endfor %}
 
-            <p class="page-header__subtitle">Catalogue version: {{ catalogue_version }}</p>
+            <p class="page-header__subtitle">Structured question methodology: {{ methodology_version }}</p>
 
             <div class="form-actions form-actions--sticky">
                 <a class="button button--secondary" href="{% url 'security_baseline:baseline' organisation.id %}">Open full security baseline</a>

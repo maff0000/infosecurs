@@ -4,33 +4,26 @@ Asset-specific protection/exposure assessment (PID.md M002 §0.5).
 The most important test in this file is
 TestSingleCanonicalAnswer.test_editing_from_either_page_is_the_identical_underlying_row -
 the dispatch's explicit "non-negotiable correctness requirement": proving
-the asset-detail page and the general Security Baseline page read/write
+the asset-detail page and the new M008C guided Stage 4 journey read/write
 the *same* BaselineAnswer row (by primary key and updated_at), not two
 pages that merely happen to show the same value.
+
+M008C-WI2b: this page was converted from the old free-text-note
+`BaselineAssessmentForm` to the same `StructuredAnswerForm` the guided
+Stage 4 journey uses (security_baseline.forms) - field names changed
+from `answer__<key>`/`note__<key>` to `option__<key>` (+ `confirm__<key>`
+for joiner_mover_leaver only).
 """
 import pytest
 from django.urls import reverse
 
 from key_assets.models import KeyAsset
-from security_baseline.catalogue import CATALOGUE
-from security_baseline.forms import answer_field_name, note_field_name
+from security_baseline.forms import option_field_name
 from security_baseline.models import BaselineAnswer, BaselineAssessment
 
 
-def _all_unknown_baseline_post():
-    """
-    A minimal valid POST to the *general* (full-catalogue) baseline page:
-    every question explicitly answered 'unknown'. Deliberately duplicated
-    from security_baseline/tests/test_http_ui.py's identical helper rather
-    than imported across the app-test boundary - matching this dispatch's
-    existing convention (key_assets/tests/conftest.py duplicates
-    organisations' fixtures for the same reason).
-    """
-    data = {}
-    for item in CATALOGUE:
-        data[answer_field_name(item["key"])] = "unknown"
-        data[note_field_name(item["key"])] = ""
-    return data
+def _question_url(organisation_id, key):
+    return reverse("security_baseline:foundations_question", args=[organisation_id, key])
 
 
 @pytest.fixture
@@ -56,11 +49,11 @@ class TestAssetDetailViewRendersRelevantQuestions:
         content = response.content.decode()
 
         for expected_key in ("device_encryption", "endpoint_protection", "patching"):
-            assert f'name="{answer_field_name(expected_key)}"' in content
+            assert f'name="{option_field_name(expected_key)}"' in content
 
         # mfa_user_accounts is an identity/productivity-category question,
         # never relevant to an endpoint asset - must not be rendered here.
-        assert f'name="{answer_field_name("mfa_user_accounts")}"' not in content
+        assert f'name="{option_field_name("mfa_user_accounts")}"' not in content
 
     def test_asset_with_no_relevant_questions_shows_empty_state_not_an_error(
         self, client_a, org_a
@@ -109,17 +102,14 @@ class TestSingleCanonicalAnswer:
         self, client_a, org_a, endpoint_asset_a
     ):
         detail_url = reverse("key_assets:detail", args=[org_a.id, endpoint_asset_a.id])
-        baseline_url = reverse("security_baseline:baseline", args=[org_a.id])
+        baseline_question_url = _question_url(org_a.id, "device_encryption")
 
         # --- Step 1: answer from the ASSET-DETAIL page -----------------
-        asset_page_note = "Set from the asset-detail page - proof-note-A."
-        post_data = {}
-        for key in ("device_encryption", "endpoint_protection", "patching"):
-            post_data[answer_field_name(key)] = "unknown"
-            post_data[note_field_name(key)] = ""
-        post_data[answer_field_name("device_encryption")] = "no"
-        post_data[note_field_name("device_encryption")] = asset_page_note
-
+        post_data = {
+            option_field_name("device_encryption"): "DEVICE_ENCRYPTION_NONE",
+            option_field_name("endpoint_protection"): "ENDPOINT_PROTECTION_NOT_SURE",
+            option_field_name("patching"): "PATCHING_NOT_SURE",
+        }
         response = client_a.post(detail_url, post_data)
         assert response.status_code == 302
 
@@ -130,7 +120,6 @@ class TestSingleCanonicalAnswer:
         first_pk = answer.pk
         first_updated_at = answer.updated_at
         assert answer.answer == "no"
-        assert answer.note == asset_page_note
         # Exactly one row for this question - no asset-local duplicate.
         assert (
             BaselineAnswer.objects.filter(
@@ -139,17 +128,15 @@ class TestSingleCanonicalAnswer:
             == 1
         )
 
-        # --- Step 2: the GENERAL baseline page shows that exact answer --
-        response = client_a.get(baseline_url)
-        content = response.content.decode()
-        assert asset_page_note in content
+        # --- Step 2: the GUIDED JOURNEY shows that exact answer ---------
+        response = client_a.get(baseline_question_url)
+        assert response.context["option_field"].value() == "DEVICE_ENCRYPTION_NONE"
 
-        # --- Step 3: answer from the GENERAL baseline page --------------
-        baseline_page_note = "Updated from the general baseline page - proof-note-B."
-        full_post = _all_unknown_baseline_post()
-        full_post[answer_field_name("device_encryption")] = "yes"
-        full_post[note_field_name("device_encryption")] = baseline_page_note
-        response = client_a.post(baseline_url, full_post)
+        # --- Step 3: answer from the GUIDED JOURNEY ----------------------
+        response = client_a.post(
+            baseline_question_url,
+            {option_field_name("device_encryption"): "DEVICE_ENCRYPTION_ALL"},
+        )
         assert response.status_code == 302
 
         answer.refresh_from_db()
@@ -161,7 +148,6 @@ class TestSingleCanonicalAnswer:
         assert second_pk == first_pk
         assert second_updated_at > first_updated_at
         assert answer.answer == "yes"
-        assert answer.note == baseline_page_note
         assert (
             BaselineAnswer.objects.filter(
                 assessment=assessment, question_key="device_encryption"
@@ -171,9 +157,9 @@ class TestSingleCanonicalAnswer:
 
         # --- Step 4: the ASSET-DETAIL page shows that updated answer ----
         response = client_a.get(detail_url)
-        content = response.content.decode()
-        assert baseline_page_note in content
-        assert asset_page_note not in content
+        assert response.context["form"][option_field_name("device_encryption")].value() == (
+            "DEVICE_ENCRYPTION_ALL"
+        )
 
 
 @pytest.mark.django_db
