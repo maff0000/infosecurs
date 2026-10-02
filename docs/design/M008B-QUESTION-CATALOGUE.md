@@ -21,23 +21,45 @@ reinterpretation.
    but mean materially different things, each keeps its own
    `option_code` and its own downstream wording — applied to all 12
    controls, not just the backups example Central Architecture named.
+6. **[WI-ERRATA]** `CATALOGUE_VERSION` bumps to `"2026-10-baseline-v2"`
+   — corrected from this revision's own earlier "stays unchanged"
+   claim, since question wording has materially changed (§0).
 
 ## 0. New versioning
 
-- `security_baseline.catalogue.CATALOGUE_VERSION` stays exactly
-  `"2026-09-baseline-v1"` — **unchanged**, per Central Architecture's
-  explicit "preserve stable control keys and existing M007 security
-  weights." The 12 control keys and their weights are not touched.
-- A new, separate identifier versions the structured-question layer
-  itself: `FOUNDATIONS_QUESTION_METHODOLOGY_VERSION =
-  "2026-10-structured-v1"`. This is what changes if question wording or
-  option sets change in future, independent of the underlying baseline
-  catalogue version.
+**[WI-ERRATA correction]** This section originally stated
+`CATALOGUE_VERSION` stays unchanged. Central Architecture corrected
+this: the existing source contract requires a version bump whenever
+question *wording* changes (which it has, extensively, in this
+revision), even though control keys and weights do not change. The
+corrected versioning is:
+
+- `security_baseline.catalogue.CATALOGUE_VERSION` bumps to
+  `"2026-10-baseline-v2"` — the **12 control keys, their weights, and
+  every `risk_register.methodology` scenario ID remain exactly
+  unchanged**; only the version identifier itself changes, reflecting
+  that the question wording/catalogue presented to the customer has
+  materially changed since `"2026-09-baseline-v1"`.
+- A second, separate identifier versions the new structured-question
+  layer itself (option codes, provenance shape): `FOUNDATIONS_QUESTION_
+  METHODOLOGY_VERSION = "2026-10-structured-v1"` — unchanged from
+  Revision 2's own proposal.
+- The two identifiers answer two different questions: `CATALOGUE_
+  VERSION` answers "which version of the 12-control question/weighting
+  methodology was this answered against" (existing M002/M007 contract);
+  `FOUNDATIONS_QUESTION_METHODOLOGY_VERSION` answers "which version of
+  the *structured option-code* scheme produced this specific stored
+  answer." Both are recorded per answer (below) — neither supersedes
+  the other.
 - Persisted provenance per answer (the `AnswerSelectionDetail`-shaped
   model from §B4, Revision 1 — unchanged in shape, now with explicit
-  fields): `control_key`, `option_code`, `derived_answer` (the canonical
-  five-state value), `methodology_version` (the new identifier above).
-  Display wording is never identity — only `option_code` is.
+  fields, **corrected to carry both version identifiers**):
+  `control_key`, `option_code`, `derived_answer` (the canonical
+  five-state value), `catalogue_version` (the `security_baseline.
+  catalogue.CATALOGUE_VERSION` this answer was given against),
+  `methodology_version` (the `FOUNDATIONS_QUESTION_METHODOLOGY_VERSION`
+  that produced this `option_code`). Display wording is never identity
+  — only `option_code` is.
 - **Two new dedicated structured facts** (new `OrganisationProfile` or
   sibling fields — additive, not replacing anything):
   - `has_remote_or_offsite_access` (tri-state: `yes` / `no` /

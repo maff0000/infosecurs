@@ -4,17 +4,21 @@
 explicit instruction not to leave Stage 1–3 wording/options to Engineer
 implementation. Every question below maps to a real, already-existing
 field (or one of the two new dedicated facts from
-`M008B-QUESTION-CATALOGUE-v2.md` §0) — nothing here invents a new
+`M008B-QUESTION-CATALOGUE.md` §0) — nothing here invents a new
 canonical data model beyond those two additive fields.
 
 Technology/data questions that Revision 1 placed in Stage 1 are moved to
 Stage 3, per Central Architecture's explicit instruction.
 
+**[WI-ERRATA correction]** Stage 1 originally omitted two existing
+`OrganisationProfile` facts that belong there. Both are added below as
+1.4 and 1.5 — no new canonical data model, both fields already exist.
+
 ---
 
 ## Stage 1 — Your Business
 
-**Business identity/context only.** Three questions.
+**Business identity/context only.** Five questions.
 
 ### 1.1 Legal / trading name
 - **Question:** "What is your business's legal or trading name?"
@@ -50,6 +54,35 @@ Stage 3, per Central Architecture's explicit instruction.
   is **never** sufficient authority for any NOT_APPLICABLE gate on its
   own (see control 7's own dedicated gating fact instead).
 
+### 1.4 Why are you working on security now? — **[WI-ERRATA, added]**
+- **Question:** "Why are you working on security now?"
+- **Input:** single choice from a finite list — existing
+  `OrganisationProfile.commercial_security_driver` field (already a
+  `CharField`; this choice list is the field's corrected, bounded value
+  set, per the free-text replacement register's Row 2 correction — no
+  new column).
+- **Options (`option_code` → label):**
+  | `option_code` | Label |
+  |---|---|
+  | `DRIVER_CUSTOMER_SUPPLIER` | A customer or supplier has asked us to |
+  | `DRIVER_SENSITIVE_DATA` | We handle sensitive or confidential information |
+  | `DRIVER_CERTIFICATION_CONTRACT` | We need it for a certification or contract |
+  | `DRIVER_GENERAL_RISK` | We want to reduce cyber risk generally |
+  | `DRIVER_NOT_SURE` | Not sure yet |
+- Single choice. **No text field** — the free-text replacement
+  register's Row 2 correction (removing the open "why security matters"
+  narrative) is implemented exactly by this question.
+
+### 1.5 Do customers or suppliers ask you to complete security questionnaires? — **[WI-ERRATA, added]**
+- **Question:** "Do customers or suppliers ever ask you to complete
+  security questionnaires?"
+- **Input:** single choice — existing `OrganisationProfile.
+  receives_security_questionnaires` field, the existing tri-state
+  `TRI_STATE_CHOICES` values (`UNKNOWN` → "Not confirmed", `YES` →
+  "Yes", `NO` → "No"), presented to the customer as Yes / No / Not sure.
+  No new truth store — this is the field's existing value set, asked at
+  the right point in the guided journey rather than left stranded.
+
 ---
 
 ## Stage 2 — Your People & Workplaces
@@ -84,7 +117,7 @@ roles.** Five questions/steps.
 - **Input:** number — **new field**, `OrganisationProfile.
   people_with_system_access_count` (additive migration). Distinct from
   `staff_count` on purpose: this is the one and only authority for
-  `joiner_mover_leaver`'s NOT_APPLICABLE gate (§M008B-v2 control 7).
+  `joiner_mover_leaver`'s NOT_APPLICABLE gate (`M008B-QUESTION-CATALOGUE.md` control 7).
 - If the answer is exactly `1`, a required, explicit confirmation
   choice is shown before NOT_APPLICABLE becomes selectable on the
   `joiner_mover_leaver` question in Stage 4: "Confirm: no other staff,
@@ -147,7 +180,7 @@ Stage 1 per Central Architecture's correction.
   endpoint_management` (`ENDPOINT_MANAGEMENT_CHOICES`, unchanged):
   Company-managed devices / Bring your own device (BYOD) / Both / Not
   confirmed. (Drives the `endpoint_protection` option-availability
-  conditioning in Stage 4, M008B-v2 control 3.)
+  conditioning in Stage 4, `M008B-QUESTION-CATALOGUE.md` control 3.)
 
 ### 3.4 Own software/service
 - **Question:** "Does your business develop or host its own software
