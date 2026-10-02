@@ -28,6 +28,7 @@ from organisations.forms import (
     OrganisationProfileStage2SupplementaryForm,
     OrganisationProfileStage3Form,
 )
+from organisations.guided_journey import current_guided_stage
 from organisations.models import (
     UNKNOWN,
     AuditEvent,
@@ -93,6 +94,25 @@ _NEEDS_ATTENTION_PHRASES: dict[str, tuple[str, str]] = {
     ),
 }
 
+# M008C/M008-WI5 (docs/design/M008C-UX-FLOW-DESIGN.md §5): replaces the
+# M007-WI5 "click here"-only link wording (a known limitation that WI's
+# own dispatch flagged, never fixed at the time) with a short,
+# destination-specific phrase per signal - the design doc's own example
+# ("Staff account MFA isn't enabled yet -> [Go to Security]"). Same shape
+# as `_NEEDS_ATTENTION_PHRASES` above (one entry per `NeedsAttentionSignal.
+# key`), added here rather than to `entitlements.metrics` - that module's
+# own docstring is explicit it builds no HTML or wording at all (PID
+# §14.1), so a link-phrase mapping has no home there. The structural rule
+# this WI must NOT change stays exactly as before (enforced in
+# `detail.html`): the whole Needs Attention line is never itself a link,
+# only this phrase is the `<a>`.
+_NEEDS_ATTENTION_LINK_PHRASES: dict[str, str] = {
+    "important_controls_not_fully_implemented": "Go to Security",
+    "foundations_items_incomplete": "Go to Foundations",
+    "controls_marked_not_sure": "Go to Security Baseline",
+    "policy_review_overdue": "Go to Policy",
+}
+
 
 def _needs_attention_lines(needs_attention, organisation_id) -> list[dict]:
     """
@@ -101,9 +121,12 @@ def _needs_attention_lines(needs_attention, organisation_id) -> list[dict]:
     itself always returns all four, count=0 where nothing applies, so this
     is the one place that filters, matching that module's own docstring).
     Iterated in `entitlements.metrics.NeedsAttention`'s own field order,
-    which is PID §14's own listed order. No HTML is built here - `text` is
-    plain wording, `url` a plain string; the template alone decides how
-    `click here` is marked up (PID §14.1's binding link-behaviour rule).
+    which is PID §14's own listed order. No HTML is built here - `text`/
+    `link_text` are plain wording, `url` a plain string; the template
+    alone decides how `link_text` is marked up (PID §14.1's binding
+    link-behaviour rule, unchanged by M008-WI5 - only the WORDS inside the
+    one permitted `<a>` changed, from the literal "click here" to
+    `link_text`'s own destination-specific phrase).
     """
     lines = []
     for signal in (
@@ -120,6 +143,7 @@ def _needs_attention_lines(needs_attention, organisation_id) -> list[dict]:
             {
                 "text": f"{signal.count} {phrase}",
                 "url": _product_area_url(signal.destination_product_area_code, organisation_id),
+                "link_text": _NEEDS_ATTENTION_LINK_PHRASES[signal.key],
             }
         )
     return lines
@@ -252,6 +276,13 @@ def organisation_detail(request, organisation_id):
     posture = get_foundational_security_posture(organisation)
     completion = get_security_foundations_completion(organisation)
     needs_attention = get_needs_attention(organisation)
+    # M008C/M008-WI5 (docs/design/M008C-UX-FLOW-DESIGN.md §5): the single
+    # "Continue Security Foundations" primary CTA, resolved via
+    # `organisations.guided_journey.current_guided_stage` - the ONE place
+    # "which stage is next" is decided. Non-paused branch only, exactly
+    # like every other call in this function body - the paused branch
+    # above returns before reaching here and gets zero new calls.
+    current_stage = current_guided_stage(organisation)
 
     return render(
         request,
@@ -266,6 +297,7 @@ def organisation_detail(request, organisation_id):
                 "organisations:foundations", kwargs={"organisation_id": organisation.id}
             ),
             "needs_attention_lines": _needs_attention_lines(needs_attention, organisation.id),
+            "current_stage": current_stage,
         },
     )
 

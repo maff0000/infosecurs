@@ -256,8 +256,8 @@ class TestNeedsAttention:
 
         content = client_a.get(reverse("organisations:detail", args=[org_a.id])).content.decode()
         assert "1 policy review is overdue" in content
-        assert "— " in content  # the em dash separator before "click here"
-        assert ">click here<" in content
+        assert "— " in content  # the em dash separator before the link phrase
+        assert ">Go to Policy<" in content
 
     def test_important_controls_line_has_the_correct_count_and_wording(self, client_a, user_a, org_a):
         set_session_tier(client_a, user_a, TIER_FOUNDATION)
@@ -310,12 +310,19 @@ class TestNeedsAttention:
         lines = _parse_needs_attention_lines(content)
 
         assert len(lines) == 4  # every signal is non-zero in this scenario
+        expected_link_texts = {"Go to Security", "Go to Foundations", "Go to Security Baseline", "Go to Policy"}
+        seen_link_texts = set()
         for line in lines:
             assert line["inside_anchor"] is False, "a Needs Attention line must never be nested inside an <a>"
             assert len(line["anchors"]) == 1, "exactly one <a> per line"
             href, text = line["anchors"][0]
-            assert text == "click here"
+            assert text != "click here", "M008-WI5 replaces the generic 'click here' wording"
+            assert text in expected_link_texts
+            seen_link_texts.add(text)
             assert href  # a real, non-empty destination
+        # Each of the four signals renders its own distinct, non-generic
+        # link phrase - never the same generic phrase for every signal.
+        assert seen_link_texts == expected_link_texts
 
     def test_important_controls_link_points_at_security_state(self, client_a, user_a, org_a):
         set_session_tier(client_a, user_a, TIER_FOUNDATION)
