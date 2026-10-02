@@ -32,10 +32,12 @@
             through its lifecycle.
         </p>
     {% endif %}
-    {# M008C-WI3 (register row 10): `description` is no longer a form
-       field - shown read-only here, never a Textarea. For a brand-new,
-       no-risk action there is nothing to derive it from yet, so nothing is
-       shown at all (it will save as blank). #}
+    {% comment %}
+    M008C-WI3 (register row 10): `description` is no longer a form
+    field - shown read-only here, never a Textarea. For a brand-new,
+    no-risk action there is nothing to derive it from yet, so nothing is
+    shown at all (it will save as blank).
+    {% endcomment %}
     {% if risk %}
         <div class="field">
             <label>Description</label>

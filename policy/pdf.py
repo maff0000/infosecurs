@@ -54,28 +54,28 @@ def _build_flowables(version, organisation):
         )
     flowables.append(Spacer(1, 8 * mm))
 
-    # I1 fix (M006-AUDIT-0004): `version.review_warnings` is already
-    # persisted on this exact immutable version row (H3 correction,
-    # M006-AUDIT-0003) - reading it here is NOT a live-state lookup, it is
-    # the same "every fact printed comes from that exact immutable version
-    # row" discipline this module's own docstring already commits to for
-    # `title`/`sections`/`approval_mode`/etc. Rendered BEFORE the main
-    # policy sections loop (Central Architecture's own stated preference),
-    # entirely omitted (no heading, nothing) when the list is empty so an
-    # approved version with a clean baseline never shows an empty/awkward
-    # section. Every entry is rendered - no truncation for page count
-    # (Central Architecture: "report, don't silently delete disclosure").
-    if version.review_warnings:
-        flowables.append(
-            Paragraph("Review warnings / items requiring attention", styles["Heading2"])
-        )
-        for warning in version.review_warnings:
-            subject = warning.get("subject", "")
-            detail = warning.get("detail", "")
-            flowables.append(Paragraph(escape(subject), styles["Heading3"]))
-            flowables.append(Paragraph(escape(detail).replace("\n", "<br/>"), styles["BodyText"]))
-            flowables.append(Spacer(1, 2 * mm))
-        flowables.append(Spacer(1, 6 * mm))
+    # M008-WI6 Finding B remediation (dell-debian Auditor, 2026-10-02):
+    # `version.review_warnings` is DELIBERATELY NEVER rendered into this
+    # PDF. The M006-AUDIT-0004 "I1 fix" that used to render it here (a
+    # "Review warnings / items requiring attention" section, naming
+    # current-state/gap disclosure for every NO/PARTIAL/UNKNOWN control)
+    # directly violated the master PID's own binding rule
+    # (docs/pids/M008-FOUNDATIONS-EXPERIENCE-REDESIGN.md §3.6: "Current
+    # state, proposed commitment and gap must remain separate, even in
+    # polished language or a PDF") - it carried the exact same forbidden
+    # content class into the exact same PDF that M008D-WI4's own
+    # `implementation_status_rows` mechanism was carefully built to never
+    # reach (see `policy.implementation_status`'s own "never persisted,
+    # never rendered into the PDF" discipline). `review_warnings` remains
+    # fully visible IN-PRODUCT ONLY (`policy/templates/policy/
+    # version_detail.html` and `policy/templates/policy/approve.html`,
+    # unchanged) - this distributable PDF now contains ONLY the fixed
+    # normative clause sections, matching the Policy Truth Matrix's Table 1
+    # exactly. See `policy/tests/test_pdf_rendering.py`'s
+    # `TestReviewWarningsNeverAppearInPdf` for the regression proof (the
+    # Auditor's own technique: render a real PDF with non-empty
+    # `review_warnings`, pypdf-extract its text, assert none of that text
+    # appears anywhere in it).
 
     for entry in version.sections:
         flowables.append(Paragraph(escape(section_label(entry.get("section_key", ""))), styles["Heading2"]))

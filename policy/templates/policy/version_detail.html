@@ -25,7 +25,6 @@
     </div>
     <div class="form-actions">
         {% if version.status == "draft" %}
-            <a class="button button--secondary" href="{% url 'policy:version_edit' organisation.id version.id %}">Edit draft</a>
             {% if not readiness.is_ready %}
                 <p class="field__help">This policy is not yet ready to approve.</p>
             {% elif can_approve_directly %}
@@ -39,7 +38,7 @@
             <a class="button button--secondary" href="{% url 'policy:version_download' organisation.id version.id %}">Download PDF</a>
             <form method="post" action="{% url 'policy:version_new_draft' organisation.id version.id %}">
                 {% csrf_token %}
-                <button type="submit" class="button button--primary">Create new draft to edit</button>
+                <button type="submit" class="button button--primary">Generate new draft</button>
             </form>
         {% elif version.status == "superseded" %}
             <a class="button button--secondary" href="{% url 'policy:version_download' organisation.id version.id %}">Download PDF</a>
@@ -73,10 +72,12 @@
     </section>
 {% endif %}
 
-{# M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §3-4): a distinct,
-   clearly separate section, never merged into the policy preview's own
-   body text below - and never part of the downloadable PDF (policy.pdf
-   never receives implementation_status_rows at all). #}
+{% comment %}
+M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §3-4): a distinct,
+clearly separate section, never merged into the policy preview's own
+body text below - and never part of the downloadable PDF (policy.pdf
+never receives implementation_status_rows at all).
+{% endcomment %}
 <section class="form-section">
     <h2 class="form-section__heading">Implementation status</h2>
     <p class="field__help">

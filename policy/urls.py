@@ -13,7 +13,13 @@ urlpatterns = [
         name="generate_deterministic",
     ),
     path("versions/<uuid:version_id>/", views.policy_version_detail, name="version_detail"),
-    path("versions/<uuid:version_id>/edit/", views.policy_edit, name="version_edit"),
+    # M008-WI6 Finding A: the free-text section-editor route
+    # (`policy:version_edit` -> `policy.views.policy_edit` ->
+    # `PolicyVersionEditForm`) is REMOVED here, not merely unlinked - the
+    # URL pattern no longer exists at all, so it 404s for any request,
+    # `{% url %}` call, or `reverse()` lookup. See `policy/forms.py`'s
+    # module docstring and `policy/tests/test_edit.py` for the full
+    # reasoning and regression proof.
     path(
         "versions/<uuid:version_id>/approve/direct/",
         views.policy_approve_direct,

@@ -6,15 +6,26 @@ plus the immutable-history regression and the AI-generated-draft
 regression the correction's own design tension implies (see
 `policy.services.compute_current_review_warnings`'s docstring).
 
-Exercises the REAL service/view functions throughout - `create_new_draft_
-from_approved`, `policy.views.policy_edit` (via a real HTTP POST),
-`approve_policy_directly`, `security_baseline.services.save_baseline_
-answers` (the one canonical write path for a baseline answer, per that
-module's own docstring) - never a raw ORM bypass of product logic, and
-(Case 4) `evidence.link_services.link_evidence_to_control` for a genuine
-evidence-conflict scenario, mirroring `security_state/tests/
-test_services.py::TestEvidenceConflict`'s own real-evidence-link
-discipline exactly, rather than re-deriving/faking assurance_label.
+Exercises the REAL service functions throughout - `create_new_draft_
+from_approved`, `approve_policy_directly`, `security_baseline.services.
+save_baseline_answers` (the one canonical write path for a baseline
+answer, per that module's own docstring) - never a raw ORM bypass of
+product logic, and (Case 4) `evidence.link_services.
+link_evidence_to_control` for a genuine evidence-conflict scenario,
+mirroring `security_state/tests/test_services.py::TestEvidenceConflict`'s
+own real-evidence-link discipline exactly, rather than re-deriving/faking
+assurance_label.
+
+M008-WI6 Finding A (dell-debian Auditor, 2026-10-02): Case 1 below used to
+perform its "edit v2's prose" step via a real HTTP POST to the
+now-retired `policy:version_edit` free-text editor. That route no longer
+exists (see `policy/tests/test_edit.py`) - there is no remaining
+customer-facing way to hand-edit a draft's prose at all. The invariant
+this case proves (`review_warnings` is derived from canonical security
+state, never from section content/prose) is unaffected by Finding A and
+must still hold regardless of how a draft's sections came to differ from
+when it was created, so that step now mutates `sections` directly at the
+ORM layer instead.
 """
 import datetime
 
@@ -90,15 +101,20 @@ class TestCase1UnchangedGaps:
             w["source"] == REVIEW_WARNING_SOURCE_DETERMINISTIC for w in v2.review_warnings
         )
 
-        # --- edit v2's prose via the real HTTP edit path ---
-        edit_data = {"title": v2.title, "next_review_date": ""}
-        edit_data.update(
-            {f"section__{s['section_key']}": s["content"] + " Edited." for s in v2.sections}
-        )
-        edit_response = client_a.post(
-            reverse("policy:version_edit", args=[org_a.id, v2.id]), data=edit_data
-        )
-        assert edit_response.status_code == 302
+        # --- simulate v2's prose differing from its original generated
+        # content (M008-WI6 Finding A retired the customer-facing
+        # free-text editor that used to perform this step via an HTTP
+        # POST to `policy:version_edit` - there is no remaining
+        # customer-facing way to hand-edit a draft's prose at all, but the
+        # invariant this case proves still must hold regardless of how a
+        # draft's sections came to differ from when it was created, so
+        # this mutates `sections` directly at the ORM layer instead of via
+        # the retired view) ---
+        v2.sections = [
+            {"section_key": s["section_key"], "content": s["content"] + " Edited."}
+            for s in v2.sections
+        ]
+        v2.save(update_fields=["sections", "updated_at"])
         v2.refresh_from_db()
         assert all("Edited." in s["content"] for s in v2.sections)
         # Warnings remain after the edit - prose is never a source of them.

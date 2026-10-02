@@ -9,8 +9,16 @@ opt-out to inventory here; this module's job is to PROVE that default
 escaping actually holds, end-to-end, through the real HTTP form for every
 customer-editable text field PID §11c names: organisation name, a
 governance person's name, a workplace name, evidence title/description,
-remediation text, a policy edit, and a questionnaire question/source
-label/edited answer.
+remediation text, and a questionnaire question/source label/edited
+answer.
+
+`TestPolicyEditXSS` (which used to exercise `policy:version_edit`, the
+free-text section editor) is REMOVED here - M008-WI6 Finding A
+(dell-debian Auditor, 2026-10-02) retired that view/form/URL entirely
+(see `policy/forms.py`'s module docstring and `policy/tests/test_edit.py`)
+because it let unvetted customer prose into the distributed, approved
+policy PDF; there is no longer any free-text policy field for this
+module's XSS-escaping discipline to exercise.
 
 Two hostile payloads are used throughout (PID §11c's own examples):
 
@@ -39,7 +47,6 @@ from django.urls import reverse
 from evidence.models import EvidenceItem
 from governance.models import GovernanceRoleAssignment
 from organisations.models import Organisation
-from policy.models import PolicyDocument, PolicyVersion
 from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
 from questionnaire.tests.conftest import patch_questionnaire_generation_gateways
 from remediation.models import RemediationAction
@@ -237,39 +244,6 @@ class TestRemediationTextXSS:
         )
         action = RemediationAction.objects.get(organisation=org_a)
         assert action.description == ""
-
-
-class TestPolicyEditXSS:
-    def test_edited_title_and_section_content_are_escaped(self, client_a, org_a):
-        document, _ = PolicyDocument.objects.get_or_create(organisation=org_a)
-        version = PolicyVersion.objects.create(
-            document=document,
-            organisation=org_a,
-            version_number=1,
-            status=PolicyVersion.STATUS_DRAFT,
-            title="Org Information Security Policy",
-            sections=[{"section_key": "purpose_and_scope", "content": "Purpose text."}],
-            review_warnings=[],
-        )
-
-        response = client_a.post(
-            reverse("policy:version_edit", args=[org_a.id, version.id]),
-            data={
-                "title": _SCRIPT_PAYLOAD,
-                "next_review_date": "",
-                "section__purpose_and_scope": _ATTR_BREAKOUT_PAYLOAD,
-            },
-            follow=True,
-        )
-        assert response.status_code == 200
-        version.refresh_from_db()
-        assert version.title == _SCRIPT_PAYLOAD
-        assert version.sections[0]["content"] == _ATTR_BREAKOUT_PAYLOAD
-
-        _assert_hostile_text_is_escaped(response.content, plain_html_escaped=_SCRIPT_PAYLOAD_ESCAPED)
-        _assert_hostile_text_is_escaped(
-            response.content, plain_html_escaped=_ATTR_BREAKOUT_PAYLOAD_ESCAPED
-        )
 
 
 class TestQuestionnaireQuestionAndSourceLabelXSS:

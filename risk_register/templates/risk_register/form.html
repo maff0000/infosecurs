@@ -17,10 +17,12 @@
         This risk is still an <strong>AI suggestion</strong>. Edit anything that isn't quite right before
         you confirm it - nothing here is part of your confirmed risk register yet.
     </p>
-    {# M008C-WI3: threat/vulnerability are no longer form fields (register
-       rows 6-7) - read-only display of whatever is already stored on this
-       risk row (the matched scenario's own wording, for a catalogue-
-       originated risk). #}
+    {% comment %}
+    M008C-WI3: threat/vulnerability are no longer form fields (register
+    rows 6-7) - read-only display of whatever is already stored on this
+    risk row (the matched scenario's own wording, for a catalogue-
+    originated risk).
+    {% endcomment %}
     <div class="field">
         <label>Threat</label>
         <p class="field__help">Not editable - this is the matched scenario's own wording.</p>
