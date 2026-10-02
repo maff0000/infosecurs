@@ -21,17 +21,48 @@
         <p>Account management is handled separately.</p>
     </div>
 {% else %}
+    {# M008C/M008-WI5 (docs/design/M008C-UX-FLOW-DESIGN.md §5): the single #}
+    {# "Continue Security Foundations" primary action, ABOVE both metric #}
+    {# cards - answers "what should I do next" before any number. #}
+    {# `current_stage` is resolved by `organisations.guided_journey. #}
+    {# current_guided_stage` - this template only renders it, never #}
+    {# recomputes "which stage is next" itself. `current_stage.is_complete` #}
+    {# is only ever true once all 6 guided stages are done (that #}
+    {# resolver's own Stage 6 terminal-state judgement call) - the CTA #}
+    {# stays visible either way, with different wording, rather than #}
+    {# disappearing (see that module's docstring). #}
+    <div class="guided-cta">
+        {% if current_stage.is_complete %}
+            <a class="guided-cta__link" href="{{ current_stage.url }}">
+                <span class="guided-cta__icon" aria-hidden="true">&#9654;</span>
+                Review your Security Policy
+            </a>
+            <p class="guided-cta__subtitle">All 6 guided Foundations stages are complete</p>
+        {% else %}
+            <a class="guided-cta__link" href="{{ current_stage.url }}">
+                <span class="guided-cta__icon" aria-hidden="true">&#9654;</span>
+                Continue Security Foundations
+            </a>
+            <p class="guided-cta__subtitle">Stage {{ current_stage.number }} of 6 — {{ current_stage.name }}</p>
+        {% endif %}
+    </div>
+
     {# PID §13: exactly two primary metric cards, no third headline score, #}
     {# no chart/gauge/icon - a plain percentage and text (PID §2.3/§13's #}
     {# own "function before form"). Both percentages come straight from #}
     {# entitlements.metrics - nothing here computes or re-derives either #}
-    {# number. #}
+    {# number. Each card's `__copy` carries two sentences: the original #}
+    {# M007 disclaimer/count, plus one added M008C §5 sentence making the #}
+    {# completion-vs-posture distinction explicit in plain language ("a #}
+    {# company can complete the programme with poor protections") - #}
+    {# neither metric's own definition/percentage/label changes. #}
     <div class="metric-card-row">
         <div class="metric-card">
             <h2 class="metric-card__title">Foundational Security Posture</h2>
             <p class="metric-card__value">{{ posture.percentage }}%</p>
             <p class="metric-card__copy">
                 Based on your recorded foundational security state. This is not an independent security assessment.
+                It can stay low even after every Foundations step is complete, if what you've told us shows weak protections.
             </p>
             <a class="button button--secondary" href="{{ security_state_url }}">View security state</a>
         </div>
@@ -40,6 +71,7 @@
             <p class="metric-card__value">{{ completion.percentage }}%</p>
             <p class="metric-card__copy">
                 {{ completion.completed_count }} of {{ completion.total_count }} Foundations items completed.
+                This counts the work you've done, not how protected you are — a fully completed programme can still have poor protections.
             </p>
             <a class="button button--secondary" href="{{ foundations_url }}">Continue Foundations</a>
         </div>
@@ -47,13 +79,14 @@
 
     {% if needs_attention_lines %}
         {# PID §14.1 - Product Authority decision, not negotiable: the #}
-        {# whole line is never itself a link. Only the literal words #}
-        {# "click here" at the end are the <a>. Do not turn this into a #}
-        {# clickable card/row. #}
+        {# whole line is never itself a link. Only the short, destination- #}
+        {# specific phrase at the end (`line.link_text` - M008-WI5 replaces #}
+        {# the old literal "click here" wording) is the <a>. Do not turn #}
+        {# this into a clickable card/row. #}
         <div class="needs-attention">
             <h2>Needs attention</h2>
             {% for line in needs_attention_lines %}
-                <p class="needs-attention__line">{{ line.text }} — <a href="{{ line.url }}">click here</a></p>
+                <p class="needs-attention__line">{{ line.text }} — <a href="{{ line.url }}">{{ line.link_text }}</a></p>
             {% endfor %}
         </div>
     {% endif %}

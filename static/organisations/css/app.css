@@ -675,6 +675,38 @@ a:hover { color: var(--color-primary-dark); }
   margin: 0 0 var(--space-2) 0;
 }
 
+/* --- Home guided-journey CTA (M008C/M008-WI5, docs/design/
+   M008C-UX-FLOW-DESIGN.md §5) - the single primary action, ABOVE the
+   metric cards above. Added here, next to `.metric-card-row`/
+   `.metric-card`, rather than as a new inline <style> block in
+   detail.html: every other Home-dashboard-specific class (`.metric-card`,
+   `.needs-attention`, `.paused-state`) already lives in this one shared
+   stylesheet, not inline in that template, so this keeps Home's own CSS
+   in the one place it already is - not split across two locations for
+   one page. */
+.guided-cta {
+  background: var(--color-primary-tint);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.guided-cta__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  text-decoration: none;
+}
+.guided-cta__link:hover { text-decoration: underline; }
+.guided-cta__icon { font-size: 0.85em; }
+.guided-cta__subtitle {
+  color: var(--color-text-muted);
+  margin: var(--space-1) 0 0 0;
+}
+
 /* --- Tier-0 paused Home (PID §13.1) --- */
 .paused-state {
   background: var(--color-surface);
