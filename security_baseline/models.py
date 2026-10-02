@@ -93,3 +93,77 @@ class BaselineAnswer(models.Model):
 
     def __str__(self):
         return f"{self.question_key} = {self.answer} ({self.assessment.organisation})"
+
+
+class AnswerSelectionDetail(models.Model):
+    """
+    M008B (docs/design/M008B-QUESTION-CATALOGUE.md §0): provenance for one
+    structured Stage 4 answer - which exact `option_code` the customer
+    selected, and which version of the structured option-code scheme
+    (`security_baseline.structured_catalogue.
+    FOUNDATIONS_QUESTION_METHODOLOGY_VERSION`) was active when it was
+    recorded.
+
+    This is deliberately a SEPARATE fact from `BaselineAnswer.answer`
+    (the derived canonical five-state answer, still the single thing every
+    other part of this codebase - risk generation, policy grounding,
+    entitlements metrics - reads): two different `option_code`s can derive
+    the exact same canonical answer (e.g. `BACKUPS_RESTORE_UNTESTED` and
+    `BACKUPS_COVERAGE_PARTIAL` both derive PARTIAL) while meaning
+    materially different things, and only this model remembers which one
+    was actually selected.
+
+    Deliberately mirrors `BaselineAnswer`'s own shape exactly: an FK to
+    `BaselineAssessment` only (CASCADE), never a direct FK to
+    `Organisation` - this is what lets this model cascade-delete
+    automatically on an M008A reset (docs/evidence/M008A-RESET-DELETION-
+    MANIFEST.md) with zero changes to `organisations.reset_service`'s
+    direct-FK-to-Organisation guard sets, exactly like `BaselineAnswer`
+    already does. One row per (assessment, question_key), same
+    `unique_together` shape as `BaselineAnswer`'s own
+    `unique_answer_per_question` constraint - re-answering a question
+    updates the existing row rather than accumulating history.
+
+    The sole write path for this model is
+    `security_baseline.services.record_structured_baseline_answer` - never
+    constructed directly by view code.
+    """
+
+    assessment = models.ForeignKey(
+        BaselineAssessment, on_delete=models.CASCADE, related_name="selection_details"
+    )
+    question_key = models.CharField(
+        max_length=64,
+        help_text="Matches BaselineAnswer.question_key for the same (assessment, question).",
+    )
+    option_code = models.CharField(
+        max_length=64,
+        help_text=(
+            "The stable option_code the customer selected "
+            "(security_baseline.structured_catalogue.STRUCTURED_OPTIONS)."
+        ),
+    )
+    methodology_version = models.CharField(
+        max_length=64,
+        help_text=(
+            "The security_baseline.structured_catalogue."
+            "FOUNDATIONS_QUESTION_METHODOLOGY_VERSION active when this "
+            "option_code was recorded."
+        ),
+    )
+    recorded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["question_key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assessment", "question_key"],
+                name="unique_selection_detail_per_question",
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.question_key} = {self.option_code} "
+            f"({self.assessment.organisation})"
+        )

@@ -19,7 +19,10 @@ VALID_PROFILE_POST = {
     "receives_security_questionnaires": "yes",
     "cyber_essentials_status": "in_progress",
     "iso27001_status": "not_certified",
-    "commercial_security_driver": "A major customer requires Cyber Essentials.",
+    # M008B: commercial_security_driver is now a choice-constrained
+    # CharField (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.4) - a real
+    # DRIVER_* value, not open free text.
+    "commercial_security_driver": "customer_supplier",
 }
 
 

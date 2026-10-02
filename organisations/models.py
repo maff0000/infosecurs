@@ -58,6 +58,55 @@ ASSURANCE_STATUS_CHOICES = [
     ("certified", "Certified"),
 ]
 
+# M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.2): replaces the old
+# free-text "what you do in a few words" label entirely - a finite choice
+# list, not a bounded text field. "Not sure yet" is listed first, matching
+# this module's own UNKNOWN-first convention for every other enum above.
+SECTOR_NOT_SURE = "not_sure"
+SECTOR_PROFESSIONAL_CONSULTING = "professional_consulting"
+SECTOR_RETAIL_ECOMMERCE = "retail_ecommerce"
+SECTOR_FINANCIAL_ACCOUNTING = "financial_accounting"
+SECTOR_HEALTHCARE_CARE = "healthcare_care"
+SECTOR_TECHNOLOGY_SOFTWARE = "technology_software"
+SECTOR_MANUFACTURING_LOGISTICS = "manufacturing_logistics"
+SECTOR_CONSTRUCTION_TRADES = "construction_trades"
+SECTOR_EDUCATION_TRAINING = "education_training"
+SECTOR_LEGAL_SERVICES = "legal_services"
+SECTOR_HOSPITALITY = "hospitality"
+SECTOR_OTHER = "other"
+
+SECTOR_CHOICES = [
+    (SECTOR_NOT_SURE, "Not sure yet"),
+    (SECTOR_PROFESSIONAL_CONSULTING, "Professional or consulting services"),
+    (SECTOR_RETAIL_ECOMMERCE, "Retail or e-commerce"),
+    (SECTOR_FINANCIAL_ACCOUNTING, "Financial or accounting services"),
+    (SECTOR_HEALTHCARE_CARE, "Healthcare or care services"),
+    (SECTOR_TECHNOLOGY_SOFTWARE, "Technology or software"),
+    (SECTOR_MANUFACTURING_LOGISTICS, "Manufacturing or logistics"),
+    (SECTOR_CONSTRUCTION_TRADES, "Construction or trades"),
+    (SECTOR_EDUCATION_TRAINING, "Education or training"),
+    (SECTOR_LEGAL_SERVICES, "Legal services"),
+    (SECTOR_HOSPITALITY, "Hospitality"),
+    (SECTOR_OTHER, "Other / not listed"),
+]
+
+# M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.4; docs/design/
+# M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 2): replaces the old open
+# "why security matters to you" free text with a finite choice list.
+DRIVER_NOT_SURE = "not_sure"
+DRIVER_CUSTOMER_SUPPLIER = "customer_supplier"
+DRIVER_SENSITIVE_DATA = "sensitive_data"
+DRIVER_CERTIFICATION_CONTRACT = "certification_contract"
+DRIVER_GENERAL_RISK = "general_risk"
+
+DRIVER_CHOICES = [
+    (DRIVER_NOT_SURE, "Not sure yet"),
+    (DRIVER_CUSTOMER_SUPPLIER, "A customer or supplier has asked us to"),
+    (DRIVER_SENSITIVE_DATA, "We handle sensitive or confidential information"),
+    (DRIVER_CERTIFICATION_CONTRACT, "We need it for a certification or contract"),
+    (DRIVER_GENERAL_RISK, "We want to reduce cyber risk generally"),
+]
+
 
 class Organisation(models.Model):
     """A stable tenant identity. Everything tenant-owned hangs off this."""
@@ -151,11 +200,34 @@ class OrganisationProfile(models.Model):
         blank=True,
         help_text="A short description of what the organisation does.",
     )
+    # M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.2; docs/design/
+    # M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 1): the `description`
+    # field above is retired from the Foundation form entirely (existing
+    # values, if any, stay read-only) - this new, additive, finite-choice
+    # field is its replacement, not a second copy of the same fact.
+    sector = models.CharField(
+        max_length=32, choices=SECTOR_CHOICES, default=SECTOR_NOT_SURE,
+        help_text="Which best describes what the organisation does.",
+    )
     staff_count = models.IntegerField(
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
         help_text="Approximate headcount. Leave blank if not yet confirmed.",
+    )
+    # M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §2.3): the sole
+    # authority for `security_baseline`'s `joiner_mover_leaver` control's
+    # NOT_APPLICABLE gate - deliberately distinct from `staff_count`,
+    # which is never sufficient authority for that gate on its own.
+    people_with_system_access_count = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text=(
+            "How many people - including contractors or anyone else, not "
+            "just staff - have access to the organisation's business "
+            "systems or accounts. Leave blank if not yet confirmed."
+        ),
     )
 
     # --- Working model ------------------------------------------------------
@@ -172,6 +244,19 @@ class OrganisationProfile(models.Model):
     endpoint_management = models.CharField(
         max_length=32, choices=ENDPOINT_MANAGEMENT_CHOICES, default=UNKNOWN,
         help_text="How staff devices/endpoints are managed.",
+    )
+    # M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §2.4): the sole
+    # authority for `security_baseline`'s `remote_access_control` control's
+    # NOT_APPLICABLE gate - deliberately never inferred from `working_model`
+    # or `primary_cloud_provider`. Reuses the existing TRI_STATE_CHOICES
+    # value set rather than inventing a new one.
+    has_remote_or_offsite_access = models.CharField(
+        max_length=8, choices=TRI_STATE_CHOICES, default=UNKNOWN,
+        help_text=(
+            "Does anyone access business systems or data from outside the "
+            "organisation's normal workplace(s), even occasionally (e.g. "
+            "from home, while travelling)?"
+        ),
     )
 
     # --- Technology ---------------------------------------------------------
@@ -219,9 +304,15 @@ class OrganisationProfile(models.Model):
         max_length=16, choices=ASSURANCE_STATUS_CHOICES, default=UNKNOWN,
         help_text="ISO 27001 certification status.",
     )
-    commercial_security_driver = models.TextField(
-        blank=True,
-        help_text="The immediate commercial/security driver, if known (free text, optional).",
+    # M008B (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.4; docs/design/
+    # M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 2): corrected from a free
+    # TextField to a finite-choice CharField - a genuine field-type change,
+    # not a no-op. No data migration/backfill mapping is attempted: Beta
+    # has zero real customer rows today (confirmed with the PL), so a
+    # plain AlterField with no data migration is correct and sufficient.
+    commercial_security_driver = models.CharField(
+        max_length=32, choices=DRIVER_CHOICES, default=DRIVER_NOT_SURE,
+        help_text="Why the organisation is working on security now.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

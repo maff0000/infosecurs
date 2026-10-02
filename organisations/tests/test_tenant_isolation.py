@@ -49,7 +49,11 @@ class TestTenantIsolation:
                 "receives_security_questionnaires": "unknown",
                 "cyber_essentials_status": "unknown",
                 "iso27001_status": "unknown",
-                "commercial_security_driver": "",
+                # M008B: commercial_security_driver is now a choice-
+                # constrained CharField with no empty choice (docs/design/
+                # M008B-STAGES-1-3-CATALOGUE.md §1.4) - a real DRIVER_*
+                # value, not an empty string.
+                "commercial_security_driver": "not_sure",
             },
         )
         assert response.status_code == 302
@@ -135,6 +139,12 @@ class TestTenantIsolation:
                 "receives_security_questionnaires": "unknown",
                 "cyber_essentials_status": "unknown",
                 "iso27001_status": "unknown",
+                # M008B: commercial_security_driver is now a required,
+                # choice-constrained CharField with no empty choice (same
+                # convention as working_model/handles_personal_data above)
+                # - a real DRIVER_* value is required for this submission
+                # to validate at all.
+                "commercial_security_driver": "not_sure",
                 "organisation": str(org_b.id),  # smuggled field; form doesn't declare it
             },
         )

@@ -22,7 +22,10 @@ def test_profile_save_and_reload_preserves_all_fields(org_a):
         receives_security_questionnaires="yes",
         cyber_essentials_status="in_progress",
         iso27001_status="not_certified",
-        commercial_security_driver="A key customer requires evidence of security controls.",
+        # M008B: commercial_security_driver is now a choice-constrained
+        # CharField (docs/design/M008B-STAGES-1-3-CATALOGUE.md §1.4) - a
+        # real DRIVER_* value, not open free text.
+        commercial_security_driver="customer_supplier",
     )
     profile_id = profile.pk
 
@@ -43,10 +46,7 @@ def test_profile_save_and_reload_preserves_all_fields(org_a):
     assert reloaded.receives_security_questionnaires == "yes"
     assert reloaded.cyber_essentials_status == "in_progress"
     assert reloaded.iso27001_status == "not_certified"
-    assert (
-        reloaded.commercial_security_driver
-        == "A key customer requires evidence of security controls."
-    )
+    assert reloaded.commercial_security_driver == "customer_supplier"
 
 
 @pytest.mark.django_db

@@ -1,28 +1,46 @@
 """
-The single code path that writes `BaselineAnswer` rows.
+The code paths that write `BaselineAnswer` rows.
 
 PID.md M002 §0.5's non-negotiable rule: "there must remain exactly one
 canonical stored answer per control fact even when it is surfaced from more
 than one journey. Editing an answer from an asset-contextual page edits the
 same canonical `security_baseline` record the general baseline page
 reads/writes - never a second, asset-local, potentially contradictory
-copy."
+copy." That rule is about the stored DATA (one `BaselineAnswer` row per
+(assessment, question_key), enforced by that model's own unique
+constraint) - it is not a rule that only one Python function may ever
+write one. Two such functions exist in this module:
 
-This is a small, mechanical extraction of the `update_or_create` loop that
-`security_baseline.views.baseline_view` already used - not a redesign of
-this app's behaviour. `baseline_view` now calls this function for the
-full-catalogue case; `key_assets.views.key_asset_detail` (PID §0.5's
-asset-specific protection-checks page) calls the exact same function for
-its filtered subset of questions. There is no other place in the codebase
-that constructs or saves a `BaselineAnswer`.
+- `save_baseline_answers` - the original free-form/general-catalogue save
+  path. `baseline_view` calls this for the full-catalogue case;
+  `key_assets.views.key_asset_detail` (PID §0.5's asset-specific
+  protection-checks page) calls the exact same function for its filtered
+  subset of questions.
+- `record_structured_baseline_answer` (M008B, docs/design/M008B-QUESTION-
+  CATALOGUE.md) - the sole write path for a structured Stage 4 answer,
+  added by this module to resolve a customer-selected `option_code` into
+  its canonical five-state answer via `security_baseline.
+  structured_catalogue.resolve_option` before writing. No view code in
+  this WI calls `BaselineAnswer.objects.update_or_create` directly for a
+  structured answer - wiring a Stage 4 view up to this function is a
+  later WI's job.
 
-M003 PID §12 additionally makes this the shared baseline save path that
-must emit a `control_answer_changed` activity event on a genuine canonical
-answer change - see the before/after comparison in the loop below and
-`activity.services.record_event`.
+Both still write through the same canonical `BaselineAnswer` model, so the
+"exactly one canonical stored answer" invariant holds regardless of which
+journey/function produced it.
+
+M003 PID §12 additionally makes `save_baseline_answers` the shared
+baseline save path that must emit a `control_answer_changed` activity
+event on a genuine canonical answer change - see the before/after
+comparison in its loop below and `activity.services.record_event`.
+`record_structured_baseline_answer` does not emit this event (not
+required by its own M008B dispatch) - flagged in that function's
+docstring as a documentation/behavioural asymmetry worth a product
+decision once a Stage 4 view actually calls it.
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Iterable, Mapping, Optional
 
 from django.db import transaction
@@ -30,9 +48,18 @@ from django.db import transaction
 from activity.models import ActivityEvent
 from activity.services import record_event
 from organisations.models import Organisation
-from security_baseline.catalogue import CATALOGUE, CATALOGUE_VERSION
+from security_baseline.catalogue import CATALOGUE, CATALOGUE_BY_KEY, CATALOGUE_VERSION
 from security_baseline.forms import answer_field_name, note_field_name
-from security_baseline.models import ANSWER_UNKNOWN, BaselineAnswer, BaselineAssessment
+from security_baseline.models import (
+    ANSWER_UNKNOWN,
+    AnswerSelectionDetail,
+    BaselineAnswer,
+    BaselineAssessment,
+)
+from security_baseline.structured_catalogue import (
+    FOUNDATIONS_QUESTION_METHODOLOGY_VERSION,
+    resolve_option,
+)
 
 
 def save_baseline_answers(
@@ -138,3 +165,131 @@ def save_baseline_answers(
                 )
 
     return assessment
+
+
+@dataclasses.dataclass(frozen=True)
+class RecordedStructuredAnswer:
+    """What a caller needs to confirm what `record_structured_baseline_answer` did."""
+
+    assessment: BaselineAssessment
+    answer: BaselineAnswer
+    selection_detail: AnswerSelectionDetail
+
+
+def record_structured_baseline_answer(
+    organisation: Organisation,
+    control_key: str,
+    option_code: str,
+    *,
+    actor=None,
+) -> RecordedStructuredAnswer:
+    """
+    The sole write path for a structured Stage 4 answer (docs/design/
+    M008B-QUESTION-CATALOGUE.md).
+
+    Resolves `option_code` into its canonical five-state answer via
+    `security_baseline.structured_catalogue.resolve_option` - never trusts
+    a caller's own claimed derived answer (defence in depth, the same
+    discipline as M007's `has_capability`: never trust client-supplied
+    state, always re-derive it server-side) - then writes BOTH:
+
+    - the canonical `BaselineAnswer` row every other part of this
+      codebase already reads (risk generation, policy grounding,
+      entitlements metrics, ...), and
+    - a new `AnswerSelectionDetail` provenance row recording exactly
+      which `option_code` was selected and which version of the
+      structured option-code scheme
+      (`FOUNDATIONS_QUESTION_METHODOLOGY_VERSION`) produced it.
+
+    `actor` is accepted for the caller's own audit/logging purposes and
+    is also passed to `activity.services.record_event` exactly like
+    `save_baseline_answers` already does - a structured Stage 4 answer
+    emits the same `ActivityEvent.EVENT_CONTROL_ANSWER_CHANGED` event,
+    under the same "only when the canonical answer actually changes"
+    guard, so the activity log has no blind spot for answers recorded
+    through this newer write path.
+
+    Raises `ValueError` if `control_key` is not a real, active
+    `security_baseline.catalogue` control key - nothing is written.
+    Raises `security_baseline.structured_catalogue.UnknownOptionCodeError`
+    (a `KeyError` subclass) if `option_code` is not a real, defined option
+    for that (valid) control - nothing is written. In both cases this
+    function never falls back to a default derived answer.
+
+    `BaselineAssessment.catalogue_version` is set to the current
+    `security_baseline.catalogue.CATALOGUE_VERSION` only when the
+    assessment row is newly created by this call - an EXISTING
+    assessment's `catalogue_version` is never silently changed here
+    (deliberately NOT mirroring `save_baseline_answers`' own unconditional
+    re-stamp on every call). If an existing assessment's
+    `catalogue_version` were ever found to differ from the current
+    `CATALOGUE_VERSION` at the point a structured answer is recorded
+    against it, that is a genuine methodology-version transition and a
+    product decision - this function does not decide it unilaterally, and
+    does not attempt to detect or special-case it.
+
+    `BaselineAnswer.note` is never written by this function - the
+    structured Stage 4 journey has no free-text note concept, so an
+    existing note (if any, from the general baseline page) is left
+    exactly as it was; `update_or_create`'s `defaults` below only ever
+    names `answer`.
+
+    One `AnswerSelectionDetail` row per (assessment, question_key), same
+    shape as `BaselineAnswer`'s own uniqueness - re-answering the same
+    control updates the existing row rather than accumulating history.
+    """
+    if control_key not in CATALOGUE_BY_KEY:
+        raise ValueError(
+            f"{control_key!r} is not a real, active security_baseline "
+            "catalogue control key."
+        )
+
+    # Re-derive the canonical answer server-side - never trust a caller's
+    # own claimed derived_answer. Raises UnknownOptionCodeError (or, in
+    # principle, UnknownControlKeyError - already ruled out above) if
+    # option_code is not real for this control. Nothing has been written
+    # yet at this point.
+    option = resolve_option(control_key, option_code)
+
+    with transaction.atomic():
+        assessment, _created = BaselineAssessment.objects.get_or_create(
+            organisation=organisation,
+            defaults={"catalogue_version": CATALOGUE_VERSION},
+        )
+
+        previous = BaselineAnswer.objects.filter(
+            assessment=assessment, question_key=control_key
+        ).first()
+        previous_answer = previous.answer if previous is not None else ANSWER_UNKNOWN
+
+        answer, _ = BaselineAnswer.objects.update_or_create(
+            assessment=assessment,
+            question_key=control_key,
+            defaults={"answer": option.derived_answer},
+        )
+
+        selection_detail, _ = AnswerSelectionDetail.objects.update_or_create(
+            assessment=assessment,
+            question_key=control_key,
+            defaults={
+                "option_code": option_code,
+                "methodology_version": FOUNDATIONS_QUESTION_METHODOLOGY_VERSION,
+            },
+        )
+
+        if option.derived_answer != previous_answer:
+            record_event(
+                organisation,
+                ActivityEvent.EVENT_CONTROL_ANSWER_CHANGED,
+                actor=actor,
+                control_key=control_key,
+                metadata={
+                    "previous_answer": previous_answer,
+                    "new_answer": option.derived_answer,
+                    "option_code": option_code,
+                },
+            )
+
+    return RecordedStructuredAnswer(
+        assessment=assessment, answer=answer, selection_detail=selection_detail
+    )

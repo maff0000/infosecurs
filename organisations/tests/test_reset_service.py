@@ -39,7 +39,13 @@ from policy.models import PolicyDocument, PolicyVersion
 from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
 from remediation.models import ActionEvidenceLink, RemediationAction
 from risk_register.models import Risk
-from security_baseline.models import ANSWER_YES, BaselineAnswer, BaselineAssessment
+from security_baseline.models import (
+    ANSWER_YES,
+    AnswerSelectionDetail,
+    BaselineAnswer,
+    BaselineAssessment,
+)
+from security_baseline.services import record_structured_baseline_answer
 from workplace.models import Workplace
 
 MINIMAL_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
@@ -88,6 +94,14 @@ def _populate_every_delete_target(organisation, user):
     answer = BaselineAnswer.objects.create(
         assessment=assessment, question_key="mfa_user_accounts", answer=ANSWER_YES
     )
+    # M008B WI1: a real AnswerSelectionDetail row, created via the real
+    # service function (record_structured_baseline_answer) - not a
+    # hand-rolled equivalent - mirroring this helper's own existing
+    # "real file on disk via the real storage module" discipline above.
+    recorded = record_structured_baseline_answer(
+        organisation, "mfa_user_accounts", "MFA_USER_ALL_REQUIRED", actor=user
+    )
+    selection_detail = recorded.selection_detail
 
     workplace = Workplace.objects.create(
         organisation=organisation, name="HQ", type=Workplace.TYPE_DEDICATED_OFFICE
@@ -178,6 +192,7 @@ def _populate_every_delete_target(organisation, user):
         "audit_event": audit_event,
         "assessment": assessment,
         "answer": answer,
+        "selection_detail": selection_detail,
         "workplace": workplace,
         "key_asset": key_asset,
         "risk": risk,
@@ -215,6 +230,15 @@ class TestFullRoundTrip:
         assert not AuditEvent.objects.filter(organisation=organisation).exists()
         assert not BaselineAssessment.objects.filter(organisation=organisation).exists()
         assert not BaselineAnswer.objects.filter(assessment=created["assessment"]).exists()
+        # M008B WI1: AnswerSelectionDetail has no direct FK to Organisation
+        # at all (only to BaselineAssessment) - it cascades automatically
+        # when its parent BaselineAssessment row is deleted, exactly like
+        # BaselineAnswer, and is not touched by any explicit organisation-
+        # scoped delete call of its own.
+        assert not AnswerSelectionDetail.objects.filter(
+            pk=created["selection_detail"].pk
+        ).exists()
+        assert not AnswerSelectionDetail.objects.filter(assessment=created["assessment"]).exists()
         assert not Workplace.objects.filter(organisation=organisation).exists()
         assert not KeyAsset.objects.filter(organisation=organisation).exists()
         assert not Risk.objects.filter(organisation=organisation).exists()

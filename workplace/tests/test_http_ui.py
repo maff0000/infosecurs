@@ -252,7 +252,11 @@ class TestWorkingModelCannotBeIndependentlyEdited:
             "receives_security_questionnaires": "unknown",
             "cyber_essentials_status": "unknown",
             "iso27001_status": "unknown",
-            "commercial_security_driver": "",
+            # M008B (organisations app, collateral fix - security_baseline
+            # WI1 dispatch): commercial_security_driver is now a choice-
+            # constrained CharField with no empty choice - a real
+            # DRIVER_* value, not an empty string.
+            "commercial_security_driver": "not_sure",
         }
         response = client_a.post(reverse("organisations:profile", args=[org_a.id]), valid_post)
         assert response.status_code == 302  # the rest of the profile still saves fine
