@@ -90,8 +90,46 @@ class TestSecurityBaselineCSRFAndMethods:
         _assert_safe_csrf_rejection(response)
 
     def test_get_does_not_save_a_baseline_answer(self, client_a, org_a):
+        """
+        M008C-WI2b: `security_baseline:baseline` no longer renders a form
+        on GET at all - it unconditionally redirects into the guided
+        Stage 4 journey (302), never constructing a form from request
+        data either way. The property this test exists to prove (a bare
+        GET never creates a BaselineAssessment) still holds - just via a
+        302, not a 200.
+        """
         before = BaselineAssessment.objects.filter(organisation=org_a).count()
         response = client_a.get(reverse("security_baseline:baseline", args=[org_a.id]))
+        assert response.status_code == 302
+        after = BaselineAssessment.objects.filter(organisation=org_a).count()
+        assert after == before == 0, "a bare GET must never create a BaselineAssessment"
+
+
+class TestFoundationsQuestionCSRFAndMethods:
+    """
+    M008C-WI2b: the real form-bearing baseline page is now
+    `security_baseline:foundations_question`, not `...baseline` (see
+    `TestSecurityBaselineCSRFAndMethods` above) - the same two properties
+    proven there are proven here against the page that actually renders
+    a form and accepts a mutating POST.
+    """
+
+    def test_post_without_csrf_token_is_rejected(self, org_a, user_a):
+        url = reverse(
+            "security_baseline:foundations_question",
+            args=[org_a.id, "mfa_user_accounts"],
+        )
+        response = _csrf_client(user_a).post(url, data={})
+        _assert_safe_csrf_rejection(response)
+
+    def test_get_does_not_save_a_baseline_answer(self, client_a, org_a):
+        before = BaselineAssessment.objects.filter(organisation=org_a).count()
+        response = client_a.get(
+            reverse(
+                "security_baseline:foundations_question",
+                args=[org_a.id, "mfa_user_accounts"],
+            )
+        )
         assert response.status_code == 200
         after = BaselineAssessment.objects.filter(organisation=org_a).count()
         assert after == before == 0, "a bare GET must never create a BaselineAssessment"

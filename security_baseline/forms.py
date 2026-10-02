@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 
 from security_baseline.catalogue import CATALOGUE, CATALOGUE_BY_KEY
 from security_baseline.models import ANSWER_CHOICES, ANSWER_UNKNOWN
+from security_baseline.stage4 import QUESTION_COPY, offered_options
 
 
 def answer_field_name(question_key):
@@ -12,6 +13,14 @@ def answer_field_name(question_key):
 
 def note_field_name(question_key):
     return f"note__{question_key}"
+
+
+def option_field_name(question_key):
+    return f"option__{question_key}"
+
+
+def confirm_field_name(question_key):
+    return f"confirm__{question_key}"
 
 
 class BaselineAnswerSelect(forms.Select):
@@ -72,6 +81,23 @@ class BaselineAssessmentForm(forms.Form):
     """
     One answer + one optional note per catalogue question.
 
+    M008C-WI2b note: this form class (and the per-question free-text
+    `note__<key>` field it builds) is kept for `security_baseline.
+    services.save_baseline_answers`'s own existing unit tests and for
+    `policy`'s test fixtures (both construct it directly, never via an
+    HTTP request) - it is deliberately NOT deleted. What changed is that,
+    as of this WI, NO view anywhere in this codebase constructs this form
+    from `request.POST` any more: `security_baseline.views.baseline_view`
+    now unconditionally redirects into the new guided Stage 4 journey
+    (`foundations_start`/`foundations_question`, both built on the new
+    `StructuredAnswerForm` below), and `key_assets.views.key_asset_detail`
+    was converted to the same `StructuredAnswerForm`. There is therefore
+    no URL, in this codebase, that can turn an HTTP request into a write
+    through this form any more - the free-text note path this WI's PID
+    identifies as a reachable legacy bypass is genuinely unreachable, not
+    merely hidden behind the new pages (see `security_baseline.views`'
+    module docstring and this WI's own report for the full reasoning).
+
     Deliberately a plain Form rather than a ModelForm: BaselineAnswer is a
     per-question row (organisations/models.py's OrganisationProfileForm has
     one field per model field; here the field set is driven by the
@@ -120,4 +146,105 @@ class BaselineAssessmentForm(forms.Form):
             note_field = note_field_name(key)
             if note_field in cleaned_data:
                 cleaned_data[note_field] = cleaned_data[note_field].strip()
+        return cleaned_data
+
+
+# M008B control 7's confirmation requirement - a required, explicit
+# checkbox-style confirmation submitted in the SAME POST as
+# `JML_NOT_APPLICABLE` itself (docs/design/M008B-QUESTION-CATALOGUE.md
+# control 7). Deliberately specific to this one control/option_code pair,
+# not a generic rule - no other control in the Revision 2 catalogue has an
+# equivalent requirement (remote_access_control's NOT_APPLICABLE needs
+# only the confirmed OrganisationProfile fact, no extra checkbox).
+_JML_CONTROL_KEY = "joiner_mover_leaver"
+_JML_NOT_APPLICABLE_OPTION_CODE = "JML_NOT_APPLICABLE"
+
+
+class StructuredAnswerForm(forms.Form):
+    """
+    One `option_code` field (+ one confirmation checkbox field, for
+    `joiner_mover_leaver` only) per control key in `question_keys`.
+
+    This is the ONE form class every Stage 4 structured-answer write path
+    in this codebase builds on: the one-question-at-a-time guided journey
+    (`security_baseline.views.foundations_question`, `question_keys=[one
+    key]`) and the asset-specific protection-checks page
+    (`key_assets.views.key_asset_detail`, `question_keys=` that asset
+    category's relevant subset) both use this exact class - mirroring
+    `BaselineAssessmentForm`'s own historical "one form class, optionally
+    filtered question_keys" shape, now for the structured option-code
+    world.
+
+    Each `option_code` `ChoiceField`'s `choices` are built from
+    `security_baseline.stage4.offered_options(key, organisation)` ONLY -
+    never from the full, ungated `security_baseline.structured_catalogue.
+    STRUCTURED_OPTIONS` table, and never from anything the client sent.
+    This is what makes a forged/unoffered option_code (e.g. a
+    NOT_APPLICABLE option for a control that never has one, or a
+    `JML_NOT_APPLICABLE` submitted when `OrganisationProfile.
+    people_with_system_access_count != 1`) fail ordinary `ChoiceField`
+    validation - rejected with a normal form error, nothing written,
+    `security_baseline.services.record_structured_baseline_answer` never
+    even called. `organisation` must be the already tenant-scoped
+    `Organisation` the caller fetched via `get_member_organisation_or_404`
+    - this form never looks an organisation up itself.
+    """
+
+    def __init__(self, *args, organisation, question_keys, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.organisation = organisation
+        self.question_keys = list(question_keys)
+        # One per-request computation of what is actually offered - never
+        # recomputed per field access, and never trusted from any earlier
+        # render (a profile fact could, in principle, have changed between
+        # this form's GET and this POST; re-deriving it fresh here means
+        # the POST is always checked against the CURRENT facts, not a
+        # stale snapshot).
+        self.allowed_options_by_key = {
+            key: offered_options(key, organisation) for key in self.question_keys
+        }
+        for key in self.question_keys:
+            allowed = self.allowed_options_by_key[key]
+            self.fields[option_field_name(key)] = forms.ChoiceField(
+                choices=[(code, option.label) for code, option in allowed.items()],
+                label=QUESTION_COPY[key]["question"],
+                widget=forms.RadioSelect,
+            )
+            if key == _JML_CONTROL_KEY:
+                self.fields[confirm_field_name(key)] = forms.BooleanField(
+                    required=False,
+                    label=(
+                        "Confirm: no other staff, contractor, or "
+                        "shared/service accounts exist for this "
+                        "organisation"
+                    ),
+                )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for key in self.question_keys:
+            opt_field = option_field_name(key)
+            if opt_field not in cleaned_data:
+                # Already has a field-level error from ChoiceField
+                # validation (missing/invalid option_code) - nothing
+                # further to check for this control.
+                continue
+            option_code = cleaned_data[opt_field]
+            if (
+                key == _JML_CONTROL_KEY
+                and option_code == _JML_NOT_APPLICABLE_OPTION_CODE
+                and not cleaned_data.get(confirm_field_name(key))
+            ):
+                # Server-side enforcement, not just a hidden/pre-ticked
+                # field: JML_NOT_APPLICABLE is never accepted without the
+                # confirmation checkbox checked in this SAME submission,
+                # even when the organisation's people_with_system_access_
+                # count fact genuinely is 1 (docs/design/M008B-QUESTION-
+                # CATALOGUE.md control 7).
+                self.add_error(
+                    opt_field,
+                    "Confirm that no other staff, contractor, or "
+                    "shared/service accounts exist before selecting "
+                    "Not applicable.",
+                )
         return cleaned_data

@@ -1,0 +1,162 @@
+{% extends "application_shell.html" %}
+
+{% block title %}{{ item.title }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  /* Page-local Stage 4 styling only (this codebase's own established
+     convention - see organisations/templates/organisations/foundations.html's
+     equivalent comment): shared geometry (fieldset/field/button) stays in
+     static/organisations/css/app.css; only this page's own progress-line
+     and option-list presentation is local here, to avoid touching a
+     stylesheet shared with the sibling Stage 1-3 work. */
+  .stage4-progress {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+  .stage4-progress__bar {
+    flex: 1 1 160px;
+    max-width: 240px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-border);
+    overflow: hidden;
+  }
+  .stage4-progress__fill {
+    display: block;
+    height: 100%;
+    background: var(--color-primary);
+  }
+  .stage4-eyebrow {
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin: 0 0 var(--space-1) 0;
+  }
+  .stage4-why {
+    color: var(--color-text-muted);
+    margin: var(--space-1) 0 var(--space-4) 0;
+  }
+  .stage4-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-3) 0;
+  }
+  .stage4-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    cursor: pointer;
+  }
+  .stage4-option:hover { border-color: var(--color-primary); }
+  .stage4-option input { margin-top: 3px; }
+  .stage4-explainer {
+    background: var(--color-primary-tint);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    margin: 0 0 var(--space-4) 0;
+  }
+  .stage4-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Your Security</h1>
+        <p class="page-header__subtitle">
+            {{ organisation.name }} &middot; Stage 4 of 6 &middot; Question {{ question_number }} of {{ question_total }}
+        </p>
+    </div>
+</div>
+
+<div class="stage4-progress">
+    <span>Your Security — {{ progress_copy }}</span>
+    {% if not progress.complete %}
+        <span class="stage4-progress__bar" aria-hidden="true">
+            <span class="stage4-progress__fill" style="width: {% widthratio progress.reviewed progress.total 100 %}%"></span>
+        </span>
+    {% endif %}
+</div>
+
+<p class="form-card__intro">
+    This is a statement you confirm, not a control the system has independently verified. Answer honestly,
+    including "Not sure" where you're not sure - an accurate "unknown" is more useful than a guess. You can
+    change any answer later as your organisation's security improves.
+</p>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<p class="stage4-eyebrow">{{ item.title }}</p>
+<h2 id="stage4-question-heading">{{ item.question }}</h2>
+<p class="stage4-why">Why we ask: {{ item.why_it_matters }}</p>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    <fieldset style="border:none;padding:0;margin:0;" role="radiogroup" aria-labelledby="stage4-question-heading">
+        <div class="stage4-options">
+            {% for radio in option_field %}
+                <label class="stage4-option">
+                    {{ radio.tag }}
+                    <span>{{ radio.choice_label }}</span>
+                </label>
+            {% endfor %}
+        </div>
+    </fieldset>
+    {% for error in option_field.errors %}
+        <p class="field__error" role="alert">{{ error }}</p>
+    {% endfor %}
+
+    {% if confirm_field %}
+        <div class="field">
+            <label>
+                {{ confirm_field }}
+                {{ confirm_field.label }}
+            </label>
+            <p class="field__help">
+                Only needed if you select "Not applicable" above - otherwise this checkbox is ignored.
+            </p>
+        </div>
+    {% endif %}
+
+    {% if explainer %}
+        <p class="stage4-explainer">{{ explainer }}</p>
+    {% endif %}
+
+    <div class="form-actions form-actions--sticky">
+        {% if previous_key %}
+            <a class="button button--secondary" href="{% url 'security_baseline:foundations_question' organisation.id previous_key %}">&larr; Back</a>
+        {% else %}
+            <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">&larr; Back to overview</a>
+        {% endif %}
+        <button type="submit" class="button button--primary">Save and continue</button>
+        {% if next_key %}
+            <a class="button button--secondary" href="{% url 'security_baseline:foundations_question' organisation.id next_key %}">Next &rarr;</a>
+        {% else %}
+            <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">Finish for now &rarr;</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}

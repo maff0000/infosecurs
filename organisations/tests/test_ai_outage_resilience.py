@@ -91,7 +91,11 @@ class TestNonAiPagesSurviveAGatewayOutage:
         "url_name",
         [
             "organisations:detail",  # Overview
-            "security_baseline:baseline",
+            # "security_baseline:baseline" deliberately excluded here -
+            # M008C-WI2b made it a redirect-only legacy shim into the
+            # guided Stage 4 journey (302, not 200); see
+            # test_foundations_question_page_returns_200_with_ai_gateway_completely_unreachable
+            # below for the real rendered-page equivalent of this check.
             "key_assets:list",
             "risk_register:list",
             "evidence:list",
@@ -107,6 +111,24 @@ class TestNonAiPagesSurviveAGatewayOutage:
         self, client_a, org_a, gateway_completely_unreachable, url_name
     ):
         response = client_a.get(reverse(url_name, args=[org_a.id]))
+        assert response.status_code == 200
+
+    def test_foundations_question_page_returns_200_with_ai_gateway_completely_unreachable(
+        self, client_a, org_a, gateway_completely_unreachable
+    ):
+        """
+        The real rendered-page equivalent of the parametrized check above
+        for the M008C guided Stage 4 journey - `security_baseline:
+        baseline` itself is now just a redirect into this page (see the
+        comment on the parametrize list above), and this page is, like
+        every other one in that list, read-only with respect to AI.
+        """
+        response = client_a.get(
+            reverse(
+                "security_baseline:foundations_question",
+                args=[org_a.id, "mfa_user_accounts"],
+            )
+        )
         assert response.status_code == 200
 
 

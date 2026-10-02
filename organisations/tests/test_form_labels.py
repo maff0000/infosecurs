@@ -40,7 +40,18 @@ class TestOrganisationScopedFormsAreLabelled:
         _assert_fully_labelled(client_a.get(reverse("organisations:create")))
 
     def test_security_baseline_form(self, client_a, org_a):
-        _assert_fully_labelled(client_a.get(reverse("security_baseline:baseline", args=[org_a.id])))
+        # M008C-WI2b: `security_baseline:baseline` now only redirects into
+        # the guided Stage 4 journey (security_baseline.views.
+        # baseline_view's own docstring) - the real rendered form this
+        # check cares about is now `foundations_question`.
+        _assert_fully_labelled(
+            client_a.get(
+                reverse(
+                    "security_baseline:foundations_question",
+                    args=[org_a.id, "mfa_user_accounts"],
+                )
+            )
+        )
 
     def test_key_assets_create_form(self, client_a, org_a):
         _assert_fully_labelled(client_a.get(reverse("key_assets:create", args=[org_a.id])))

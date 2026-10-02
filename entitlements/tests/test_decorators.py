@@ -77,7 +77,16 @@ class TestTierMatrixAtRouteLevel:
     def test_foundation_reaches_every_tier1_route(self, client_a, user_a, org_a, route_name):
         set_session_tier(client_a, user_a, TIER_FOUNDATION, organisation_id=org_a.id)
         response = client_a.get(reverse(route_name, args=[org_a.id]))
-        assert response.status_code == 200
+        # M008C-WI2b: `security_baseline:baseline` itself now always
+        # redirects (302) into the guided Stage 4 journey on a GET it
+        # has been allowed to reach at all (see security_baseline.views.
+        # baseline_view) - every other TIER1_ROUTES member still renders
+        # 200 directly. The property this test proves is "the capability
+        # gate did not deny this tier", not "this exact route renders a
+        # 200 body" - a 302 from the view ITSELF (as opposed to a 403
+        # from require_capability) is just as valid a proof of "allowed
+        # through" as a 200.
+        assert response.status_code in (200, 302)
 
     def test_foundation_is_denied_customer_assurance(self, client_a, user_a, org_a):
         set_session_tier(client_a, user_a, TIER_FOUNDATION, organisation_id=org_a.id)
@@ -107,7 +116,10 @@ class TestTierMatrixAtRouteLevel:
     ):
         set_session_tier(client_a, user_a, TIER_MONTHLY, organisation_id=org_a.id)
         response = client_a.get(reverse(route_name, args=[org_a.id]))
-        assert response.status_code == 200
+        # See test_foundation_reaches_every_tier1_route's comment above -
+        # security_baseline:baseline legitimately redirects (302) rather
+        # than rendering 200 directly as of M008C-WI2b.
+        assert response.status_code in (200, 302)
 
     def test_pro_inherits_every_route_monthly_reaches(self, client_a, user_a, org_a):
         """Proves the inheritance PROPERTY itself (PID §25.1's own "must
@@ -115,19 +127,23 @@ class TestTierMatrixAtRouteLevel:
         re-asserting the same fixed list twice: whatever the Monthly
         session can reach, the Pro session can reach too."""
         all_routes = TIER1_ROUTES + TIER2_ROUTES + [HOME_ROUTE]
+        # security_baseline:baseline redirects (302) rather than
+        # rendering 200 directly as of M008C-WI2b - see
+        # test_foundation_reaches_every_tier1_route's comment above.
+        allowed_statuses = (200, 302)
 
         set_session_tier(client_a, user_a, TIER_MONTHLY, organisation_id=org_a.id)
         monthly_ok = {
             route_name
             for route_name in all_routes
-            if client_a.get(reverse(route_name, args=[org_a.id])).status_code == 200
+            if client_a.get(reverse(route_name, args=[org_a.id])).status_code in allowed_statuses
         }
 
         set_session_tier(client_a, user_a, TIER_PRO, organisation_id=org_a.id)
         pro_ok = {
             route_name
             for route_name in all_routes
-            if client_a.get(reverse(route_name, args=[org_a.id])).status_code == 200
+            if client_a.get(reverse(route_name, args=[org_a.id])).status_code in allowed_statuses
         }
 
         assert monthly_ok <= pro_ok
