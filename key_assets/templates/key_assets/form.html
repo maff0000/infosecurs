@@ -50,12 +50,6 @@
             {% for error in form.criticality.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
         </div>
 
-        <div class="field {% if form.description.errors %}field--error{% endif %}">
-            <label for="{{ form.description.id_for_label }}">Short description</label>
-            <p class="field__help">Optional.</p>
-            {{ form.description }}
-            {% for error in form.description.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
-        </div>
     </fieldset>
 
     <div class="form-actions">
