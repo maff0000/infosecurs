@@ -1,0 +1,122 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Your Technology & Data — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<p class="stage-indicator">Stage 3 of 6</p>
+<div class="page-header">
+    <div>
+        <h1>Your Technology &amp; Data</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p class="stage-progress">{{ confirmed_count }} of {{ total_count }} confirmed so far on this page - key assets are tracked separately below.</p>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>Platforms and devices</legend>
+
+        <div class="field {% if form.productivity_platform.errors %}field--error{% endif %}">
+            <label for="{{ form.productivity_platform.id_for_label }}">{{ form.productivity_platform.label }}</label>
+            {% if form.productivity_platform.help_text %}<p class="field__help">{{ form.productivity_platform.help_text }}</p>{% endif %}
+            {{ form.productivity_platform }}
+            {% for error in form.productivity_platform.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.primary_cloud_provider.errors %}field--error{% endif %}">
+            <label for="{{ form.primary_cloud_provider.id_for_label }}">{{ form.primary_cloud_provider.label }}</label>
+            {% if form.primary_cloud_provider.help_text %}<p class="field__help">{{ form.primary_cloud_provider.help_text }}</p>{% endif %}
+            {{ form.primary_cloud_provider }}
+            {% for error in form.primary_cloud_provider.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.endpoint_management.errors %}field--error{% endif %}">
+            <label for="{{ form.endpoint_management.id_for_label }}">{{ form.endpoint_management.label }}</label>
+            {% if form.endpoint_management.help_text %}<p class="field__help">{{ form.endpoint_management.help_text }}</p>{% endif %}
+            {{ form.endpoint_management }}
+            {% for error in form.endpoint_management.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.develops_hosts_own_software.errors %}field--error{% endif %}">
+            <label for="{{ form.develops_hosts_own_software.id_for_label }}">{{ form.develops_hosts_own_software.label }}</label>
+            {% if form.develops_hosts_own_software.help_text %}<p class="field__help">{{ form.develops_hosts_own_software.help_text }}</p>{% endif %}
+            {{ form.develops_hosts_own_software }}
+            {% for error in form.develops_hosts_own_software.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>What kinds of data does your business handle?</legend>
+        <p class="form-section__help">Select the answer that applies to each - all independent, so answer each on its own.</p>
+
+        <div class="field {% if form.handles_personal_data.errors %}field--error{% endif %}">
+            <label for="{{ form.handles_personal_data.id_for_label }}">{{ form.handles_personal_data.label }}</label>
+            {{ form.handles_personal_data }}
+            {% for error in form.handles_personal_data.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.handles_confidential_business_data.errors %}field--error{% endif %}">
+            <label for="{{ form.handles_confidential_business_data.id_for_label }}">{{ form.handles_confidential_business_data.label }}</label>
+            {{ form.handles_confidential_business_data }}
+            {% for error in form.handles_confidential_business_data.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.handles_payment_card_data.errors %}field--error{% endif %}">
+            <label for="{{ form.handles_payment_card_data.id_for_label }}">{{ form.handles_payment_card_data.label }}</label>
+            {{ form.handles_payment_card_data }}
+            {% for error in form.handles_payment_card_data.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.handles_special_category_data.errors %}field--error{% endif %}">
+            <label for="{{ form.handles_special_category_data.id_for_label }}">{{ form.handles_special_category_data.label }}</label>
+            {{ form.handles_special_category_data }}
+            {% for error in form.handles_special_category_data.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+        <legend>Do you hold, or are you working towards, any of the following?</legend>
+
+        <div class="field {% if form.cyber_essentials_status.errors %}field--error{% endif %}">
+            <label for="{{ form.cyber_essentials_status.id_for_label }}">{{ form.cyber_essentials_status.label }}</label>
+            {% if form.cyber_essentials_status.help_text %}<p class="field__help">{{ form.cyber_essentials_status.help_text }}</p>{% endif %}
+            {{ form.cyber_essentials_status }}
+            {% for error in form.cyber_essentials_status.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.iso27001_status.errors %}field--error{% endif %}">
+            <label for="{{ form.iso27001_status.id_for_label }}">{{ form.iso27001_status.label }}</label>
+            {% if form.iso27001_status.help_text %}<p class="field__help">{{ form.iso27001_status.help_text }}</p>{% endif %}
+            {{ form.iso27001_status }}
+            {% for error in form.iso27001_status.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="summary-card">
+        <h2>Key assets</h2>
+        <p>
+            What are your business's key assets - the systems, devices,
+            information or services that matter most if something goes
+            wrong? {{ confirmed_assets_count }} confirmed so far. This
+            opens a short, separate list; come back here when you're done.
+        </p>
+        <a class="button button--primary" href="{{ key_assets_url }}">Open key assets</a>
+    </div>
+
+    <div class="form-actions form-actions--sticky">
+        <a class="button button--secondary" href="{{ stage2_url }}">Back</a>
+        <button type="submit" class="button button--primary">Save and continue</button>
+    </div>
+</form>
+{% endblock %}

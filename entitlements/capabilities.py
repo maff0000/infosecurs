@@ -51,6 +51,19 @@ ORGANISATIONS_URL_NAME_TO_CAPABILITY: dict[str, str] = {
     # map - every other entry here maps a DIFFERENT url_name to its
     # capability code.
     "foundations": "foundations",
+    # M008C/M008B-WI2a: the three new Stage 1-3 guided-journey pages are
+    # part of the same Foundations journey the "foundations" worklist
+    # itself belongs to - same capability code (and therefore the same
+    # min_package_tier=1 gate), not a new ProductArea/migration of their
+    # own (this WI's dispatch: "do not add a new migration unless
+    # genuinely unavoidable - it shouldn't be"). Without an entry here,
+    # `require_capability()` would raise `ImproperlyConfigured` the first
+    # time one of these routes was exercised (entitlements/decorators.py's
+    # own fail-loud-at-programming-time behaviour for an unmapped
+    # `organisations` url_name).
+    "stage1_business": "foundations",
+    "stage2_people_workplaces": "foundations",
+    "stage3_technology_data": "foundations",
 }
 
 

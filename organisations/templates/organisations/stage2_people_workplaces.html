@@ -1,0 +1,73 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Your People & Workplaces — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<p class="stage-indicator">Stage 2 of 6</p>
+<div class="page-header">
+    <div>
+        <h1>Your People &amp; Workplaces</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p class="stage-progress">{{ confirmed_count }} of {{ total_count }} confirmed so far on this page - work pattern, workplaces and governance roles are tracked separately below.</p>
+
+<div class="summary-card">
+    <h2>Where do people normally work?</h2>
+    <p>
+        Tell us about your workplace(s) - everyone from home, one office, a
+        shared/coworking space, or a mix. This opens a short, separate set
+        of questions; come back here when you're done.
+    </p>
+    <a class="button button--primary" href="{{ workplace_url }}">
+        {% if has_active_workplace %}Open workplaces{% else %}Set up your workplaces{% endif %}
+    </a>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" class="profile-form" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="form-section">
+        <legend>People with access to your systems</legend>
+
+        <div class="field {% if form.people_with_system_access_count.errors %}field--error{% endif %}">
+            <label for="{{ form.people_with_system_access_count.id_for_label }}">{{ form.people_with_system_access_count.label }}</label>
+            {% if form.people_with_system_access_count.help_text %}<p class="field__help">{{ form.people_with_system_access_count.help_text }}</p>{% endif %}
+            {{ form.people_with_system_access_count }}
+            {% for error in form.people_with_system_access_count.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="field {% if form.has_remote_or_offsite_access.errors %}field--error{% endif %}">
+            <label for="{{ form.has_remote_or_offsite_access.id_for_label }}">{{ form.has_remote_or_offsite_access.label }}</label>
+            {% if form.has_remote_or_offsite_access.help_text %}<p class="field__help">{{ form.has_remote_or_offsite_access.help_text }}</p>{% endif %}
+            {{ form.has_remote_or_offsite_access }}
+            {% for error in form.has_remote_or_offsite_access.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="summary-card">
+        <h2>Governance roles</h2>
+        <p>
+            Security responsible person, policy authoriser, and senior
+            leadership representative - {{ governance_assigned_count }} of 3
+            roles currently assigned. This opens a short, separate page;
+            come back here when you're done.
+        </p>
+        <a class="button button--primary" href="{{ governance_url }}">Open governance roles</a>
+    </div>
+
+    <div class="form-actions form-actions--sticky">
+        <a class="button button--secondary" href="{{ stage1_url }}">Back</a>
+        <button type="submit" class="button button--primary">Save and continue</button>
+    </div>
+</form>
+{% endblock %}
