@@ -239,16 +239,6 @@
   .option.selected { border-color: var(--accent); background: var(--accent-soft); }
   .option.notsure { border-style: dashed; }
 
-  .followup {
-    margin-top: 6px; margin-bottom: 18px; padding: 14px 16px; background: var(--surface-sunken);
-    border-radius: var(--radius-s); border: 1px solid var(--line);
-  }
-  .followup label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-  .followup input[type=text] {
-    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-s);
-    font-size: 14px; background: var(--surface); color: var(--ink);
-  }
-
   .explainer {
     margin-top: 4px; margin-bottom: 20px; padding: 14px 16px; border-radius: var(--radius-s);
     background: var(--good-soft); color: var(--good); font-size: 14px; display: none;
@@ -395,7 +385,7 @@
           <div class="primary-cta-text">
             <div class="k">Continue</div>
             <div class="v">Security Foundations — Stage 4 of 6</div>
-            <div class="d">Your Security: 2 of 12 questions answered</div>
+            <div class="d">Your Security: 4 of 12 reviewed · 1 still needs confirming</div>
           </div>
           <button class="btn cta-btn" data-go="q-simple">Continue →</button>
         </div>
@@ -444,7 +434,7 @@
           <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 1</span><span class="stage-name">Your Business</span><span class="stage-status done">✓ Complete</span></button>
           <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 2</span><span class="stage-name">Your People &amp; Workplaces</span><span class="stage-status done">✓ Complete</span></button>
           <button class="stage-tile" data-go="foundations"><span class="stage-num">Stage 3</span><span class="stage-name">Your Technology &amp; Data</span><span class="stage-status done">✓ Complete</span></button>
-          <button class="stage-tile" data-go="q-simple"><span class="stage-num">Stage 4</span><span class="stage-name">Your Security</span><span class="stage-status current">▶ 2 of 12 answered</span></button>
+          <button class="stage-tile" data-go="q-simple"><span class="stage-num">Stage 4</span><span class="stage-name">Your Security</span><span class="stage-status current">▶ 4 of 12 reviewed · 1 to confirm</span></button>
           <button class="stage-tile" data-go="risks"><span class="stage-num">Stage 5</span><span class="stage-name">Your Risks &amp; Actions</span><span class="stage-status todo">Not started</span></button>
           <button class="stage-tile" data-go="policy"><span class="stage-num">Stage 6</span><span class="stage-name">Your Security Policy</span><span class="stage-status todo">Not started</span></button>
         </div>
@@ -453,7 +443,7 @@
       <!-- ============ SIMPLE QUESTION ============ -->
       <section class="screen" id="screen-q-simple" aria-labelledby="qs-h1">
         <div class="progress-line">
-          <span>Your Security — question 3 of 12</span>
+          <span>Your Security — 4 of 12 reviewed · 1 still needs confirming</span>
           <span class="progress-bar"><span class="progress-bar-fill" style="width:25%"></span></span>
         </div>
         <div class="eyebrow">Staff sign-in protection</div>
@@ -481,8 +471,8 @@
       <!-- ============ CONDITIONAL QUESTION ============ -->
       <section class="screen" id="screen-q-conditional" aria-labelledby="qc-h1">
         <div class="progress-line">
-          <span>Your Security — question 6 of 12</span>
-          <span class="progress-bar"><span class="progress-bar-fill" style="width:50%"></span></span>
+          <span>Your Security — 5 of 12 reviewed · 1 still needs confirming</span>
+          <span class="progress-bar"><span class="progress-bar-fill" style="width:42%"></span></span>
         </div>
         <div class="eyebrow">Backups you can actually restore from</div>
         <h1 class="page-title" id="qc-h1">Is important business data backed up, and has anyone tried restoring from it?</h1>
@@ -491,17 +481,12 @@
         <fieldset style="border:none;padding:0;margin:0;" role="radiogroup" aria-labelledby="qc-h1">
           <div class="options">
             <label class="option"><input type="radio" name="qc"> <span class="opt-label">Backed up AND a restore has been tested</span></label>
-            <label class="option selected"><input type="radio" name="qc" checked> <span class="opt-label">Backed up but restore has never been tested</span></label>
-            <label class="option"><input type="radio" name="qc"> <span class="opt-label">Backed up but only partially covered</span></label>
+            <label class="option selected"><input type="radio" name="qc" checked> <span class="opt-label">Backed up, but a restore has never been tested</span></label>
+            <label class="option"><input type="radio" name="qc"> <span class="opt-label">Backed up, but only some systems/data are covered</span></label>
             <label class="option"><input type="radio" name="qc"> <span class="opt-label">Not backed up</span></label>
             <label class="option notsure"><input type="radio" name="qc"> <span class="opt-label">Not sure</span></label>
           </div>
         </fieldset>
-
-        <div class="followup">
-          <label for="qc-followup">What's covered? <span style="font-weight:400;color:var(--ink-soft)">(optional, short)</span></label>
-          <input type="text" id="qc-followup" class="confirm-input" style="margin:0;max-width:100%" placeholder="e.g. Shared drive and accounting system" value="Shared drive and accounting system">
-        </div>
 
         <div class="explainer warn show">Backups exist, but an untested restore is treated as a gap, not a pass — we'll record this honestly and suggest a test restore as a next action.</div>
 
@@ -514,7 +499,7 @@
       <!-- ============ NOT SURE BEHAVIOUR ============ -->
       <section class="screen" id="screen-q-notsure" aria-labelledby="qn-h1">
         <div class="progress-line">
-          <span>Your Security — question 9 of 12</span>
+          <span>Your Security — 8 of 12 reviewed · 2 still need confirming</span>
           <span class="progress-bar"><span class="progress-bar-fill" style="width:75%"></span></span>
         </div>
         <div class="eyebrow">Helping staff recognise security risks</div>
@@ -543,7 +528,7 @@
         <div class="complete-wrap">
           <div class="complete-icon">✓</div>
           <h1 class="page-title" id="sc-h1" style="margin-bottom:10px;">Your Security — done for now</h1>
-          <p class="page-lede" style="margin:0 auto 26px;">We've worked out <strong>5 risks</strong> and some recommended actions from your answers.</p>
+          <p class="page-lede" style="margin:0 auto 26px;">We've identified <strong>2 risks</strong> from your answers, plus <strong>1 thing</strong> that still needs confirming, each with a recommended next step.</p>
           <button class="btn primary" data-go="risks">See your risks and actions →</button>
         </div>
       </section>
@@ -552,27 +537,40 @@
       <section class="screen" id="screen-risks" aria-labelledby="r-h1">
         <div class="eyebrow">Stage 5 of 6</div>
         <h1 class="page-title" id="r-h1">Your Risks &amp; Actions</h1>
+        <p class="page-lede" style="font-weight:600;color:var(--ink);">2 security risks identified · 1 thing still needs confirming</p>
         <p class="page-lede">What's happening now, and what we recommend next. Reviewing a risk doesn't resolve it — the action does.</p>
 
+        <h3 style="font-family:'Lexend',sans-serif;font-size:14px;margin:4px 0 10px;">Confirmed risks</h3>
         <div class="card risk-card">
           <div class="risk-sev high" aria-hidden="true"></div>
           <div class="risk-body">
             <div class="risk-title">Backup restore not verified</div>
-            <div class="risk-meta">From: Backups (your answer) · Impact: Moderate · Likelihood: Possible</div>
+            <div class="risk-meta">From: Backups — &ldquo;restore never tested&rdquo; (your answer) · Impact: Moderate · Likelihood: Possible</div>
             <p style="font-size:14px;margin:0 0 4px;">If backups were needed in an emergency, it isn't confirmed they would actually restore successfully.</p>
             <div class="risk-section-label">Recommended action</div>
             <div class="risk-action">Schedule and carry out a test restore of your backups.</div>
           </div>
         </div>
+        <div class="card risk-card" style="margin-top:12px;">
+          <div class="risk-sev high" aria-hidden="true"></div>
+          <div class="risk-body">
+            <div class="risk-title">No clear incident reporting route</div>
+            <div class="risk-meta">From: Incident reporting route — &ldquo;no clear route&rdquo; (your answer) · Impact: Moderate · Likelihood: Possible</div>
+            <p style="font-size:14px;margin:0 0 4px;">Staff wouldn't currently know who to tell if they suspected a security incident.</p>
+            <div class="risk-section-label">Recommended action</div>
+            <div class="risk-action">Establish and communicate a clear incident reporting route.</div>
+          </div>
+        </div>
 
+        <h3 style="font-family:'Lexend',sans-serif;font-size:14px;margin:22px 0 10px;">Things still needing confirmation</h3>
         <div class="card risk-card">
           <div class="risk-sev med" aria-hidden="true"></div>
           <div class="risk-body">
-            <div class="risk-title">Awareness training gap (unconfirmed)</div>
-            <div class="risk-meta">From: Staff awareness (not yet confirmed) · Impact: Moderate · Likelihood: Possible</div>
-            <p style="font-size:14px;margin:0 0 4px;">Without confirmed awareness activity, staff may be more susceptible to phishing and social engineering.</p>
+            <div class="risk-title">Staff security awareness — not yet confirmed</div>
+            <div class="risk-meta">From: Staff awareness — &ldquo;not sure&rdquo; (your answer) · This is not a confirmed gap</div>
+            <p style="font-size:14px;margin:0 0 4px;">We don't yet know whether staff receive any security-awareness activity. This is recorded as unconfirmed, not as a known gap.</p>
             <div class="risk-section-label">Recommended action</div>
-            <div class="risk-action">Confirm current practice, then introduce regular awareness activity if needed.</div>
+            <div class="risk-action">Confirm current practice.</div>
           </div>
         </div>
 
@@ -586,32 +584,49 @@
       <section class="screen" id="screen-policy" aria-labelledby="p-h1">
         <div class="eyebrow">Stage 6 of 6</div>
         <h1 class="page-title" id="p-h1">Your Security Policy</h1>
-        <p class="page-lede">Built from what you've confirmed so far. Nothing here claims more than what's actually been established.</p>
+        <p class="page-lede">Your downloadable policy states your organisation's commitments. Your current implementation status — what's already true and what's still a gap — is reviewed separately below, and is never included in the downloadable document.</p>
 
+        <h3 style="font-family:'Lexend',sans-serif;font-size:14px;margin:4px 0 10px;">Your policy (downloadable)</h3>
         <div class="policy-doc">
-          <h2>Thornfield Bookkeeping Ltd — Information Security Policy (draft preview)</h2>
+          <h2>Thornfield Bookkeeping Ltd — Information Security Policy</h2>
           <div class="policy-section">
             <span class="truth-tag norm">Commitment</span>
             <p style="margin:8px 0 0;">This policy applies to all staff, contractors and systems used to carry out the organisation's work.</p>
           </div>
           <div class="policy-section">
-            <span class="truth-tag fact">Confirmed</span>
-            <p style="margin:8px 0 0;">Multi-factor authentication is required for all staff accounts.</p>
+            <span class="truth-tag norm">Commitment</span>
+            <p style="margin:8px 0 0;">Multi-factor authentication must be used for all staff and administrator accounts.</p>
           </div>
           <div class="policy-section">
-            <span class="truth-tag gap">Gap — action needed</span>
-            <p style="margin:8px 0 0;">A test restore of backups has not yet been carried out. This is an identified action, not yet complete.</p>
+            <span class="truth-tag norm">Commitment</span>
+            <p style="margin:8px 0 0;">Important business data must be backed up, and the ability to restore from backup must be periodically tested.</p>
           </div>
           <div class="policy-section">
-            <span class="truth-tag gap">Not yet confirmed</span>
-            <p style="margin:8px 0 0;">Whether staff receive security-awareness activity has not yet been confirmed.</p>
+            <span class="truth-tag norm">Commitment</span>
+            <p style="margin:8px 0 0;">Staff must have a clear, known route to report suspected security incidents to the Security responsible person.</p>
           </div>
-          <div class="policy-actions">
-            <button class="btn ghost" data-go="q-simple">← Return to a question</button>
-            <button class="btn">Flag for review</button>
-            <button class="btn primary" disabled title="Disabled while gaps remain unconfirmed — illustrative only" style="opacity:.55;cursor:not-allowed;">Approve (example state)</button>
+          <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">Every organisation's downloadable policy uses this same wording — the commitment is the same regardless of current state. (Full 8-section document; abridged here for this prototype screen.)</p>
+        </div>
+
+        <h3 style="font-family:'Lexend',sans-serif;font-size:14px;margin:24px 0 10px;">Implementation status (internal review only — not in the downloadable policy)</h3>
+        <div class="card">
+          <div class="attn-item">
+            <span class="label"><span class="pill" style="background:var(--good-soft);color:var(--good);margin-right:8px;">Met</span>Multi-factor authentication (staff) — required for all accounts</span>
+          </div>
+          <div class="attn-item" style="margin-top:8px;">
+            <span class="label"><span class="pill bad" style="margin-right:8px;">Gap</span>Backups — restore never tested → <em>schedule a test restore</em></span>
+          </div>
+          <div class="attn-item" style="margin-top:8px;">
+            <span class="label"><span class="pill warn" style="margin-right:8px;">Not yet confirmed</span>Staff security awareness → <em>confirm current practice</em></span>
           </div>
         </div>
+
+        <div class="policy-actions" style="margin-top:20px;">
+          <button class="btn ghost" data-go="q-simple">← Return to a question</button>
+          <button class="btn">Flag for review</button>
+          <button class="btn primary" title="Approving records commitments — it does not claim every control is already in place">Approve policy</button>
+        </div>
+        <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;max-width:60ch;">Approving this policy records your organisation's security commitments. It does not certify that every control is currently in place, and does not require every control to be Met first — gaps and unconfirmed items remain visible above after approval.</p>
       </section>
 
       <!-- ============ DEV TOOLS ============ -->
