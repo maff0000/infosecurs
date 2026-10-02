@@ -8,9 +8,13 @@
         <h1>Information Security Policy</h1>
         <p class="page-header__subtitle">{{ organisation.name }}</p>
     </div>
-    <form method="post" action="{% url 'policy:generate' organisation.id %}">
+    <form method="post" action="{% url 'policy:generate_deterministic' organisation.id %}">
         {% csrf_token %}
         <button type="submit" class="button button--primary">Generate policy draft</button>
+    </form>
+    <form method="post" action="{% url 'policy:generate' organisation.id %}">
+        {% csrf_token %}
+        <button type="submit" class="button button--secondary">Generate with AI instead (optional)</button>
     </form>
 </div>
 

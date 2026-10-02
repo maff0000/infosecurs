@@ -84,12 +84,20 @@ from evidence.models import EvidenceItem  # noqa: E402
 from governance.models import GovernanceRoleAssignment  # noqa: E402
 from governance.services import assign_role, ensure_account_holder_person  # noqa: E402
 from key_assets.models import CATEGORY_BUSINESS_APPLICATION, CRITICALITY_HIGH, KeyAsset  # noqa: E402
-from organisations.models import Organisation, OrganisationMembership  # noqa: E402
+from organisations.models import (  # noqa: E402
+    SECTOR_PROFESSIONAL_CONSULTING,
+    Organisation,
+    OrganisationMembership,
+    OrganisationProfile,
+)
 from policy.models import PolicyDocument, PolicyVersion  # noqa: E402
 from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse  # noqa: E402
 from remediation.models import RemediationAction  # noqa: E402
 from risk_register.models import Risk  # noqa: E402
 from security_baseline.catalogue import CATALOGUE  # noqa: E402
+from security_baseline.services import record_structured_baseline_answer  # noqa: E402
+from security_baseline.structured_catalogue import STRUCTURED_OPTIONS  # noqa: E402
+from workplace.models import Workplace  # noqa: E402
 
 PASSWORD = "a-strong-synthetic-test-password-123"
 
@@ -703,6 +711,32 @@ def test_policy_approval_summary_wraps_with_long_governance_name_at_375px(live_s
         person=person,
         assigned_by=user,
     )
+
+    # M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6): the policy
+    # readiness gate now also requires a confirmed legal name/sector,
+    # >=1 active workplace, all three governance roles, and all 12
+    # controls reviewed before the real "Approve this policy" POST below
+    # (through `policy:version_approve_direct`) will succeed.
+    for role in (
+        GovernanceRoleAssignment.ROLE_SECURITY_RESPONSIBLE,
+        GovernanceRoleAssignment.ROLE_SENIOR_LEADERSHIP,
+    ):
+        assign_role(organisation=organisation, role=role, person=person, assigned_by=user)
+    OrganisationProfile.objects.update_or_create(
+        organisation=organisation,
+        defaults={
+            "legal_trading_name": "Viewport J1 Policy Synthetic Ltd",
+            "sector": SECTOR_PROFESSIONAL_CONSULTING,
+        },
+    )
+    Workplace.objects.get_or_create(
+        organisation=organisation,
+        name="Viewport J1 HQ",
+        defaults={"type": Workplace.TYPE_DEDICATED_OFFICE},
+    )
+    for control_key, options in STRUCTURED_OPTIONS.items():
+        option_code = next(iter(options.keys()))
+        record_structured_baseline_answer(organisation, control_key, option_code, actor=user)
 
     document = PolicyDocument.objects.get_or_create(organisation=organisation)[0]
     version = PolicyVersion.objects.create(

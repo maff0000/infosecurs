@@ -147,7 +147,7 @@ class TestPolicyLifecycleTenantIsolation:
         assert version.status == PolicyVersion.STATUS_DRAFT
 
     def test_member_cannot_download_other_organisations_approved_policy(
-        self, client_b, org_a, user_a
+        self, client_b, org_a, user_a, satisfy_policy_readiness
     ):
         person = OrganisationPerson.objects.create(
             organisation=org_a, user=user_a, full_name="Org A Holder"
@@ -157,6 +157,7 @@ class TestPolicyLifecycleTenantIsolation:
             role=GovernanceRoleAssignment.ROLE_POLICY_AUTHORISER,
             person=person,
         )
+        satisfy_policy_readiness(org_a, user_a)
         version = self._org_a_version(
             org_a, sections=[{"section_key": "purpose_and_scope", "content": "secret content"}]
         )
@@ -166,7 +167,7 @@ class TestPolicyLifecycleTenantIsolation:
         assert response.status_code == 404
 
     def test_member_cannot_create_new_draft_for_other_organisations_approved_policy(
-        self, client_b, org_a, user_a
+        self, client_b, org_a, user_a, satisfy_policy_readiness
     ):
         person = OrganisationPerson.objects.create(
             organisation=org_a, user=user_a, full_name="Org A Holder"
@@ -176,6 +177,7 @@ class TestPolicyLifecycleTenantIsolation:
             role=GovernanceRoleAssignment.ROLE_POLICY_AUTHORISER,
             person=person,
         )
+        satisfy_policy_readiness(org_a, user_a)
         version = self._org_a_version(org_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 

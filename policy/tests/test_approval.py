@@ -28,9 +28,11 @@ from policy.services import (
 @pytest.mark.django_db
 class TestApprovePolicyDirectlyService:
     def test_direct_approval_sets_fields_and_emits_event(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         review_date = datetime.date(2027, 1, 1)
 
@@ -84,9 +86,11 @@ class TestApprovePolicyDirectlyService:
 @pytest.mark.django_db
 class TestRecordExternalPolicyApprovalService:
     def test_external_approval_sets_fields_and_emits_event(
-        self, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, external_person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         review_date = datetime.date(2027, 3, 1)
 
@@ -137,9 +141,11 @@ class TestRecordExternalPolicyApprovalService:
 @pytest.mark.django_db
 class TestApprovalSummaryWording:
     def test_direct_wording_names_the_authoriser_as_approver(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
         text = approval_summary(version)
@@ -148,9 +154,11 @@ class TestApprovalSummaryWording:
         assert "external" not in text.lower()
 
     def test_external_wording_never_implies_authoriser_logged_in(
-        self, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, external_person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         record_external_policy_approval(
             version, actor=user_a, next_review_date=datetime.date(2027, 1, 1)
@@ -173,9 +181,11 @@ class TestApprovalSummaryWording:
 @pytest.mark.django_db
 class TestSupersessionOnApproval:
     def test_approving_a_second_version_supersedes_the_first(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         first = make_draft_version(org_a, version_number=1)
         approve_policy_directly(first, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 
@@ -202,9 +212,11 @@ class TestSupersessionOnApproval:
         assert superseded_event.metadata == {"superseded_by_version_number": second.version_number}
 
     def test_first_approval_emits_no_superseded_event(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
         assert not ActivityEvent.objects.filter(
@@ -218,9 +230,11 @@ class TestSupersessionOnApproval:
 @pytest.mark.django_db
 class TestCreateNewDraftFromApproved:
     def test_creates_independent_copy_and_leaves_approved_row_untouched(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         approved = make_draft_version(org_a)
         approve_policy_directly(approved, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
         approved.refresh_from_db()
@@ -279,9 +293,11 @@ class TestCreateNewDraftFromApproved:
 @pytest.mark.django_db
 class TestApprovalViews:
     def test_direct_approve_get_then_post_confirms(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
 
         get_response = client_a.get(
@@ -322,9 +338,11 @@ class TestApprovalViews:
         assert any("not the assigned Policy Authoriser" in m for m in shown_messages)
 
     def test_external_approve_get_then_post_confirms(
-        self, client_a, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, external_person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, external_person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
 
         get_response = client_a.get(
@@ -378,9 +396,11 @@ class TestApprovalViews:
         assert any("Only a draft policy version can be approved" in m for m in shown_messages)
 
     def test_new_draft_view_redirects_to_edit_the_new_version(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         version = make_draft_version(org_a)
         approve_policy_directly(version, actor=user_a, next_review_date=datetime.date(2027, 1, 1))
 

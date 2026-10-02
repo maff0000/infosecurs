@@ -78,8 +78,10 @@ from governance.models import GovernanceRoleAssignment
 from security_baseline.models import ANSWER_NO, ANSWER_PARTIAL, ANSWER_UNKNOWN
 from security_state.services import LABEL_EVIDENCE_CONFLICT, LABEL_EVIDENCE_STALE
 
+from policy.clause_library import CLAUSE_LIBRARY_VERSION, build_normative_sections
 from policy.models import PolicyDocument, PolicyVersion
 from policy.grounding import build_policy_grounding_payload
+from policy.readiness import policy_readiness
 
 
 class PolicyLifecycleError(Exception):
@@ -314,8 +316,26 @@ def compute_current_review_warnings(version: PolicyVersion) -> list:
 
 @transaction.atomic
 def _persist_draft(
-    organisation, result: PolicyGenerationResult, record, grounding, *, actor
+    organisation,
+    result: PolicyGenerationResult,
+    record,
+    grounding,
+    *,
+    actor,
+    generation_source: str = PolicyVersion.GENERATION_SOURCE_AI,
 ) -> PolicyVersion:
+    """
+    Shared persistence step for every draft-generation path. `record`
+    (an `ai_platform.AIInvocationRecord` or `None`) and `generation_source`
+    are both caller-supplied, never inferred here - this is what lets
+    `generate_policy_draft_deterministic` below reuse this exact
+    persistence/activity-event/review-warning-merge logic (M008D-WI4's own
+    explicit instruction: "either parameterise it or write a small sibling
+    function... DO NOT let a deterministic draft get mis-tagged as
+    AI-generated") while still passing `generation_source=
+    GENERATION_SOURCE_DETERMINISTIC` and `record=None` explicitly, rather
+    than this function silently defaulting every caller to `AI`.
+    """
     document, _ = PolicyDocument.objects.get_or_create(organisation=organisation)
     # H3: tagged (source=ai / source=deterministic) so a later approval-time
     # recompute (`compute_current_review_warnings`) can refresh only the
@@ -331,7 +351,7 @@ def _persist_draft(
         title=result.policy_title,
         sections=[dataclasses.asdict(section) for section in result.sections],
         review_warnings=review_warnings,
-        generation_source=PolicyVersion.GENERATION_SOURCE_AI,
+        generation_source=generation_source,
         prompt_version=result.prompt_version,
         ai_invocation_record=record,
         created_by=actor,
@@ -342,6 +362,12 @@ def _persist_draft(
         actor=actor,
         related_object_type="policy_version",
         related_object_id=str(version.id),
+        # Deliberately unchanged from before this WI
+        # (`policy/tests/test_services.py`'s own pre-existing
+        # `test_emits_exactly_one_policy_draft_generated_event` pins this
+        # exact shape) - `generation_source` is already on the persisted
+        # `PolicyVersion` row itself; it does not also need to be
+        # duplicated into this event's metadata.
         metadata={"version_number": version.version_number},
     )
     return version
@@ -363,6 +389,14 @@ def generate_policy_draft(
     config-loading discipline, and `risk_register.interpretation_service.
     interpret_draft_risks`'s identical default). Tests pass
     `ai_platform.testing.FakePolicyGateway` explicitly.
+
+    This remains the OPTIONAL AI-based path (M008D-WI4 - docs/design/
+    M008D-POLICY-ARCHITECTURE.md §7 "Zero LLM calls in the default path" /
+    Central Architecture §10 "do not reintroduce a routine policy-
+    generation call") - `generate_policy_draft_deterministic` below is now
+    the routine/default path a Stage 6 guided screen uses. This function
+    is left completely intact and reachable; it is not removed, restricted,
+    or deprecated by that WI.
     """
     grounding = build_policy_grounding_payload(organisation)
     gateway = gateway if gateway is not None else LiteLLMGateway()
@@ -370,6 +404,56 @@ def generate_policy_draft(
     result, record = generate_policy(gateway, grounding, PROMPT_VERSION)
 
     return _persist_draft(organisation, result, record, grounding, actor=actor)
+
+
+def generate_policy_draft_deterministic(organisation, *, actor) -> PolicyVersion:
+    """
+    M008D-WI4 - the new, zero-AI DEFAULT policy-generation path (docs/
+    design/M008D-POLICY-ARCHITECTURE.md §2-3, §7).
+
+    Builds a `PolicyGenerationResult` entirely from `policy.clause_library.
+    build_normative_sections` - a fixed, versioned, Git-controlled clause
+    set, never an LLM call. `resolved_model=None` (no model was ever
+    resolved - there was no gateway call), `prompt_version=
+    CLAUSE_LIBRARY_VERSION` (the versioned artefact that actually produced
+    this draft's content, playing the exact same "which version of the
+    generation logic produced this" role `prompt_version` already plays
+    for an AI-generated draft - `policy.clause_library.CLAUSE_LIBRARY_
+    VERSION`'s own docstring explains why it is versioned the same way).
+
+    `review_warnings=[]` is passed into `_persist_draft` below exactly like
+    `create_new_draft_from_approved` already does for a manual copy - there
+    is no AI-authored warning to carry, so `_merge_and_tag_review_warnings`
+    (inside `_persist_draft`) computes a purely deterministic warning set
+    from this organisation's CURRENT `security_state_facts`, tagged
+    `source=deterministic` throughout, exactly as a later approval-time
+    recompute (`compute_current_review_warnings`) already expects.
+
+    This function makes ZERO AI/LLM calls - it imports neither
+    `ai_platform.policy_orchestration` nor `ai_platform.gateway`
+    (`LiteLLMGateway`/`PolicyGenerationGateway`), only the pure-dataclass
+    `ai_platform.policy_contracts` (via `policy.clause_library`), and
+    `policy.grounding.build_policy_grounding_payload` (a set of plain ORM
+    reads, not a network call) for the `security_state_facts` the review-
+    warning merge needs - see `policy/tests/test_services_deterministic.py`
+    for the import-statement-level proof this stays true.
+    """
+    grounding = build_policy_grounding_payload(organisation)
+    result = PolicyGenerationResult(
+        policy_title=f"{organisation.name} Information Security Policy",
+        sections=build_normative_sections(organisation),
+        review_warnings=[],
+        resolved_model=None,
+        prompt_version=CLAUSE_LIBRARY_VERSION,
+    )
+    return _persist_draft(
+        organisation,
+        result,
+        record=None,
+        grounding=grounding,
+        actor=actor,
+        generation_source=PolicyVersion.GENERATION_SOURCE_DETERMINISTIC,
+    )
 
 
 @transaction.atomic
@@ -428,6 +512,23 @@ def _finalise_approval(
         raise PolicyLifecycleError(
             f"PolicyVersion {version.pk} is {version.status!r}, not 'draft' - only a draft "
             "policy version can be approved."
+        )
+
+    # M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6): the final,
+    # authoritative backstop for the policy readiness gate - never trusted
+    # from the view layer's own (earlier, friendlier) check alone, same
+    # "re-check server-side" discipline this function's own docstring
+    # already applies to the draft-status check above. Deliberately checks
+    # only §6 conditions 1-2 (business/context facts + all 12 controls
+    # reviewed) - NO/PARTIAL/UNKNOWN control answers never block approval
+    # (§6 conditions 3-4), and `entitlements.metrics.
+    # get_security_foundations_completion`'s 18-item percentage is
+    # explicitly NOT a condition here (§6 condition 6) - see
+    # `policy.readiness.policy_readiness`'s own docstring.
+    readiness = policy_readiness(version.organisation)
+    if not readiness.is_ready:
+        raise PolicyLifecycleError(
+            "This policy cannot be approved yet: " + " ".join(readiness.blocking_reasons)
         )
 
     previous_approved = (
@@ -624,6 +725,7 @@ def create_new_draft_from_approved(version: PolicyVersion, *, actor) -> PolicyVe
 
 __all__ = [
     "generate_policy_draft",
+    "generate_policy_draft_deterministic",
     "PolicyLifecycleError",
     "DEFAULT_REVIEW_INTERVAL_DAYS",
     "default_next_review_date",

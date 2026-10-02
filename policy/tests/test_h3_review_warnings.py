@@ -70,9 +70,11 @@ def _has_control(subjects, control_key):
 @pytest.mark.django_db
 class TestCase1UnchangedGaps:
     def test_manual_redraft_carries_correct_warnings_through_create_edit_approve_and_display(
-        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, client_a, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, GAP_CONTROL, ANSWER_NO, actor=user_a)
 
         approved_v1 = make_draft_version(
@@ -120,9 +122,11 @@ class TestCase1UnchangedGaps:
 @pytest.mark.django_db
 class TestCase2GapResolvedBeforeApproval:
     def test_stale_warning_does_not_survive_to_preview_or_approval(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, GAP_CONTROL, ANSWER_UNKNOWN, actor=user_a)
 
         approved_v1 = make_draft_version(
@@ -147,9 +151,11 @@ class TestCase2GapResolvedBeforeApproval:
 @pytest.mark.django_db
 class TestCase3NewGapAppearsBeforeApproval:
     def test_new_warning_appears_in_preview_and_survives_to_approval(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, NEW_GAP_CONTROL, ANSWER_YES, actor=user_a)
 
         approved_v1 = make_draft_version(
@@ -173,9 +179,11 @@ class TestCase3NewGapAppearsBeforeApproval:
 @pytest.mark.django_db
 class TestCase4EvidenceConflictPreserved:
     def test_evidence_conflict_warning_survives_manual_draft_and_approval(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, EVIDENCE_CONFLICT_CONTROL, ANSWER_YES, actor=user_a)
 
         # A genuine, real, active CONTRADICTS link - same mechanism/fixture
@@ -211,9 +219,11 @@ class TestCase4EvidenceConflictPreserved:
 @pytest.mark.django_db
 class TestImmutableHistoryRegression:
     def test_approved_and_superseded_versions_review_warnings_never_retroactively_change(
-        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version
+        self, org_a, user_a, person_a, assign_policy_authoriser, make_draft_version,
+        satisfy_policy_readiness,
     ):
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, GAP_CONTROL, ANSWER_UNKNOWN, actor=user_a)
 
         approved_v1 = make_draft_version(
@@ -250,7 +260,7 @@ class TestImmutableHistoryRegression:
 @pytest.mark.django_db
 class TestAiGeneratedDraftApprovalRegression:
     def test_ai_authored_warnings_are_not_discarded_by_the_approval_recompute(
-        self, org_a, user_a, person_a, assign_policy_authoriser
+        self, org_a, user_a, person_a, assign_policy_authoriser, satisfy_policy_readiness
     ):
         """Not one of Central Architecture's own 4 numbered cases, but
         implied by the design tension `compute_current_review_warnings`'s
@@ -259,6 +269,7 @@ class TestAiGeneratedDraftApprovalRegression:
         `_finalise_approval`'s recompute untouched, while the deterministic
         subset is still correctly current at approval time."""
         assign_policy_authoriser(org_a, person_a)
+        satisfy_policy_readiness(org_a, user_a)
         _set_answer(org_a, GAP_CONTROL, ANSWER_UNKNOWN, actor=user_a)
 
         ai_subject = "AI-authored: unusual third-party data-sharing clause noticed"

@@ -7,6 +7,11 @@ app_name = "policy"
 urlpatterns = [
     path("", views.policy_detail, name="detail"),
     path("generate/", views.policy_generate, name="generate"),
+    path(
+        "generate/deterministic/",
+        views.policy_generate_deterministic,
+        name="generate_deterministic",
+    ),
     path("versions/<uuid:version_id>/", views.policy_version_detail, name="version_detail"),
     path("versions/<uuid:version_id>/edit/", views.policy_edit, name="version_edit"),
     path(

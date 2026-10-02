@@ -34,11 +34,15 @@ from django.db import transaction
 
 from evidence.services import create_file_evidence
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
-from organisations.models import Organisation, OrganisationMembership
+from governance.services import assign_role
+from organisations.models import SECTOR_PROFESSIONAL_CONSULTING, Organisation, OrganisationMembership, OrganisationProfile
 from policy.models import PolicyDocument, PolicyVersion
 from policy.services import approve_policy_directly, create_new_draft_from_approved
 from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
 from questionnaire.services import accept_questionnaire_response
+from security_baseline.services import record_structured_baseline_answer
+from security_baseline.structured_catalogue import STRUCTURED_OPTIONS
+from workplace.models import Workplace
 
 ORG_NAME = "Backup Restore Demo Org (synthetic)"
 USER_USERNAME = "backup_restore_demo"
@@ -92,6 +96,37 @@ class Command(BaseCommand):
                 role=GovernanceRoleAssignment.ROLE_POLICY_AUTHORISER,
                 defaults={"person": person},
             )
+
+            # M008D-WI4: the policy readiness gate (docs/design/
+            # M008D-POLICY-ARCHITECTURE.md §6) now requires a confirmed
+            # legal name/sector, >=1 active workplace, all three
+            # governance roles, and all 12 controls reviewed before
+            # `approve_policy_directly` (called below) will succeed - this
+            # synthetic fixture organisation needs the same minimal setup
+            # a real customer's own journey through Stage 1-4/Governance
+            # would provide.
+            OrganisationProfile.objects.get_or_create(
+                organisation=organisation,
+                defaults={
+                    "legal_trading_name": ORG_NAME,
+                    "sector": SECTOR_PROFESSIONAL_CONSULTING,
+                },
+            )
+            Workplace.objects.get_or_create(
+                organisation=organisation,
+                name="Demo HQ (synthetic)",
+                defaults={"type": Workplace.TYPE_DEDICATED_OFFICE},
+            )
+            for role_key, _label in GovernanceRoleAssignment.ROLE_CHOICES:
+                if not GovernanceRoleAssignment.objects.filter(
+                    organisation=organisation, role=role_key
+                ).exists():
+                    assign_role(organisation=organisation, role=role_key, person=person)
+            for control_key, options in STRUCTURED_OPTIONS.items():
+                option_code = next(iter(options.keys()))
+                record_structured_baseline_answer(
+                    organisation, control_key, option_code, actor=user
+                )
 
         # --- Evidence: real uploaded file bytes -----------------------------
         evidence_item = organisation.evidence_items.filter(title=EVIDENCE_TITLE).first()

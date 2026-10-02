@@ -152,3 +152,74 @@ def make_draft_version(db):
         return PolicyVersion.objects.create(**defaults)
 
     return _make
+
+
+# --- Policy readiness fixture (M008D-WI4) -----------------------------------
+# Added when the §6 readiness gate was wired into `policy.services.
+# _finalise_approval` - every PRE-EXISTING test in this directory that
+# exercises a real approval (`approve_policy_directly`/
+# `record_external_policy_approval`, or the HTTP approve views) now needs
+# this to be satisfied first, or that approval attempt raises
+# `PolicyLifecycleError`/shows a "not yet ready" error instead of
+# succeeding. This fixture ONLY fills in whatever readiness condition a
+# calling test has not already set up itself (e.g. it never overwrites an
+# already-assigned Policy Authoriser - see `_satisfy`'s own "skip a role
+# that already has an assignment" check) - never a parallel path that
+# could interact with product logic differently from a real customer's
+# own journey through Stage 1-4/Governance.
+@pytest.fixture
+def satisfy_policy_readiness():
+    """`satisfy_policy_readiness(organisation, actor)` - minimal setup so
+    `policy.readiness.policy_readiness(organisation).is_ready` is True:
+    a confirmed legal name + sector, one active workplace, all three
+    governance roles assigned, and a recorded structured Stage 4 answer
+    (any option_code) for every one of the 12 catalogue controls.
+
+    Deliberately called BEFORE a test's own, more specific baseline
+    mutation (e.g. `save_baseline_answers`/`_set_answer` for one named
+    control) wherever both are used in the same test - this fixture's own
+    blanket "YES for every control" write only establishes that every
+    control HAS been reviewed (an `AnswerSelectionDetail` row exists);
+    it never needs to run again afterwards even if a later, more specific
+    call changes that one control's canonical `BaselineAnswer.answer` -
+    `security_baseline.stage4.stage4_progress`'s own `reviewed` count
+    only checks row EXISTENCE, not whether its value still matches
+    whatever this fixture originally wrote."""
+
+    def _satisfy(organisation, actor):
+        from governance.models import GovernanceRoleAssignment, OrganisationPerson
+        from governance.services import assign_role
+        from organisations.models import SECTOR_PROFESSIONAL_CONSULTING, OrganisationProfile
+        from security_baseline.services import record_structured_baseline_answer
+        from security_baseline.structured_catalogue import STRUCTURED_OPTIONS
+        from workplace.models import Workplace
+
+        OrganisationProfile.objects.update_or_create(
+            organisation=organisation,
+            defaults={
+                "legal_trading_name": f"{organisation.name} (readiness fixture)",
+                "sector": SECTOR_PROFESSIONAL_CONSULTING,
+            },
+        )
+        Workplace.objects.get_or_create(
+            organisation=organisation,
+            name="Readiness fixture HQ",
+            defaults={"type": Workplace.TYPE_DEDICATED_OFFICE},
+        )
+        fixture_person, _ = OrganisationPerson.objects.get_or_create(
+            organisation=organisation,
+            user=None,
+            full_name="Readiness Fixture Person",
+            defaults={"job_title": "Fixture"},
+        )
+        for role_key, _label in GovernanceRoleAssignment.ROLE_CHOICES:
+            already_assigned = GovernanceRoleAssignment.objects.filter(
+                organisation=organisation, role=role_key
+            ).exists()
+            if not already_assigned:
+                assign_role(organisation=organisation, role=role_key, person=fixture_person)
+        for control_key, options in STRUCTURED_OPTIONS.items():
+            option_code = next(iter(options.keys()))
+            record_structured_baseline_answer(organisation, control_key, option_code, actor=actor)
+
+    return _satisfy

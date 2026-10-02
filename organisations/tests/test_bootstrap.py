@@ -216,11 +216,37 @@ class TestCreateCustomerZeroGovernanceBootstrap:
         management-command bootstrap -> real login -> real "Approve
         directly" POST -> STATUS_APPROVED / APPROVAL_MODE_DIRECT.
         """
+        from organisations.models import SECTOR_PROFESSIONAL_CONSULTING, OrganisationProfile
         from policy.models import PolicyDocument, PolicyVersion
+        from security_baseline.services import record_structured_baseline_answer
+        from security_baseline.structured_catalogue import STRUCTURED_OPTIONS
+        from workplace.models import Workplace
 
         self._bootstrap(monkeypatch)
         user = self._user()
         organisation = self._organisation()
+
+        # M008D-WI4 (docs/design/M008D-POLICY-ARCHITECTURE.md §6): the
+        # policy readiness gate now also requires a confirmed legal name/
+        # sector, >=1 active workplace, and all 12 controls reviewed -
+        # `create_customer_zero` already assigns all three governance
+        # roles (proof point 2 above), so only these three remain to set
+        # up for this end-to-end approval proof.
+        OrganisationProfile.objects.update_or_create(
+            organisation=organisation,
+            defaults={
+                "legal_trading_name": self.ORG_NAME,
+                "sector": SECTOR_PROFESSIONAL_CONSULTING,
+            },
+        )
+        Workplace.objects.get_or_create(
+            organisation=organisation,
+            name="CZ Gov Synthetic HQ",
+            defaults={"type": Workplace.TYPE_DEDICATED_OFFICE},
+        )
+        for control_key, options in STRUCTURED_OPTIONS.items():
+            option_code = next(iter(options.keys()))
+            record_structured_baseline_answer(organisation, control_key, option_code, actor=user)
 
         document = PolicyDocument.objects.create(organisation=organisation)
         version = PolicyVersion.objects.create(
