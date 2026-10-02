@@ -13,6 +13,7 @@ from django.test import Client
 from key_assets.models import KeyAsset
 from organisations.models import Organisation, OrganisationMembership
 from risk_register.models import Risk
+from risk_register.risk_choices import TREATMENT_MITIGATE_SUGGESTED
 
 
 @pytest.fixture
@@ -90,15 +91,27 @@ def confirmed_asset_a(db, org_a):
 
 
 def _risk(org, **overrides):
+    """
+    `scenario_id="endpoint_device_encryption_loss_theft"` (M008C-WI3):
+    every real, catalogue-originated `Risk` row has one
+    (`risk_register.scenario_engine.instantiate_risks_for_organisation`
+    always sets it) - set here too so this fixture matches production
+    shape and `remediation.views._scenario_description_for`/
+    `action_create_from_risk` has a real scenario to derive the action's
+    description from, exactly as it would for a real risk.
+    `rationale`/`proposed_treatment` use real M008C-WI3 closed-form codes
+    (not free text) for the same reason.
+    """
     defaults = dict(
         organisation=org,
         title="Org risk",
+        scenario_id="endpoint_device_encryption_loss_theft",
         threat="t",
         vulnerability="v",
         impact=3,
         likelihood=3,
-        rationale="r",
-        proposed_treatment="Do the treatment thing.",
+        rationale="impact_3_confidential_data",
+        proposed_treatment=TREATMENT_MITIGATE_SUGGESTED,
         status=Risk.STATUS_CONFIRMED,
     )
     defaults.update(overrides)
@@ -107,9 +120,9 @@ def _risk(org, **overrides):
 
 @pytest.fixture
 def risk_a(db, org_a):
-    return _risk(org_a, title="Org A risk", proposed_treatment="Org A proposed treatment.")
+    return _risk(org_a, title="Org A risk")
 
 
 @pytest.fixture
 def risk_b(db, org_b):
-    return _risk(org_b, title="Org B risk", proposed_treatment="Org B proposed treatment.")
+    return _risk(org_b, title="Org B risk")

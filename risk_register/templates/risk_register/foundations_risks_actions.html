@@ -1,0 +1,98 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Your Risks &amp; Actions — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .risks-actions__headline { font-size: 1.15rem; font-weight: 600; margin: 0 0 var(--space-4) 0; }
+  .risks-actions__group { margin-bottom: var(--space-5); }
+  .risks-actions__group-intro { color: var(--color-text-muted); margin: -4px 0 var(--space-3) 0; }
+  .risk-action-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+  .risk-action-card--unconfirmed { border-left: 4px solid var(--color-warning-text, #8a5a00); }
+  .risk-action-card--confirmed { border-left: 4px solid var(--color-error-text, #a3521f); }
+  .risk-action-card__title { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .risk-action-card__meta { color: var(--color-text-muted); font-size: 0.9rem; margin: 0 0 var(--space-2) 0; }
+  .risk-action-card__question-links { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+  .badge--band-low { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--band-medium { background: #fdf1d6; color: #8a5a00; }
+  .badge--band-high { background: #fbe6d6; color: #a3521f; }
+  .badge--band-critical { background: var(--color-error-bg); color: var(--color-error-text); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Your Risks &amp; Actions</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'organisations:foundations' organisation.id %}">&larr; Back to Foundations</a>
+            &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<p class="risks-actions__headline">{{ headline }}</p>
+
+<div class="empty-state" style="text-align: left;">
+    <p>
+        Every risk below is matched deterministically against your confirmed key assets and your
+        security-baseline answers - no AI call is made to produce this list. Risks are regenerated
+        automatically each time you visit this page, but nothing already confirmed or dismissed is
+        ever changed or duplicated.
+    </p>
+</div>
+
+<section class="risks-actions__group">
+    <h2>Confirmed risks</h2>
+    <p class="risks-actions__group-intro">
+        Your current baseline answers confirm these control gaps exist.
+    </p>
+    {% if confirmed_risks %}
+        {% for risk in confirmed_risks %}
+            <div class="risk-action-card risk-action-card--confirmed">
+                <p class="risk-action-card__title">
+                    <a href="{% url 'risk_register:detail' organisation.id risk.id %}">{{ risk.title }}</a>
+                    <span class="badge badge--band-{{ risk.risk_band }}">{{ risk.risk_band_label }} ({{ risk.score }})</span>
+                </p>
+                <p class="risk-action-card__meta">{{ risk.consequence }}</p>
+                <div class="risk-action-card__question-links">
+                    <a class="button button--secondary" href="{% url 'risk_register:detail' organisation.id risk.id %}">Review this risk</a>
+                    <a class="button button--secondary" href="{% url 'remediation:create_from_risk' organisation.id risk.id %}">Create remediation action</a>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state"><p>No confirmed risks yet.</p></div>
+    {% endif %}
+</section>
+
+<section class="risks-actions__group">
+    <h2>Items still needing confirmation</h2>
+    <p class="risks-actions__group-intro">
+        We don't yet know whether these control gaps exist - the underlying security-baseline
+        question hasn't been answered, or was answered "not sure". Confirm the question to find out.
+    </p>
+    {% if needing_confirmation %}
+        {% for item in needing_confirmation %}
+            <div class="risk-action-card risk-action-card--unconfirmed">
+                <p class="risk-action-card__title">{{ item.risk.title }}</p>
+                <p class="risk-action-card__meta">
+                    We don't yet know whether this applies to your organisation - the recommended
+                    next step is to confirm the underlying question, not a remediation action.
+                </p>
+                <div class="risk-action-card__question-links">
+                    {% for link in item.question_links %}
+                        <a class="button button--secondary" href="{{ link.url }}">Confirm: {{ link.title }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state"><p>Nothing awaiting confirmation right now.</p></div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -340,6 +340,21 @@ def organisation_foundations(request, organisation_id):
                 kwargs={"organisation_id": organisation.id},
             ),
         },
+        # M008C-WI3: Stage 5 "Your Risks & Actions" - same purely additive
+        # pattern as the Stage 1-3 tiles above (this WI's own instruction:
+        # "add a 4th tile there for Stage 5, same pattern"). Stage 4 (the
+        # guided security-baseline walk, `security_baseline:foundations_start`)
+        # deliberately has no tile of its own here - it was already reachable
+        # before this WI via the 12 BASELINE_CONTROL rows' own `action_url`
+        # below, and adding one was not asked for by this WI's scope.
+        {
+            "number": 5,
+            "name": "Your Risks & Actions",
+            "url": reverse(
+                "risk_register:foundations_risks_actions",
+                kwargs={"organisation_id": organisation.id},
+            ),
+        },
     ]
 
     return render(

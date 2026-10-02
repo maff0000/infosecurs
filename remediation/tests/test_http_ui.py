@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from activity.models import ActivityEvent
 from remediation.models import RemediationAction
+from risk_register.methodology import CATALOGUE_BY_ID
 
 
 @pytest.mark.django_db
@@ -85,26 +86,30 @@ class TestActionCreate:
 
 @pytest.mark.django_db
 class TestActionCreateFromRisk:
-    def test_get_prefills_title_and_description_from_risk(self, client_a, org_a, risk_a):
+    def test_get_prefills_title_and_shows_scenario_description_from_risk(
+        self, client_a, org_a, risk_a
+    ):
         response = client_a.get(
             reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id])
         )
         assert response.status_code == 200
         content = response.content.decode()
         assert risk_a.title in content
-        assert risk_a.proposed_treatment in content
+        scenario_treatment = CATALOGUE_BY_ID[risk_a.scenario_id].suggested_treatment
+        assert scenario_treatment in content
 
     def test_get_never_creates_an_action_automatically(self, client_a, org_a, risk_a):
         """PID §13: 'Creation is explicit... do not automatically create actions for every risk.'"""
         client_a.get(reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id]))
         assert RemediationAction.objects.filter(organisation=org_a).count() == 0
 
-    def test_post_creates_action_linked_to_the_risk(self, client_a, org_a, risk_a, user_a):
+    def test_post_creates_action_linked_to_the_risk_with_scenario_description(
+        self, client_a, org_a, risk_a, user_a
+    ):
         response = client_a.post(
             reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id]),
             {
                 "title": risk_a.title,
-                "description": risk_a.proposed_treatment,
                 "priority": "medium",
                 "control_key": "",
                 "key_asset": "",
@@ -117,13 +122,13 @@ class TestActionCreateFromRisk:
         assert action.risk_id == risk_a.id
         assert action.status == RemediationAction.STATUS_OPEN
         assert action.created_by_id == user_a.id
+        assert action.description == CATALOGUE_BY_ID[risk_a.scenario_id].suggested_treatment
 
     def test_post_emits_action_created_event_with_risk_id(self, client_a, org_a, risk_a, user_a):
         client_a.post(
             reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id]),
             {
                 "title": risk_a.title,
-                "description": risk_a.proposed_treatment,
                 "priority": "medium",
                 "control_key": "",
                 "key_asset": "",
@@ -143,8 +148,17 @@ class TestActionCreateFromRisk:
             "risk_id": str(risk_a.id),
         }
 
-    def test_user_can_edit_prefilled_content_before_creating(self, client_a, org_a, risk_a):
-        """PID §13: 'user reviews/edits' - the prefill is not forced through verbatim."""
+    def test_user_can_edit_title_but_a_forged_description_override_is_ignored(
+        self, client_a, org_a, risk_a
+    ):
+        """
+        PID §13: 'user reviews/edits' - the title is genuinely editable.
+        M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10: description is NOT
+        - there is no form field for it any more, so even a forged POST
+        "description" key is silently ignored (ordinary Django behaviour
+        for a POST key with no matching field), never persisted in place
+        of the scenario's own verbatim text.
+        """
         response = client_a.post(
             reverse("remediation:create_from_risk", args=[org_a.id, risk_a.id]),
             {
@@ -161,6 +175,8 @@ class TestActionCreateFromRisk:
         action = RemediationAction.objects.get(organisation=org_a)
         assert action.title == "A rewritten, more specific action title"
         assert action.priority == "critical"
+        assert action.description == CATALOGUE_BY_ID[risk_a.scenario_id].suggested_treatment
+        assert "A rewritten description the user actually wrote." not in action.description
 
     def test_nonexistent_risk_id_is_404(self, client_a, org_a):
         import uuid
@@ -202,7 +218,8 @@ class TestActionList:
 class TestActionEdit:
     def test_edit_updates_fields_without_touching_status(self, client_a, org_a, user_a):
         action = RemediationAction.objects.create(
-            organisation=org_a, title="Original title", created_by=user_a
+            organisation=org_a, title="Original title", created_by=user_a,
+            description="Original, programmatically-set description.",
         )
         response = client_a.post(
             reverse("remediation:edit", args=[org_a.id, action.id]),
@@ -221,6 +238,10 @@ class TestActionEdit:
         assert action.title == "Updated title"
         assert action.priority == "critical"
         assert action.status == RemediationAction.STATUS_OPEN
+        # M008-FREE-TEXT-REPLACEMENT-REGISTER.md row 10: description is not
+        # a form field on `remediation:edit` either - a forged POST
+        # "description" value must be silently ignored, never persisted.
+        assert action.description == "Original, programmatically-set description."
 
 
 @pytest.mark.django_db
