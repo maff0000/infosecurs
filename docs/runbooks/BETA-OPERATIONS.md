@@ -198,6 +198,99 @@ source/live stack. See `docs/runbooks/BACKUP-RESTORE.md` (landed in M006
 Round 5, PID §14) for the full operator runbook, the operator safety note,
 and what "verified" means.
 
+## Secret-safe deployment identity checks
+
+**(M008 dev-schema-drift recovery incident, `docs/evidence/M008-DEV-SCHEMA-DRIFT-INCIDENT.md`.)**
+`docker compose config` fully resolves environment interpolation and
+prints the literal value of every environment variable it has — including
+`POSTGRES_PASSWORD` and any other secret in `.env` — for every service it
+describes. **Do not capture its raw output as operational evidence, and
+do not run it at all when you only need to confirm which containers/
+volumes/project a stack resolves to.** This is exactly how a credential
+was exposed into a captured terminal transcript during this incident
+(contained; never written to disk/Git/evidence; the credential was
+rotated afterward — see the evidence doc for the full record).
+
+Use these non-secret alternatives instead, whenever the actual question is
+"is this the stack/container/volume I think it is," not "what are this
+service's resolved settings":
+
+```bash
+# Container identity, no environment rendered at all:
+COMPOSE_PROJECT_NAME=<project> docker compose ps -q db
+COMPOSE_PROJECT_NAME=<project> docker compose ps -q web
+# Compare the returned IDs against ones you already recorded.
+
+# Compose project/service labels (never environment values):
+docker inspect <container> --format \
+  '{{index .Config.Labels "com.docker.compose.project"}} / {{index .Config.Labels "com.docker.compose.service"}}'
+
+# Mounts only - volume names/destinations, never a container's env:
+docker inspect <container> --format '{{json .Mounts}}'
+```
+
+**Never** run `docker inspect ... .Config.Env` either — it renders the
+same resolved secret values `docker compose config` does, just via a
+different command. If you ever need to confirm an env var's *name* is set
+(not its value), `docker exec <container> printenv | cut -d= -f1 | sort`
+prints names only. If you need a specific value for a legitimate
+operational reason (e.g. recovering it into a new `.env`), redirect the
+command's output straight into a file you control (never let it reach a
+captured terminal/tool transcript) — see the evidence doc's D2 section for
+the exact pattern used to recover and rotate `POSTGRES_PASSWORD` safely.
+
+## Prevention — after advancing canonical main on a persistent dev stack
+
+**(M008 dev-schema-drift recovery incident.)** This stack's `web` service
+only reruns `python manage.py migrate --noinput` when the `web` container
+itself restarts (see **Start**/**Migrations** above) — a long-running
+container that is never restarted after a fast-forward of the source tree
+(e.g. a bind-mounted checkout updated in place) will keep serving old
+application code against whatever schema the database was last migrated
+to, silently drifting from the canonical migration graph as soon as a new
+migration lands in source. **`/healthz/ == 200` alone must never be
+treated as proof the application is usable after a schema-bearing
+change** — `core/views.py::healthz` only proves `SELECT 1` succeeds; it
+says nothing about whether the currently-loaded ORM code matches the live
+schema, and it returned `200` throughout the M008 incident while a real
+page was raising `ProgrammingError`.
+
+After any canonical-main advance on a persistent (not freshly-created)
+development stack, before trusting it as "ready," prove all of the
+following — a mechanical sequence, not a prose assurance:
+
+1. **Source SHA** — confirm which commit the running `web` container is
+   actually serving (e.g. `git rev-parse HEAD` in the bind-mounted
+   checkout, or the image's own SHA label for a release artifact).
+2. **Migration status** — `docker compose exec web python manage.py showmigrations`
+   and `docker compose exec web python manage.py migrate --plan`. Any
+   unapplied migration here means the database has not yet caught up with
+   the code already running.
+3. **Apply canonical migrations where required** —
+   `docker compose exec web python manage.py migrate --noinput`. No
+   direct SQL, no `--fake`, no database recreation, no tenant data reset.
+4. **`migrate --plan` empty afterward** and
+   `docker compose exec web python manage.py makemigrations --check --dry-run`
+   clean — proves the applied state matches the canonical migration graph
+   with nothing left over on either side.
+5. **An authenticated, real-page smoke** — not `/healthz/` alone. At
+   minimum: Home, the Foundations workspace, and one further
+   model-backed guided page (e.g. a Stage page or Security Policy) must
+   render with no `ProgrammingError`/`OperationalError`/traceback in the
+   response body. A health check that only proves database *reachability*
+   cannot stand in for this.
+
+Also: a persistent stack is only genuinely operator-recoverable if a
+valid host configuration (a real, complete `.env` for this deployment)
+exists and is readable by the governed backup/restore scripts — a set of
+already-running containers alone is **not** sufficient backup/recovery
+readiness, because recreating any one of them (a crash, a host reboot, a
+deliberate credential rotation) requires that file to exist and be
+complete. If `.env` is ever found missing on a stack you rely on, treat
+that as its own operational gap to close (recovering every value from the
+already-running containers' own environment, never inventing one) before
+relying on that stack's backup/restore path.
+
 ## Release artifact
 
 **PID:** `docs/pids/M006-CUSTOMER-ZERO-BETA-HARDENING.md` §15/§16 (landed
