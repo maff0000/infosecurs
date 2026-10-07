@@ -196,6 +196,31 @@ def get_member_organisation_or_404(user, organisation_id):
     )
 
 
+def _customer_zero_reset_enabled_for(organisation) -> bool:
+    """
+    M008A's own reset-affordance visibility gate
+    (docs/evidence/M008A-RESET-DELETION-MANIFEST.md), factored out here
+    (M008E-WI1) so the Home dashboard and the Organisation hub both render
+    their own "is the dev reset control visible" decision from this one
+    function rather than two independently-maintained copies of the same
+    two-line expression. This is a pure, read-only visibility check used
+    ONLY to decide whether a template shows a link to the existing
+    confirmation page - it is never the reset view's own authorization
+    logic (that stays entirely in `customer_zero_reset` below, checked
+    first, fail-closed, independent of whatever any template happened to
+    render).
+
+    True only when BOTH `settings.CUSTOMER_ZERO_RESET_ENABLED` (itself
+    DJANGO_ENV == "development" AND the explicit INFOSECURS_ENABLE_
+    CUSTOMER_ZERO_RESET opt-in - see config/settings.py) AND this exact
+    organisation is the trusted `CustomerZeroFixture`.
+    """
+    return (
+        settings.CUSTOMER_ZERO_RESET_ENABLED
+        and CustomerZeroFixture.objects.filter(organisation=organisation).exists()
+    )
+
+
 @login_required
 def organisation_list(request):
     organisations = Organisation.objects.filter(memberships__user=request.user).order_by("name")
@@ -266,11 +291,22 @@ def organisation_detail(request, organisation_id):
         # never happen.
         return redirect_to_login(request.get_full_path())
 
+    # M008E-WI1 (PID §E2/§E9): the DEV Customer Zero reset affordance is
+    # independent of package tier - a Paused session still gets it,
+    # because it is a development-environment/fixture-identity gate, not
+    # an entitlement. Computed once here, reused in both the paused and
+    # non-paused branches below.
+    customer_zero_reset_enabled = _customer_zero_reset_enabled_for(organisation)
+
     if context.package_tier == TIER_PAUSED:
         return render(
             request,
             "organisations/detail.html",
-            {"organisation": organisation, "is_paused": True},
+            {
+                "organisation": organisation,
+                "is_paused": True,
+                "customer_zero_reset_enabled": customer_zero_reset_enabled,
+            },
         )
 
     posture = get_foundational_security_posture(organisation)
@@ -298,6 +334,7 @@ def organisation_detail(request, organisation_id):
             ),
             "needs_attention_lines": _needs_attention_lines(needs_attention, organisation.id),
             "current_stage": current_stage,
+            "customer_zero_reset_enabled": customer_zero_reset_enabled,
         },
     )
 
@@ -427,10 +464,10 @@ def organisation_hub(request, organisation_id):
             # "the URL happens to be unreachable" (the dispatch's own
             # explicit requirement: a template conditional showing/hiding a
             # link must check the same setting the view itself checks).
-            "customer_zero_reset_enabled": (
-                settings.CUSTOMER_ZERO_RESET_ENABLED
-                and CustomerZeroFixture.objects.filter(organisation=organisation).exists()
-            ),
+            # M008E-WI1: now the shared `_customer_zero_reset_enabled_for`
+            # helper (same two checks, same result) - also used by
+            # `organisation_detail`'s Home dashboard below.
+            "customer_zero_reset_enabled": _customer_zero_reset_enabled_for(organisation),
         },
     )
 
