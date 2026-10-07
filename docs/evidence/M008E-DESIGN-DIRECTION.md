@@ -214,11 +214,22 @@ environment/fixture-identity gate, not a package-tier entitlement (PID
   existing tint — a second, stronger visual cue for "you are here,"
   addressing the review's finding that the old pale-tint-only signal was
   genuinely low-contrast at a glance (§4/§8 of the review) — `aria-
-  current="page"` itself was already correct and is untouched.
+  current="page"` itself was already correct and is untouched. This
+  accent bar initially collided with keyboard focus on that same link —
+  see §8.2 for the finding and fix.
 - Manual keyboard tabbing was re-checked after the CSS changes on Home,
   Foundations, and the Stage 4 question form in the disposable stack —
-  focus order unchanged, visible focus ring present throughout, no
-  keyboard traps.
+  focus order unchanged, no keyboard traps. The claim that a visible
+  focus ring was "present throughout" was **not actually true**: it
+  missed a `box-shadow` collision specific to the current-page sidebar
+  nav link, where the new accent bar above silently overrode the focus
+  ring (higher CSS specificity, no `!important` anywhere). Manual tabbing
+  did not catch it: the defect is only visible as an absence (no change
+  between focused and unfocused states), which is easy to miss by eye
+  against a link that is already visually distinct as the current page,
+  and is only reliably caught by directly comparing computed style
+  before and after `.focus()`. An independent audit on PR #97 did exactly
+  that and caught it. See §8.2 for the finding and fix.
 
 ## 8. Verification
 
@@ -280,6 +291,66 @@ narrative because the four-invariant delivery chain this Work Order
 operates under depends on an honest account of what actually happened,
 including a mistake this Implementer made and caught itself — not just
 the corrected end state.
+
+### 8.2 A real regression missed by this Work Order's own manual check, found by independent audit on PR #97, and fixed
+
+A fresh Independent Auditor reviewing PR #97 found that the current-page
+sidebar nav link (`.shell-nav__link[aria-current="page"]`) never showed
+a visible focus ring when it received keyboard focus. Reproduced
+directly via Playwright: computed `box-shadow` on that link was
+byte-identical before and after calling `.focus()` on it, while a
+control non-current nav link showed its ring appear normally under the
+same comparison.
+
+Root cause: the sitewide `:focus-visible` rule
+(`static/organisations/css/app.css`, specificity (0,1,0)) sets
+`box-shadow: var(--focus-ring)`. This Work Order's own new current-page
+accent-bar rule, `.shell-nav__link[aria-current="page"]` (specificity
+(0,2,0)), also sets `box-shadow` — `inset 3px 0 0 var(--color-primary)`.
+With no `!important` used anywhere in the stylesheet, the higher-
+specificity accent-bar rule always won, so on this one element the
+accent bar silently and permanently overwrote the focus ring, whether
+the link was focused or not. The §7 manual keyboard-tabbing check did
+not catch this: it checked that focus order was sane and that *a* focus
+ring appeared on the pages it exercised, but did not isolate and
+directly compare the current-page nav link's focused vs. unfocused
+computed style specifically — exactly what the audit's Playwright check
+did. Because `.shell-nav`/`.shell-nav__link` is the shared sidebar
+rendered on every authenticated page, this was a sitewide
+keyboard-accessibility defect, not limited to the three pages this Work
+Order's manual check happened to exercise.
+
+Fixed by adding one rule to `static/organisations/css/app.css`:
+
+```css
+.shell-nav__link[aria-current="page"]:focus-visible {
+  box-shadow: var(--focus-ring), inset 3px 0 0 var(--color-primary);
+}
+```
+
+Its specificity, (0,3,0), beats both rules above, and it lists both
+signals in one `box-shadow` value — layering the outer focus ring and
+the inset accent bar — rather than letting either silently overwrite
+the other. The current-page link keeps its accent bar/tint at rest and
+gains a genuinely distinct, visible ring when focused; `border-radius`
+still comes from the untouched sitewide `:focus-visible` rule, since
+this new rule does not set it.
+
+Re-verified directly, by the same method the Auditor used, in a fresh
+disposable stack: logged in as the Customer Zero fixture user, navigated
+to Home (`aria-current="page"` there), and compared computed
+`box-shadow` before/after `.focus()` — now genuinely different, where
+before the fix it was identical. Confirmed the accent bar/tint is still
+present unfocused, and that a control non-current nav link's ordinary
+focus ring is unaffected. Full `organisations` + `security_baseline` +
+`core` suite re-run afterward with 0 new failures versus the pre-fix
+baseline.
+
+This is recorded here, alongside §8.1's earlier self-caught regression,
+for the same reason: the four-invariant delivery chain this Work Order
+operates under depends on an honest account of what happened, including
+a defect this Implementer's own manual check missed and an outside
+audit caught — not a narrative edited after the fact to look clean.
 
 ## 9. Complete changed/new file list
 

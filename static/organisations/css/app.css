@@ -687,6 +687,16 @@ a:hover { color: var(--color-primary-dark); }
   color: var(--color-primary-dark);
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
+/* M008E-WI1 repair (post-PR#97 audit finding): the rule above has higher
+   specificity than the sitewide `:focus-visible` rule and sets its own
+   box-shadow, so on this element the accent bar was silently winning over
+   the focus ring - the current-page link never showed visible keyboard
+   focus. Give the focused+current-page state its own explicit box-shadow
+   that layers both signals (outer focus ring + inset accent bar) rather
+   than letting one overwrite the other. */
+.shell-nav__link[aria-current="page"]:focus-visible {
+  box-shadow: var(--focus-ring), inset 3px 0 0 var(--color-primary);
+}
 
 .shell-main {
   flex: 1 1 0%;
