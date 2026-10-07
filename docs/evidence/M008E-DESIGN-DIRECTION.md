@@ -239,6 +239,48 @@ environment/fixture-identity gate, not a package-tier entitlement (PID
   which does carry a locally-generated dev secret key, is gitignored and
   was never staged).
 
+### 8.1 A real regression, found after the first round of commits and fixed
+
+After the first implementation commit, a full-repository `pytest -q` run
+(2242 tests, beyond what this Work Order strictly required — it only
+requires the suites for apps whose templates/views were touched) turned
+up one genuine failure and five cascading errors. Isolating each
+individually (re-running them alone once the big run finished) showed:
+
+- `core/tests/test_wi6_area_smoke_browser_acceptance.py::test_every_
+  previously_uncovered_organisation_scoped_area_smoke_at_all_widths`
+  **FAILED** for real: `scrollWidth=393 > clientWidth=375` on the
+  "Baseline" area — which, via `security_baseline.views.baseline_view`'s
+  own legacy-redirect, lands on exactly the Stage 4 question page this
+  Work Order restyled.
+- The other five (`core/tests/test_wi6_xss_browser_acceptance.py` and
+  four other apps' `test_narrow_viewport_regression.py` files) had
+  errored with Postgres deadlocks/duplicate-key teardown failures - a
+  cascade from the first test's browser/DB state, not five independent
+  defects; all five passed cleanly once re-run in isolation after the fix
+  below, confirming they were never a second real problem.
+
+Root cause: generalising Stage 4's former page-local `.stage4-progress`
+into the new shared `.progress` component (§9 below) accidentally dropped
+that rule's own `flex-wrap: wrap` - at 375px, Stage 4's progress label
+text ("Your Security — N of 12 reviewed...") is long enough on its own
+that a non-wrapping flex row forced the whole bar wider than the
+viewport. Fixed in `static/organisations/css/app.css` by restoring
+`flex-wrap: wrap` (plus `justify-content: space-between`) on `.progress`
+and letting `.progress__label` itself shrink/wrap (`flex: 1 1 auto;
+min-width: 0`) instead of `flex: none`. Re-verified directly (Playwright
+`scrollWidth`/`clientWidth` measurement at 375px on Home, Foundations,
+Stage 4, and Company — all now `375 == 375`, no overflow) and via the
+originally-failing test plus all five originally-erroring tests, now all
+green in isolation. The committed `after`-screenshot set was recaptured
+post-fix so it reflects the corrected layout, not the regression.
+
+This is recorded here rather than quietly folded into the earlier
+narrative because the four-invariant delivery chain this Work Order
+operates under depends on an honest account of what actually happened,
+including a mistake this Implementer made and caught itself — not just
+the corrected end state.
+
 ## 9. Complete changed/new file list
 
 New:

@@ -929,12 +929,26 @@ a:hover { color: var(--color-primary-dark); }
 .progress {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
+  /* `flex-wrap: wrap` (carried over from the former page-local
+     `.stage4-progress`, dropped by mistake in an earlier draft of this
+     generalisation and caught by core/tests/
+     test_wi6_area_smoke_browser_acceptance.py's real-browser 375px
+     overflow check against the Stage 4 page this component now also
+     serves, via the legacy security_baseline:baseline redirect) - at
+     375px, Stage 4's own label text ("Your Security — N of 12 reviewed
+     ...") is long enough on its own to overflow a non-wrapping flex row
+     once paired with a second flex item; wrapping lets the label and the
+     track stack onto their own lines instead of forcing the row wider
+     than the viewport. */
+  flex-wrap: wrap;
 }
 .progress__label {
   color: var(--color-text-muted);
   font-size: 0.9rem;
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .progress__track {
   flex: 1 1 160px;
