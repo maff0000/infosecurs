@@ -3,15 +3,37 @@
 {% block title %}Your Business — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
-<p class="stage-indicator">Stage 1 of 6</p>
+{# M008E-WI2-INCREMENT-1: the former standalone `.stage-indicator` line #}
+{# above the page header is folded into `.page-header__subtitle` itself #}
+{# (organisation name, Stage N of 6) - the same single-subtitle-line #}
+{# pattern WO-M008E-WI1 already established for Stage 4 #}
+{# (security_baseline/templates/security_baseline/foundations_question.html), #}
+{# so the journey's page-header hierarchy reads the same way at every #}
+{# stage instead of Stage 4 alone doing it differently. `.stage-indicator` #}
+{# is now unused (it had no other consumer - confirmed by grep) and its #}
+{# rule has been removed from static/organisations/css/app.css. #}
 <div class="page-header">
     <div>
         <h1>Your Business</h1>
-        <p class="page-header__subtitle">{{ organisation.name }}</p>
+        <p class="page-header__subtitle">{{ organisation.name }} &middot; Stage 1 of 6</p>
     </div>
 </div>
 
-<p class="stage-progress">{{ confirmed_count }} of {{ total_count }} confirmed so far.</p>
+{# The former plain `.stage-progress` text-only line is now the real, #}
+{# always-visible label of the shared `.progress` component (the same #}
+{# component Foundations/Stage 4 already use for a short line of text #}
+{# plus a simple linear progress indicator - `.claude/skills/ #}
+{# infosecurs-ui-design/SKILL.md` section 4) - only the decorative #}
+{# track/fill below the label is aria-hidden, so nothing is announced #}
+{# twice to a screen reader. No new number: widthratio derives the same #}
+{# percentage the label text already states, exactly as Stage 4's own #}
+{# progress bar already does from its own progress.reviewed/progress.total. #}
+<div class="progress">
+    <span class="progress__label">{{ confirmed_count }} of {{ total_count }} confirmed so far.</span>
+    <span class="progress__track" aria-hidden="true">
+        <span class="progress__fill" style="width: {% widthratio confirmed_count total_count 100 %}%"></span>
+    </span>
+</div>
 
 {% if form.non_field_errors %}
     <ul class="messages" role="alert">

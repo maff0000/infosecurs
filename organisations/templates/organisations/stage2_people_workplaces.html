@@ -3,15 +3,22 @@
 {% block title %}Your People & Workplaces — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
-<p class="stage-indicator">Stage 2 of 6</p>
+{# M008E-WI2-INCREMENT-1: see stage1_business.html's equivalent comment - #}
+{# the same page-header-subtitle + shared .progress consolidation, #}
+{# applied here for Stage 2. #}
 <div class="page-header">
     <div>
         <h1>Your People &amp; Workplaces</h1>
-        <p class="page-header__subtitle">{{ organisation.name }}</p>
+        <p class="page-header__subtitle">{{ organisation.name }} &middot; Stage 2 of 6</p>
     </div>
 </div>
 
-<p class="stage-progress">{{ confirmed_count }} of {{ total_count }} confirmed so far on this page - work pattern, workplaces and governance roles are tracked separately below.</p>
+<div class="progress">
+    <span class="progress__label">{{ confirmed_count }} of {{ total_count }} confirmed so far on this page - work pattern, workplaces and governance roles are tracked separately below.</span>
+    <span class="progress__track" aria-hidden="true">
+        <span class="progress__fill" style="width: {% widthratio confirmed_count total_count 100 %}%"></span>
+    </span>
+</div>
 
 <div class="summary-card">
     <h2>Where do people normally work?</h2>

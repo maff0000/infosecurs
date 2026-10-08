@@ -356,6 +356,15 @@ a:hover { color: var(--color-primary-dark); }
   padding: var(--space-5) var(--space-4);
   text-align: center;
 }
+/* M008E-WI2-INCREMENT-1: a real explanatory-prose block (e.g. Risks &
+   Actions' "how this list is generated" note) is not an empty-state
+   message and reads badly centred - this was previously solved with a
+   one-off `style="text-align: left;"` inline attribute wherever it came
+   up (PID §E8's "avoid inline-style proliferation"). A genuinely missing
+   reusable pattern, so it gets one real modifier class instead of another
+   inline attribute; `.empty-state` itself (a true empty-state message,
+   e.g. "No confirmed risks yet.") keeps its default centred text. */
+.empty-state--left { text-align: left; }
 
 /* --- Badges (M006-AUDIT-0004 J1) ---
    Before this fix, `.badge { ... white-space: nowrap; ... }` was copy-
@@ -899,16 +908,18 @@ a:hover { color: var(--color-primary-dark); }
    added to foundations.html - a genuinely shared component (not a
    page-local colour variant, which is this stylesheet's own existing
    convention for staying local - see the `.badge` comment above), so it
-   lives centrally here. */
-.stage-indicator {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-  margin: 0 0 var(--space-1) 0;
-}
-.stage-progress {
-  color: var(--color-text-muted);
-  margin: 0 0 var(--space-4) 0;
-}
+   lives centrally here.
+
+   M008E-WI2-INCREMENT-1: the former standalone `.stage-indicator`
+   ("Stage N of 6") line above the page header and the plain-text-only
+   `.stage-progress` line are both retired - Stage 1-3 now fold "Stage N
+   of 6" into `.page-header__subtitle` (matching Stage 4's own established
+   pattern) and reuse the shared `.progress`/`.progress__label` component
+   for their confirmed-count line (matching Foundations/Stage 4's own
+   progress-bar treatment), rather than keeping a page-family-specific
+   progress presentation that only Stage 1-3 used. Neither class has any
+   remaining template consumer (confirmed by grep across every app, not
+   only organisations/templates) - removed rather than left as dead CSS. */
 .stage-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
