@@ -4,12 +4,14 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>{% if supersedes %}Replace evidence with a new file{% else %}Upload file evidence{% endif %}</h1>
-    <p class="page-header__subtitle">{{ organisation.name }}</p>
+    <div>
+        <h1>{% if supersedes %}Replace evidence with a new file{% else %}Upload file evidence{% endif %}</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
 </div>
 
 {% if supersedes %}
-    <div class="empty-state" style="text-align: left; margin-bottom: var(--space-4);">
+    <div class="empty-state empty-state--left">
         <p style="margin: 0;">
             This will replace <strong>{{ supersedes.title }}</strong>. The existing item is kept as a
             historical record and marked superseded - it is not deleted or edited in place.

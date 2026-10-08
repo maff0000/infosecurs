@@ -99,7 +99,7 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p>No evidence linked to this control yet.</p>
+        <div class="empty-state"><p>No evidence linked to this control yet.</p></div>
     {% endif %}
     <p class="page-header__subtitle" style="margin-top: var(--space-3);">
         Link evidence from the evidence item's own detail page.
@@ -124,7 +124,7 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p>No remediation actions reference this control yet.</p>
+        <div class="empty-state"><p>No remediation actions reference this control yet.</p></div>
     {% endif %}
 </div>
 
@@ -137,7 +137,7 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p>No recorded activity for this control yet.</p>
+        <div class="empty-state"><p>No recorded activity for this control yet.</p></div>
     {% endif %}
 </div>
 {% endblock %}

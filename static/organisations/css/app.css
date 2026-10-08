@@ -406,6 +406,52 @@ a:hover { color: var(--color-primary-dark); }
   overflow-wrap: anywhere;
 }
 
+/* --- Tables (added WO-M008E-WI2-INCREMENT-2, PID §E8's own "tables/
+   lists" component, this increment's explicit objective) - a genuinely
+   missing shared component, not an extension of an existing one:
+   `.table` was already used as a class name in two existing templates
+   (policy/approve.html, policy/version_detail.html's "Implementation
+   status" tables) with NO corresponding CSS rule anywhere in this
+   stylesheet (confirmed by a repo-wide grep before this increment) - an
+   unstyled browser-default table, which does not reflow at narrow
+   widths and reads nothing like the rest of this design system.
+   `.table-wrap` is the narrow-viewport safety net: a table's own
+   columns are not something this product's content can meaningfully
+   stack the way a card/list reflows, so rather than widening `body`/
+   `.app-main` past the viewport (every other component's own "no
+   horizontal overflow" guarantee), an over-wide table scrolls *within*
+   this wrapper instead - in practice this should rarely trigger, since
+   `body`'s own inherited `overflow-wrap: anywhere` (see the systemic
+   overflow guarantee above) already lets table-cell text shrink below
+   its automatic minimum width, but the wrapper is kept as defence in
+   depth for a genuinely long unbreakable run, consistent with this
+   stylesheet's own established practice of never relying on exactly one
+   mechanism for this guarantee. */
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 var(--space-3) 0;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+.table th {
+  background: var(--color-surface-sunken);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* --- Forms --- */
 .form-section {
   background: var(--color-surface);

@@ -5,10 +5,14 @@
 {% block content %}
 <style>
   .asset-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  /* M008E-WI2-INCREMENT-2: same radius harmonisation as security_state/
+     templates/security_state/list.html's .state-card - a full-width
+     list-style card belongs on the --radius-lg panel/card step, not the
+     small --radius step (SKILL.md §8's two-step scale). */
   .asset-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-3) var(--space-4);
     display: flex;
     flex-wrap: wrap;

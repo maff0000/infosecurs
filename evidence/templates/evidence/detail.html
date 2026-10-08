@@ -47,13 +47,13 @@
 </div>
 
 {% if item.status == "superseded" and item.superseded_by %}
-    <div class="empty-state" style="text-align: left;">
+    <div class="empty-state empty-state--left">
         <p style="margin: 0;">Superseded by <a href="{% url 'evidence:detail' organisation.id item.superseded_by.id %}">{{ item.superseded_by.title }}</a>.</p>
     </div>
 {% endif %}
 
 {% if item.superseded_items.all %}
-    <div class="empty-state" style="text-align: left;">
+    <div class="empty-state empty-state--left">
         <p style="margin: 0;">
             Replaces:
             {% for old in item.superseded_items.all %}
@@ -152,7 +152,7 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p>Not yet linked to any control.</p>
+        <div class="empty-state"><p>Not yet linked to any control.</p></div>
     {% endif %}
     <p style="margin: 0;">
         <a class="button button--secondary" href="{% url 'evidence:link_control' organisation.id item.id %}">Link to a control</a>

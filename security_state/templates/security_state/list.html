@@ -5,10 +5,17 @@
 {% block content %}
 <style>
   .state-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  /* M008E-WI2-INCREMENT-2: full-width list-style card, same radius step
+     as .card-list__link/.foundations-row/.stage-tile (static/
+     organisations/css/app.css) - moved from the small --radius (controls/
+     chips/inputs) to --radius-lg (panels/cards), the deliberate two-step
+     scale `.claude/skills/infosecurs-ui-design/SKILL.md` §8 already
+     documents, for consistency with every other page-level card grid in
+     this rollout. */
   .state-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-3) var(--space-4);
     display: flex;
     flex-wrap: wrap;
