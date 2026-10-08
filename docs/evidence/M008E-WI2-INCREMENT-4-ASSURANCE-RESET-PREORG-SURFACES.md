@@ -365,7 +365,7 @@ $ docker compose -p m008ewi2incr4 exec -e DJANGO_ENV=test web pytest -q question
 - `python manage.py makemigrations --check --dry-run`: "No changes detected" — this increment
   needed no migration.
 - `gitleaks detect` (git-history-scoped, not `--no-git`), run after committing this increment's
-  work: <<<GITLEAKS_PLACEHOLDER>>>
+  work: 143 commits scanned, "no leaks found" (run after committing this increment's work).
 - Dependency manifests confirmed byte-identical: `git diff --stat -- requirements.txt
   requirements.in requirements-dev.txt requirements-dev.in package.json` against base SHA
   `7c7609f57f2e23a44db74bf2e6a6be73b7fa6798` — empty.
