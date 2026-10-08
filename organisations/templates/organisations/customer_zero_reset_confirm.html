@@ -10,7 +10,23 @@
     </div>
 </div>
 
-<div class="summary-card dev-tools-card">
+{% comment %}
+M008E-WI2-INCREMENT-4: was `.summary-card dev-tools-card` - the exact
+same dead class combination WO-M008E-WI1 already found and fixed on
+Home/the Organisation hub (`.dev-panel`'s own app.css comment: "the
+former plain `.summary-card dev-tools-card` ... had no CSS rule of its
+own - this card was visually identical to the three above it"). This
+confirmation page - reached by clicking through from either of those
+already-fixed `.dev-panel` affordances - was the one surface that fix
+never reached: it still rendered as an ordinary plain card, not
+unmistakably "development tool, not product content" the way the
+doctrine (`.claude/skills/infosecurs-ui-design/SKILL.md` §7) requires.
+Styling/layout only below - every word of copy, the confirmation
+input's id/name/attributes, and the view's own fail-closed gate are
+all byte-identical to before.
+{% endcomment %}
+<div class="dev-panel">
+    <span class="dev-panel__tag">Dev</span>
     <p>
         <strong>This is a development-only tool.</strong> It is reachable only because this
         environment has explicitly opted in to it, and only for this one fixture
@@ -31,17 +47,30 @@
 
     <form method="post" novalidate>
         {% csrf_token %}
-        <p>
-            <label for="id_confirmation">Type <code>RESET</code> (exactly, case-sensitive) to confirm:</label><br>
+        <div class="field">
+            <label for="id_confirmation">Type <code>RESET</code> (exactly, case-sensitive) to confirm:</label>
             <input type="text"
                    id="id_confirmation"
                    name="confirmation"
+                   class="input"
                    autocomplete="off"
                    autocapitalize="off"
                    spellcheck="false"
                    required>
-        </p>
-        <button type="submit" class="button button--primary">Reset test organisation</button>
+        </div>
+        {% comment %}
+        M008E-WI2-INCREMENT-4: `.button--primary` -> `.button--destructive`
+        (the variant WO-M008E-WI1 introduced specifically for "the one
+        action in the product that permanently deletes data" - its own
+        app.css comment). Both upstream entry points (Home, Organisation
+        hub) already link to this page using `.button--destructive`; the
+        actual execute-the-irreversible-action button, on this page
+        itself, had been left on the ordinary "go ahead" primary styling
+        - weaker action-hierarchy signal than the mere navigation links
+        leading to it. Styling only - same label, same form, same
+        fail-closed view-level check.
+        {% endcomment %}
+        <button type="submit" class="button button--destructive">Reset test organisation</button>
     </form>
 </div>
 {% endblock %}
