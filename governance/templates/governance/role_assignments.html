@@ -3,6 +3,30 @@
 {% block title %}Governance roles — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  /* `.badge`'s shared geometry (size, shape, spacing, wrap behaviour)
+     lives centrally in static/organisations/css/app.css
+     (M006-AUDIT-0004 J1) - only this page's own colour variant stays
+     local, per that file's own established convention (page-specific
+     meaning, not shared geometry). Fixed semantics
+     (`.claude/skills/infosecurs-ui-design/SKILL.md` Sec5): green =
+     supported/satisfactory/complete - "Assigned" to a currently-active
+     person IS the complete state for this one role; neutral grey =
+     unknown/not applicable/purely informational - a role not yet
+     assigned to anyone is informational, not itself a judged gap (no
+     existing severity classification anywhere in this product's code
+     currently renders "not yet assigned" as a red/amber signal -
+     organisations/overview.py's own in-progress/not-started states have
+     no colour mapping to reuse here, so this increment does not invent
+     one). The one real gap this page already signals - a role assigned
+     to a person who has since been marked inactive - keeps its existing,
+     separate `.message message--error` alert below; deliberately not
+     duplicated as a third badge colour here, to avoid two overlapping
+     signals for the same fact. */
+  .badge--assigned { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--unassigned { background: var(--color-neutral-bg); color: var(--color-neutral-text); }
+</style>
+
 <div class="page-header">
     <div>
         <h1>Governance roles</h1>
@@ -24,7 +48,7 @@
     {% endif %}
 </p>
 
-<p><a href="{% url 'governance:edit_my_details' organisation.id %}">Edit your details</a></p>
+<p><a class="button button--secondary" href="{% url 'governance:edit_my_details' organisation.id %}">Edit your details</a></p>
 
 {% for row in rows %}
 <fieldset class="form-section">
@@ -32,6 +56,7 @@
 
     {% if row.assignment %}
         <p>
+            {% if not row.assignment.assignee_is_inactive %}<span class="badge badge--assigned">Assigned</span>{% endif %}
             Currently assigned to <strong>{{ row.assignment.person.full_name }}</strong>{% if row.assignment.person.job_title %}, {{ row.assignment.person.job_title }}{% endif %}.
         </p>
         {% if row.assignment.assignee_is_inactive %}
@@ -41,7 +66,7 @@
             </p>
         {% endif %}
     {% else %}
-        <p>Not yet assigned.</p>
+        <p><span class="badge badge--unassigned">Not assigned</span> Not yet assigned.</p>
     {% endif %}
 
     {% if row.form.non_field_errors %}

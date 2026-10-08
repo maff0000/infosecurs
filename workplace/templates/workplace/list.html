@@ -3,6 +3,73 @@
 {% block title %}Workplace — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  /* M008E-WI2-INCREMENT-3: this page previously reused key_assets/templates/
+     key_assets/list.html's `.asset-card`/`.asset-grid`/`.asset-section`/
+     `.badge--confirmed` class names directly, with no local <style> block
+     of its own and no shared definition of any of them anywhere else in
+     the stylesheet (confirmed by a repo-wide grep before this increment) -
+     so every element on this page carrying one of those classes rendered
+     completely unstyled (plain browser-default box, no border/radius/
+     spacing, unstyled inline badge text). This increment gives Workplace
+     its own, correctly-named component - same shape/geometry as the five
+     other full-width list-card surfaces already harmonised to
+     --radius-lg under WO-M008E-WI2-INCREMENT-2 (.asset-card/.risk-card/
+     .evidence-card/.action-card/.state-card) - starting on the correct
+     radius step from the outset rather than needing a later harmonisation
+     pass. */
+  .workplace-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .workplace-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .workplace-card--inactive { opacity: 0.7; }
+  .workplace-card__body { flex: 1 1 320px; min-width: 0; }
+  .workplace-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  /* Same defect class/fix as key_assets/list.html's `.asset-card__title-
+     text` (M006-AUDIT-0002 G2) - the workplace name is customer-
+     controlled free text and can be a single long unbreakable run with no
+     natural break point; this wrapping <span> gives the flex row a real,
+     addressable element to shrink/wrap (an anonymous flex item generated
+     for a bare text node cannot be targeted by CSS). `body`'s own
+     inherited `overflow-wrap: anywhere` already covers plain text content
+     elsewhere, but this element is itself a flex item competing for row
+     space, so it also needs `min-width: 0` the same way the asset-card
+     precedent does. */
+  .workplace-card__title-text { min-width: 0; overflow-wrap: anywhere; }
+  .workplace-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
+  .workplace-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .workplace-section { margin-bottom: var(--space-5); }
+  .workplace-section__intro { color: var(--color-text-muted); margin: -8px 0 var(--space-3) 0; }
+  /* `.badge`'s shared geometry (size, shape, wrap behaviour) lives
+     centrally in static/organisations/css/app.css (M006-AUDIT-0004 J1) -
+     only this page's own colour variant stays local, per that file's own
+     established convention. Deliberately its own colour, not a reuse of
+     key_assets/list.html's `.badge--confirmed` (green): "Primary" names
+     which workplace record is the default one for working-model
+     calculations, not a security-status judgement
+     (`.claude/skills/infosecurs-ui-design/SKILL.md` Sec5's green/amber/red/
+     neutral meanings are fixed and must never be reassigned to an
+     unrelated label) - a quiet primary-tint badge keeps the distinction
+     visible without borrowing the "satisfactory" colour for something
+     that is not a status at all. */
+  .badge--primary { background: var(--color-primary-tint); color: var(--color-primary-dark); }
+</style>
+
 <div class="page-header">
     <div>
         <h1>Workplace</h1>
@@ -22,23 +89,23 @@
 {% endif %}
 
 {% if active_workplaces %}
-<section class="asset-section">
+<section class="workplace-section">
     <h2>Active workplaces</h2>
-    <div class="asset-grid">
+    <div class="workplace-grid">
         {% for workplace in active_workplaces %}
-            <div class="asset-card">
-                <div class="asset-card__body">
-                    <p class="asset-card__title">
-                        {{ workplace.name }}
-                        {% if workplace.is_primary %}<span class="badge badge--confirmed">Primary</span>{% endif %}
+            <div class="workplace-card">
+                <div class="workplace-card__body">
+                    <p class="workplace-card__title">
+                        <span class="workplace-card__title-text">{{ workplace.name }}</span>
+                        {% if workplace.is_primary %}<span class="badge badge--primary">Primary</span>{% endif %}
                     </p>
-                    <p class="asset-card__meta">
+                    <p class="workplace-card__meta">
                         {{ workplace.get_type_display }}
                         {% if workplace.location_label %}&middot; {{ workplace.location_label }}{% endif %}
                         {% if workplace.approx_people_count is not None %}&middot; approx {{ workplace.approx_people_count }} people{% endif %}
                     </p>
                 </div>
-                <div class="asset-card__actions">
+                <div class="workplace-card__actions">
                     <a class="button button--secondary" href="{% url 'workplace:edit' organisation.id workplace.id %}">Edit</a>
                     <form method="post" action="{% url 'workplace:deactivate' organisation.id workplace.id %}">
                         {% csrf_token %}
@@ -52,17 +119,19 @@
 {% endif %}
 
 {% if inactive_workplaces %}
-<section class="asset-section">
+<section class="workplace-section">
     <h2>Inactive workplaces</h2>
-    <p class="asset-section__intro">Kept here for reference. They are not counted towards your working model.</p>
-    <div class="asset-grid">
+    <p class="workplace-section__intro">Kept here for reference. They are not counted towards your working model.</p>
+    <div class="workplace-grid">
         {% for workplace in inactive_workplaces %}
-            <div class="asset-card asset-card--dismissed">
-                <div class="asset-card__body">
-                    <p class="asset-card__title">{{ workplace.name }}</p>
-                    <p class="asset-card__meta">{{ workplace.get_type_display }}</p>
+            <div class="workplace-card workplace-card--inactive">
+                <div class="workplace-card__body">
+                    <p class="workplace-card__title">
+                        <span class="workplace-card__title-text">{{ workplace.name }}</span>
+                    </p>
+                    <p class="workplace-card__meta">{{ workplace.get_type_display }}</p>
                 </div>
-                <div class="asset-card__actions">
+                <div class="workplace-card__actions">
                     <a class="button button--secondary" href="{% url 'workplace:edit' organisation.id workplace.id %}">Edit</a>
                     <form method="post" action="{% url 'workplace:activate' organisation.id workplace.id %}">
                         {% csrf_token %}
