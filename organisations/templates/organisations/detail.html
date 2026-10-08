@@ -91,4 +91,23 @@
         </div>
     {% endif %}
 {% endif %}
+
+{% if customer_zero_reset_enabled %}
+    {# M008E (PID §E2/§E9): the DEV Customer Zero reset affordance, now #}
+    {# discoverable on Home itself rather than only under Organisation > #}
+    {# Company (the PID's own named usability problem). Visibility here #}
+    {# checks the exact same `customer_zero_reset_enabled` boolean the #}
+    {# view computed via `_customer_zero_reset_enabled_for` (organisations/ #}
+    {# views.py) - never re-derived or approximated in this template. The #}
+    {# action link goes to the EXISTING confirmation page - this panel #}
+    {# never executes the reset directly, and is independent of package #}
+    {# tier (rendered in both the Paused and non-Paused branches above). #}
+    <div class="dev-panel">
+        <span class="dev-panel__tag">Dev</span>
+        <h2>DEV &middot; Customer Zero</h2>
+        <p>Reset this synthetic organisation to its original unanswered state.</p>
+        <a class="button button--destructive"
+           href="{% url 'organisations:customer_zero_reset' organisation.id %}">Reset test organisation</a>
+    </div>
+{% endif %}
 {% endblock %}

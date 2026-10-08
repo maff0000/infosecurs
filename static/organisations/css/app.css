@@ -3,26 +3,47 @@
   Server-rendered Django templates, no build step, no external font/CDN
   dependency (ADR-0001). Deliberately plain: legible type, real spacing,
   visible focus states, grouped controls.
+
+  M008E-WI1 (docs/pids/M008E-PRODUCT-UX-VISUAL-HARDENING.md,
+  docs/work-orders/WO-M008E-WI1.md) refreshed the token *values* below -
+  from a generic corporate-blue-on-cold-grey palette towards a calmer,
+  more deliberate "professional assurance" identity (deep teal primary,
+  a warm-neutral canvas, a clear two-step radius scale) - while keeping
+  every custom-property *name* stable. Every existing template's own
+  local <style> block (stage1-3, risk_register, policy, security_state,
+  etc. - see `.claude/skills/infosecurs-ui-design/SKILL.md` §8) reads
+  these tokens by name; renaming one would be a breaking change to pages
+  this Work Order never touched, so only values changed, and only two new
+  tokens (`--radius-lg`, `--color-neutral-bg`/`--color-neutral-text`,
+  `--color-destructive-*`, `--color-surface-sunken`) were added on top.
+  See docs/evidence/M008E-DESIGN-DIRECTION.md for the rationale and the
+  WCAG contrast check every pairing below was verified against.
 */
 
 :root {
-  --color-bg: #f4f6f8;
+  --color-bg: #eef1ef;
   --color-surface: #ffffff;
-  --color-border: #d7dde3;
-  --color-text: #1c2430;
-  --color-text-muted: #5b6b7a;
-  --color-primary: #185ea8;
-  --color-primary-dark: #124a85;
-  --color-success-bg: #e6f4ea;
-  --color-success-text: #1e6b34;
+  --color-surface-sunken: #eef2f0;
+  --color-border: #d7ded9;
+  --color-text: #17241d;
+  --color-text-muted: #57665d;
+  --color-primary: #0f6a5c;
+  --color-primary-dark: #0b4f45;
+  --color-success-bg: #e7f4ec;
+  --color-success-text: #1b6b3f;
   --color-error-bg: #fbeaea;
   --color-error-text: #a3251f;
   --color-error-border: #d9534f;
-  --color-primary-tint: #e6eefb;
-  --color-warning-bg: #fdf1d6;
-  --color-warning-text: #8a5a00;
-  --focus-ring: 0 0 0 3px rgba(24, 94, 168, 0.35);
+  --color-primary-tint: #e3f1ee;
+  --color-warning-bg: #fdf1dc;
+  --color-warning-text: #8a5a06;
+  --color-neutral-bg: #e7ebe8;
+  --color-neutral-text: #57665d;
+  --color-destructive-bg: #b23f3b;
+  --color-destructive-dark: #8f2f2c;
+  --focus-ring: 0 0 0 3px rgba(15, 106, 92, 0.35);
   --radius: 6px;
+  --radius-lg: 12px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 16px;
@@ -92,9 +113,16 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* M008E-WI1: a slightly taller top step (1.6rem -> 1.75rem) gives the one
+   real page title per page (`<h1>`) more separation from `<h2>` section
+   headings than before - part of the design-checkpoint's own typography
+   scale (docs/evidence/M008E-DESIGN-DIRECTION.md). `h3` is new - used by
+   WO-M008E-WI1 for a sub-heading step below `h2` (e.g. inside a panel)
+   where the product previously had no third size to reach for. */
 h1, h2, h3 { line-height: 1.25; margin: 0 0 var(--space-2) 0; }
-h1 { font-size: 1.6rem; font-weight: 700; }
-h2 { font-size: 1.2rem; font-weight: 600; }
+h1 { font-size: 1.75rem; font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
 p { margin: 0 0 var(--space-3) 0; }
 
 .skip-link {
@@ -226,6 +254,14 @@ a:hover { color: var(--color-primary-dark); }
   margin: -12px 0 var(--space-4) 0;
 }
 
+/* M008E-WI1 (PID §E8's "section headers" component): a real, reusable
+   class for a secondary heading that introduces a section WITHIN a page
+   (as opposed to `<h1>`, the one page title) - replaces the one-off
+   `style="margin-bottom: ..."` inline attribute previously on
+   Foundations' "Your guided journey" heading, per the "avoid inline-style
+   proliferation" instruction. */
+.section-header { margin-bottom: var(--space-2); }
+
 /* --- Messages / states --- */
 .messages { list-style: none; margin: 0 0 var(--space-4) 0; padding: 0; }
 .message {
@@ -244,11 +280,39 @@ a:hover { color: var(--color-primary-dark); }
   border-radius: var(--radius);
 }
 
-/* --- Cards / lists --- */
+/* --- Alert / contextual note (added WO-M008E-WI1, PID §E8's "alerts/
+   warnings" component) - a left-accent-bar panel for a short contextual
+   note tied to something the user just did (e.g. Stage 4's per-answer
+   explainer), distinct from `.message` (a page-level, usually transient
+   success/error notice above all page content) and from `.needs-
+   attention` (a specific, named Home-dashboard feature with its own
+   binding markup rules). `--info` is the only variant actually exercised
+   by this Work Order (Stage 4's explainer text carries no severity signal
+   to drive `--warning`/`--error` responsibly - inferring one in the
+   template would be exactly the kind of re-derived security judgement
+   this product's own doctrine forbids); the other two variants are
+   defined now so a future page with a real severity signal does not need
+   to invent its own. */
+.alert {
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-primary-tint);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+}
+.alert--info { border-left-color: var(--color-primary); background: var(--color-primary-tint); }
+.alert--warning { border-left-color: var(--color-warning-text); background: var(--color-warning-bg); }
+.alert--error { border-left-color: var(--color-error-text); background: var(--color-error-bg); }
+
+/* --- Cards / lists ---
+   M008E-WI1: panels/cards use the larger `--radius-lg` step; small
+   controls (buttons, inputs, chips/badges) keep the original `--radius`
+   - a deliberate two-step scale rather than one radius value applied to
+   everything regardless of size (`.claude/skills/infosecurs-ui-design/
+   SKILL.md` §8/§3's own "excessive rounded cards" warning). */
 .summary-card, .form-card, .auth-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
 .form-card__intro { color: var(--color-text-muted); }
@@ -262,7 +326,7 @@ a:hover { color: var(--color-primary-dark); }
   gap: var(--space-2);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-3);
   text-decoration: none;
   color: var(--color-text);
@@ -288,7 +352,7 @@ a:hover { color: var(--color-primary-dark); }
 .empty-state {
   background: var(--color-surface);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-5) var(--space-4);
   text-align: center;
 }
@@ -337,10 +401,16 @@ a:hover { color: var(--color-primary-dark); }
 .form-section {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin: 0 0 var(--space-4) 0;
 }
+/* A `<fieldset>` that should carry none of `.form-section`'s panel
+   chrome - just a semantic grouping element with the browser's default
+   fieldset box model removed (added WO-M008E-WI1, replacing an inline
+   `style="border:none;padding:0;margin:0;"` attribute - PID §E8's "avoid
+   inline-style proliferation"). */
+.fieldset--bare { border: none; padding: 0; margin: 0; }
 .form-section legend {
   font-weight: 700;
   font-size: 1.05rem;
@@ -429,6 +499,21 @@ a:hover { color: var(--color-primary-dark); }
   border-color: var(--color-border);
 }
 .button--secondary:hover { border-color: var(--color-primary); }
+
+/* M008E-WI1 (PID §E9, WO-M008E-WI1): the third button variant the design
+   checkpoint's component list calls for - any action that permanently
+   destroys data. Today that is exactly one action in the whole product,
+   the Customer Zero reset submit button - this is styling only, applied
+   by adding the class in a template; it carries no gating logic of its
+   own. Contrast-checked (white text on both the resting and hover fill)
+   against WCAG AA for normal-weight text, not just the large-text 3:1
+   floor - see docs/evidence/M008E-DESIGN-DIRECTION.md. */
+.button--destructive {
+  background: var(--color-destructive-bg);
+  color: #fff;
+  border-color: var(--color-destructive-bg);
+}
+.button--destructive:hover { background: var(--color-destructive-dark); border-color: var(--color-destructive-dark); }
 
 /* --- Auth --- */
 .auth-card { max-width: 380px; margin: var(--space-5) auto; }
@@ -586,15 +671,31 @@ a:hover { color: var(--color-primary-dark); }
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.shell-nav__link:hover { background: var(--color-bg); }
+.shell-nav__link:hover { background: var(--color-surface-sunken); }
 .shell-nav__link--child {
   font-weight: 500;
   font-size: 0.92rem;
   color: var(--color-text-muted);
 }
+/* M008E-WI1: a left accent bar (via box-shadow, so it never shifts the
+   link's own padding/width the way a real border would) added on top of
+   the existing tint - a slightly stronger "you are here" signal than
+   colour alone, consistent with the accent-bar language used elsewhere
+   in the new design system (the guided CTA, the needs-attention lines). */
 .shell-nav__link[aria-current="page"] {
   background: var(--color-primary-tint);
   color: var(--color-primary-dark);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+/* M008E-WI1 repair (post-PR#97 audit finding): the rule above has higher
+   specificity than the sitewide `:focus-visible` rule and sets its own
+   box-shadow, so on this element the accent bar was silently winning over
+   the focus ring - the current-page link never showed visible keyboard
+   focus. Give the focused+current-page state its own explicit box-shadow
+   that layers both signals (outer focus ring + inset accent bar) rather
+   than letting one overwrite the other. */
+.shell-nav__link[aria-current="page"]:focus-visible {
+  box-shadow: var(--focus-ring), inset 3px 0 0 var(--color-primary);
 }
 
 .shell-main {
@@ -643,9 +744,10 @@ a:hover { color: var(--color-primary-dark); }
    Side-by-side on desktop, stacked at this codebase's one existing 640px
    breakpoint (reused below, not a second breakpoint value). No gauge/
    chart/icon - a plain number + text (PID §2.3/§13's own "function
-   before form"), so these are deliberately just flex-row cards built from
-   the same `--color-*`/`--space-*`/`--radius` tokens every other card in
-   this stylesheet already uses. */
+   before form", reaffirmed by M008E-WI1 - do not reintroduce a visual
+   data representation here), so these are deliberately just flex-row
+   cards built from the same `--color-*`/`--space-*`/`--radius-lg` tokens
+   every other panel in this stylesheet already uses. */
 .metric-card-row {
   display: flex;
   gap: var(--space-3);
@@ -657,7 +759,7 @@ a:hover { color: var(--color-primary-dark); }
   min-width: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
@@ -683,11 +785,20 @@ a:hover { color: var(--color-primary-dark); }
    `.needs-attention`, `.paused-state`) already lives in this one shared
    stylesheet, not inline in that template, so this keeps Home's own CSS
    in the one place it already is - not split across two locations for
-   one page. */
+   one page.
+
+   M008E-WI1: moved from a light tint box to a solid filled panel - the
+   current-state review (docs/evidence/M008E-CURRENT-UX-REVIEW.md §2)
+   found the previous tint treatment visually too close to the plain
+   metric cards directly beneath it for a control the product's own code
+   comments call "the single primary action." A solid-fill panel is now
+   the one place on Home that uses the primary colour as a background
+   rather than an accent - reserved for exactly this one most-important
+   action, never reused elsewhere, so it keeps its visual weight. */
 .guided-cta {
-  background: var(--color-primary-tint);
+  background: var(--color-primary);
   border: 1px solid var(--color-primary);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
 }
@@ -697,13 +808,13 @@ a:hover { color: var(--color-primary-dark); }
   gap: var(--space-2);
   font-size: 1.15rem;
   font-weight: 700;
-  color: var(--color-primary-dark);
+  color: #fff;
   text-decoration: none;
 }
 .guided-cta__link:hover { text-decoration: underline; }
 .guided-cta__icon { font-size: 0.85em; }
 .guided-cta__subtitle {
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.85);
   margin: var(--space-1) 0 0 0;
 }
 
@@ -711,7 +822,7 @@ a:hover { color: var(--color-primary-dark); }
 .paused-state {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
 .paused-state p:last-child { margin-bottom: 0; }
@@ -719,22 +830,33 @@ a:hover { color: var(--color-primary-dark); }
 /* --- Needs attention (PID §14) - deliberately NOT another `.card-list`
    variant: each line is one plain paragraph, never itself a clickable
    row/card (PID §14.1's binding "only the words click here are the
-   link" rule - see organisations/templates/organisations/detail.html). */
+   link" rule - see organisations/templates/organisations/detail.html).
+   M008E-WI1 restyled the CONTAINER and gave each line its own quiet
+   "sunken row" background only - organisations/templates/organisations/
+   detail.html's own `{{ line.text }} — <a>{{ line.link_text }}</a>`
+   markup is completely unchanged, so the mechanical real-HTML-parse
+   proof in organisations/tests/test_home_view.py (every line is never
+   itself one giant anchor) stays valid untouched. */
 .needs-attention {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
 .needs-attention h2 { margin-bottom: var(--space-3); }
-.needs-attention__line { margin: 0 0 var(--space-2) 0; }
+.needs-attention__line {
+  margin: 0 0 var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius);
+}
 .needs-attention__line:last-child { margin-bottom: 0; }
 
 /* --- Foundations workspace (PID §15) --- */
 .foundations-summary {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
 }
@@ -751,7 +873,7 @@ a:hover { color: var(--color-primary-dark); }
 .foundations-row {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--space-3) var(--space-4);
   display: flex;
   flex-wrap: wrap;
@@ -793,6 +915,129 @@ a:hover { color: var(--color-primary-dark); }
   gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
+/* M008E-WI1: the stage tiles inside `.stage-grid` previously had no
+   component class of their own - `organisations/templates/organisations/
+   foundations.html` reused the generic `.summary-card`. Gives them their
+   own class so this one grid of tiles can be tuned (radius-lg, a touch
+   more padding) independently of an ordinary single-column summary card
+   elsewhere, without a page-local <style> block. */
+.stage-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+.stage-tile h2 { font-size: 1.05rem; }
+
+/* --- Progress (added WO-M008E-WI1, PID §E4/§E8's "a progress visual")
+   A plain, thin linear indicator for a structured multi-step task -
+   generalised from Stage 4's former page-local `.stage4-progress*`
+   classes (security_baseline/templates/security_baseline/
+   foundations_question.html) and reused by the Foundations workspace
+   completion summary. Never a gauge/ring/chart - see the Home metric
+   card comment above for the one place that distinction is binding. */
+.progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  /* `flex-wrap: wrap` (carried over from the former page-local
+     `.stage4-progress`, dropped by mistake in an earlier draft of this
+     generalisation and caught by core/tests/
+     test_wi6_area_smoke_browser_acceptance.py's real-browser 375px
+     overflow check against the Stage 4 page this component now also
+     serves, via the legacy security_baseline:baseline redirect) - at
+     375px, Stage 4's own label text ("Your Security — N of 12 reviewed
+     ...") is long enough on its own to overflow a non-wrapping flex row
+     once paired with a second flex item; wrapping lets the label and the
+     track stack onto their own lines instead of forcing the row wider
+     than the viewport. */
+  flex-wrap: wrap;
+}
+.progress__label {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.progress__track {
+  flex: 1 1 160px;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+.progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+
+/* --- Option group / option card (added WO-M008E-WI1) - generalised from
+   Stage 4's former page-local `.stage4-option*` classes. A real, roomy
+   clickable area per option (PID §E3's "substantial, clear option
+   controls") with an unmistakable selected state - border + tint + a
+   filled native radio, never a subtle colour shift alone. */
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3) 0;
+}
+.option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+}
+.option-card:hover { border-color: var(--color-primary); }
+.option-card input { margin-top: 3px; accent-color: var(--color-primary); }
+/* `:has()` is supported by every browser this product targets (current
+   Chrome/Edge/Firefox/Safari); where it is not, the option simply keeps
+   its plain resting border - the native radio/checkbox itself is always
+   still the real, accessible indicator of selection either way, so this
+   is a progressive enhancement, not the only signal. */
+.option-card:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+/* --- Development-only affordance (added WO-M008E-WI1, PID §E2/§E9) -
+   the ONE dev-only panel in the product today (the Customer Zero reset
+   control, now shown on both Home and the Organisation hub). Dashed
+   border + a small solid "DEV" tag make it unmistakably different in
+   KIND from ordinary product content - deliberately never styled with
+   the green/amber/red/neutral status vocabulary (`.claude/skills/
+   infosecurs-ui-design/SKILL.md` §5/§7 - a dev affordance is not a
+   security status). Visibility is entirely template-conditional on the
+   `customer_zero_reset_enabled` boolean the view computes
+   (`organisations.views._customer_zero_reset_enabled_for`) - this is
+   styling only. */
+.dev-panel {
+  background: var(--color-warning-bg);
+  border: 1.5px dashed var(--color-warning-text);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.dev-panel__tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-warning-text);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  margin-bottom: var(--space-2);
+}
+.dev-panel h2 { margin-bottom: var(--space-1); }
+.dev-panel p:last-of-type { margin-bottom: var(--space-3); }
 
 /* --- Responsive --- */
 @media (max-width: 640px) {

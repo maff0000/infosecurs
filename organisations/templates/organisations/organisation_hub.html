@@ -40,13 +40,21 @@
     {# the exact same `customer_zero_reset_enabled` the view computed from #}
     {# `settings.CUSTOMER_ZERO_RESET_ENABLED` - never relied on solely #}
     {# because the URL itself would 404 if reached directly. #}
-    <div class="summary-card dev-tools-card">
+    {# M008E-WI1: restyled onto the shared `.dev-panel` component (the #}
+    {# same one now also used on Home) instead of the former plain #}
+    {# `.summary-card dev-tools-card` (that second class had no CSS rule #}
+    {# of its own - this card was visually identical to the three above #}
+    {# it; see docs/evidence/M008E-CURRENT-UX-REVIEW.md §4) - and the #}
+    {# actual destructive action now uses `.button--destructive` rather #}
+    {# than the same secondary-button treatment as ordinary navigation. #}
+    <div class="dev-panel">
+        <span class="dev-panel__tag">Dev</span>
         <h2>DEV &middot; Test tools</h2>
         <p>
             Development-only tools for this fixture organisation. Not available in any
             other environment.
         </p>
-        <a class="button button--secondary"
+        <a class="button button--destructive"
            href="{% url 'organisations:customer_zero_reset' organisation.id %}">Reset test organisation</a>
     </div>
 {% endif %}
