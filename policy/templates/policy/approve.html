@@ -51,26 +51,28 @@
     {% endcomment %}
     <section class="form-section">
         <h2 class="form-section__heading">Implementation status</h2>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Control</th>
-                    <th>Current state</th>
-                    <th>Action</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in implementation_status_rows %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
                     <tr>
-                        <td>{{ row.control_key }}</td>
-                        <td>{{ row.current_state_text }}</td>
-                        <td>{{ row.action_text }}</td>
-                        <td>{{ row.status }}</td>
+                        <th>Control</th>
+                        <th>Current state</th>
+                        <th>Action</th>
+                        <th>Status</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for row in implementation_status_rows %}
+                        <tr>
+                            <td>{{ row.control_key }}</td>
+                            <td>{{ row.current_state_text }}</td>
+                            <td>{{ row.action_text }}</td>
+                            <td>{{ row.status }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </section>
 
     {% if current_review_warnings %}

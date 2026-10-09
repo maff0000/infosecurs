@@ -37,7 +37,18 @@
 
 <p class="risks-actions__headline">{{ headline }}</p>
 
-<div class="empty-state" style="text-align: left;">
+{# M008E-WI2-INCREMENT-1: the former style="text-align: left;" inline #}
+{# attribute is replaced with the new shared .empty-state--left modifier #}
+{# (static/organisations/css/app.css) - PID E8's "avoid inline-style #}
+{# proliferation", same convention WO-M008E-WI1 already applied to #}
+{# Foundations' own former inline style="margin-bottom: ..." (now #}
+{# .section-header). .empty-state defaults to centred text for a #}
+{# genuinely empty list (e.g. "No confirmed risks yet." below); this one #}
+{# block is real explanatory prose, not an empty-state message, so it #}
+{# needs left alignment - the same need risk_register/list.html's own #}
+{# identical inline attribute already has, left as its own file's concern #}
+{# (out of this increment's scope) rather than migrated here. #}
+<div class="empty-state empty-state--left">
     <p>
         Every risk below is matched deterministically against your confirmed key assets and your
         security-baseline answers - no AI call is made to produce this list. Risks are regenerated

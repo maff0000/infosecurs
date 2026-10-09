@@ -6,28 +6,53 @@
 <style>
   /* `.badge`'s shared geometry (size, shape, wrap behaviour) now lives in
      static/organisations/css/app.css (M006-AUDIT-0004 J1) - only this
-     page's own colour variants stay local. */
-  .badge--draft { background: var(--color-border); color: var(--color-text); }
+     page's own colour variants stay local.
+
+     M008E-WI2-INCREMENT-4: `badge--superseded` and `badge--outcome-
+     CONFIRM` previously hardcoded their own literal hex colours
+     (#e6eefb/#185ea8 - the exact generic corporate blue M008E-WI1
+     replaced everywhere else in the product; #fdf1d6/#8a5a00 - a
+     near-duplicate, one-digit-off copy of the real `--color-warning-*`
+     tokens) instead of reading the design-token custom properties every
+     other page's own badge variants already use - drifting silently out
+     of step with any future token refresh and, for `--superseded`,
+     literally reintroducing a fifth status colour `.claude/skills/
+     infosecurs-ui-design/SKILL.md` §5 never defines (the product has
+     exactly four: green/amber/red/neutral). `badge--draft` and
+     `badge--outcome-NOT_APPLICABLE` reused `--color-border` as a
+     background by coincidence rather than reaching for the dedicated
+     `--color-neutral-bg`/`--color-neutral-text` tokens WO-M008E-WI1 added
+     specifically to replace that exact pattern (its own evidence,
+     docs/evidence/M008E-DESIGN-DIRECTION.md §4) - this page was the one
+     surface that pattern never reached. Fixed below: `draft` and
+     `superseded` (both workflow states, not security-truth judgements)
+     and outcome `NOT_APPLICABLE` (SKILL.md §5's own "neutral = unknown/
+     not applicable" meaning) now use the neutral tokens; outcome
+     `CONFIRM` ("needs confirmation" - SKILL.md §5's amber meaning) now
+     reads the real `--color-warning-*` tokens. No colour's underlying
+     meaning changed - only literal/near-duplicate hex replaced with the
+     named tokens every other page already reads. */
+  .badge--draft { background: var(--color-neutral-bg); color: var(--color-neutral-text); }
   .badge--accepted { background: var(--color-success-bg); color: var(--color-success-text); }
-  .badge--superseded { background: #e6eefb; color: #185ea8; }
+  .badge--superseded { background: var(--color-neutral-bg); color: var(--color-neutral-text); }
   .badge--outcome-SUPPORTED { background: var(--color-success-bg); color: var(--color-success-text); }
-  .badge--outcome-CONFIRM { background: #fdf1d6; color: #8a5a00; }
+  .badge--outcome-CONFIRM { background: var(--color-warning-bg); color: var(--color-warning-text); }
   .badge--outcome-GAP { background: var(--color-error-bg); color: var(--color-error-text); }
-  .badge--outcome-NOT_APPLICABLE { background: var(--color-border); color: var(--color-text); }
+  .badge--outcome-NOT_APPLICABLE { background: var(--color-neutral-bg); color: var(--color-neutral-text); }
   .response-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
   .response-detail__section { margin-bottom: var(--space-4); }
-  .superseded-note {
-    background: #e6eefb;
-    border: 1px dashed #185ea8;
-    border-radius: var(--radius);
-    padding: var(--space-3);
-    color: var(--color-text);
-    font-size: 0.9rem;
-  }
+  /* M008E-WI2-INCREMENT-4: the fact-card list (one card per grounding
+     fact) is the same full-width list-row shape as `.asset-card`/
+     `.risk-card`/etc, which M008E-WI2-INCREMENT-2/3 harmonised onto the
+     larger `--radius-lg` panel step (`.claude/skills/infosecurs-ui-design/
+     SKILL.md` §8's two-step radius scale - `--radius` for controls/chips,
+     `--radius-lg` for panels/cards). This page's own `.fact-card` had
+     never been brought onto that step - the same recurring defect class,
+     here on its seventh occurrence. */
   .fact-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-3);
     margin-bottom: var(--space-2);
   }
@@ -52,7 +77,16 @@
 </div>
 
 {% if response.superseded_by_id %}
-    <div class="superseded-note response-detail__section">
+    {% comment %}
+    M008E-WI2-INCREMENT-4: was a bespoke `.superseded-note` class with
+    its own hardcoded blue hex colours (see this page's own <style>
+    block comment above) - replaced with the existing `.alert`/
+    `.alert--info` component (`.claude/skills/infosecurs-ui-design/
+    SKILL.md` §9's own "alerts/warnings" vocabulary entry), which this
+    exact kind of short contextual note was already built for. Same
+    wording, same position, no new component.
+    {% endcomment %}
+    <div class="alert alert--info response-detail__section">
         <strong>Superseded by a newer response.</strong>
         <a href="{% url 'questionnaire:response_detail' organisation.id response.superseded_by_id %}">View the newer response</a>.
         This response remains the historical record of what was accepted and why, at the time.

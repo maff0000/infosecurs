@@ -4,8 +4,10 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Organisation profile</h1>
-    <p class="page-header__subtitle">{{ organisation.name }}</p>
+    <div>
+        <h1>Organisation profile</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
 </div>
 
 {% if form.non_field_errors %}

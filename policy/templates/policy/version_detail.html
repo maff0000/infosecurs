@@ -85,26 +85,28 @@ never receives implementation_status_rows at all).
         This is shown here for your own internal review only &mdash; it is never included in
         the downloadable policy PDF.
     </p>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Control</th>
-                <th>Current state</th>
-                <th>Action</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in implementation_status_rows %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
                 <tr>
-                    <td>{{ row.control_key }}</td>
-                    <td>{{ row.current_state_text }}</td>
-                    <td>{{ row.action_text }}</td>
-                    <td>{{ row.status }}</td>
+                    <th>Control</th>
+                    <th>Current state</th>
+                    <th>Action</th>
+                    <th>Status</th>
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for row in implementation_status_rows %}
+                    <tr>
+                        <td>{{ row.control_key }}</td>
+                        <td>{{ row.current_state_text }}</td>
+                        <td>{{ row.action_text }}</td>
+                        <td>{{ row.status }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 
 {% if version.review_warnings %}

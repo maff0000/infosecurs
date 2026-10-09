@@ -5,10 +5,15 @@
 {% block content %}
 <style>
   .activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  /* M008E-WI2-INCREMENT-3: same radius harmonisation as security_state/
+     templates/security_state/list.html's .state-card (established
+     WO-M008E-WI2-INCREMENT-2) - a full-width list-style row belongs on
+     the --radius-lg panel/card step, not the small --radius step
+     (SKILL.md Sec8's two-step scale). */
   .activity-item {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--space-3) var(--space-4);
     display: flex;
     flex-wrap: wrap;
@@ -28,7 +33,7 @@
     </div>
 </div>
 
-<p>
+<p class="page-header__subtitle">
     A read-only history of security-state changes for this organisation - control answer
     changes, evidence and remediation-action events. Events cannot be edited or deleted
     from here.

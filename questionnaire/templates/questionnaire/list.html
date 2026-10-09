@@ -3,6 +3,38 @@
 {% block title %}Questionnaire Assurance — {{ organisation.name }} — {{ product_name }}{% endblock %}
 
 {% block content %}
+<style>
+  /* Page-local row component for "Questions asked so far" - the same
+     title/meta/action row shape already established by `.foundations-row`
+     (organisations/templates/organisations/foundations.html) and the
+     full-width list-card components added across M008E-WI2-INCREMENT-2/3
+     (`.asset-card`/`.risk-card`/`.evidence-card`/`.action-card`/
+     `.state-card`/`.workplace-card`) - a new page-local class rather than
+     reusing another domain's own class name, following
+     M008E-WI2-INCREMENT-3's own precedent for `.workplace-*` (finding 1).
+     Previously this list was a bare <ul><li>, which this page's own
+     "before" capture showed had no visual structure at all - each
+     question's title, source label and current-answer link ran together
+     as one unbroken line of inline text (M008E-WI2-INCREMENT-4 own
+     before-pass finding). */
+  .question-row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .question-row {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .question-row__body { flex: 1 1 320px; min-width: 0; }
+  .question-row__title { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+  .question-row__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: var(--space-1) 0 0 0; }
+  .question-row__action { flex: none; }
+</style>
+
 <div class="page-header">
     <div>
         <h1>Questionnaire Assurance</h1>
@@ -14,14 +46,14 @@
     <h2 class="form-section__heading">Paste one security questionnaire question</h2>
     <form method="post" action="{% url 'questionnaire:analyse' organisation.id %}">
         {% csrf_token %}
-        <p>
-            <label for="id_question_text">Paste one security questionnaire question</label><br>
-            <textarea id="id_question_text" name="question_text" rows="4" style="width: 100%;" required></textarea>
-        </p>
-        <p>
-            <label for="id_source_label">Source / customer label (optional)</label><br>
-            <input id="id_source_label" name="source_label" type="text" style="width: 100%;">
-        </p>
+        <div class="field">
+            <label for="id_question_text">Paste one security questionnaire question</label>
+            <textarea id="id_question_text" name="question_text" rows="4" class="textarea" required></textarea>
+        </div>
+        <div class="field">
+            <label for="id_source_label">Source / customer label (optional)</label>
+            <input id="id_source_label" name="source_label" type="text" class="input">
+        </div>
         <button type="submit" class="button button--primary">Analyse and draft answer</button>
     </form>
 </section>
@@ -29,17 +61,22 @@
 {% if question_rows %}
     <section class="form-section">
         <h2 class="form-section__heading">Questions asked so far</h2>
-        <ul>
+        <ul class="question-row-list">
             {% for row in question_rows %}
-                <li>
-                    <strong>{{ row.question.question_text|truncatechars:120 }}</strong>
-                    {% if row.question.source_label %}&mdash; {{ row.question.source_label }}{% endif %}
+                <li class="question-row">
+                    <div class="question-row__body">
+                        <p class="question-row__title">{{ row.question.question_text|truncatechars:120 }}</p>
+                        {% if row.question.source_label %}
+                            <p class="question-row__meta">{{ row.question.source_label }}</p>
+                        {% endif %}
+                    </div>
                     {% if row.display_response %}
-                        &middot;
-                        <a href="{% url 'questionnaire:response_detail' organisation.id row.display_response.id %}">
-                            {{ row.display_response.get_outcome_display|default:row.display_response.outcome }}
-                            {% if row.is_accepted %}(current answer){% else %}(draft — not yet accepted){% endif %}
-                        </a>
+                        <div class="question-row__action">
+                            <a class="button button--secondary" href="{% url 'questionnaire:response_detail' organisation.id row.display_response.id %}">
+                                {{ row.display_response.get_outcome_display|default:row.display_response.outcome }}
+                                {% if row.is_accepted %}(current answer){% else %}(draft — not yet accepted){% endif %}
+                            </a>
+                        </div>
                     {% endif %}
                 </li>
             {% endfor %}
