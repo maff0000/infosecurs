@@ -27,14 +27,21 @@ from ai_platform.questionnaire_interpretation_orchestration import (
     QuestionnaireInterpretationFailed,
 )
 
-from questionnaire.forms import QuestionnaireResponseEditForm
-from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
+from questionnaire import import_services
+from questionnaire.forms import QuestionnaireImportUploadForm, QuestionnaireResponseEditForm
+from questionnaire.models import (
+    QuestionnaireImport,
+    QuestionnaireImportValidationError,
+    QuestionnaireQuestion,
+    QuestionnaireResponse,
+)
 from questionnaire.presentation import grounding_facts_for_display, outcome_presentation
 from questionnaire.services import (
     accept_questionnaire_response,
     edit_questionnaire_response_text,
     generate_questionnaire_response,
 )
+from questionnaire.upload_handler import install_upload_size_guard
 
 
 def _get_member_response_or_404(user, organisation_id, response_id):
@@ -263,4 +270,128 @@ def questionnaire_response_regenerate(request, organisation_id, response_id):
         "questionnaire:response_detail",
         organisation_id=organisation.id,
         response_id=new_response.id,
+    )
+
+
+# ===========================================================================
+# M009A - minimal real Customer Assurance entry surface
+# (WO-M009A-SECURE-INGESTION-XLSX.md Correction 15). Views below NEVER
+# mutate `security_gate_status`/`status`/`extraction_summary`/any
+# artifact-identity field directly (Correction 14) - every lifecycle
+# transition goes through `questionnaire.import_services`.
+# ===========================================================================
+
+
+def _get_member_import_or_404(user, organisation_id, import_id):
+    """Tenant-scoped import fetch, mirroring `_get_member_response_or_404`
+    above exactly - a foreign/manipulated import id in the URL is an
+    ordinary 404, never a path to another organisation's artifact (PID
+    §23 tenant isolation, carried over unchanged into M009A)."""
+    organisation = get_member_organisation_or_404(user, organisation_id)
+    import_record = get_object_or_404(QuestionnaireImport, id=import_id, organisation=organisation)
+    return organisation, import_record
+
+
+@login_required
+@require_capability()
+def questionnaire_import_upload(request, organisation_id):
+    """XLSX upload control (Correction 15) - Monthly+ entitlement-gated
+    via the existing `customer_assurance` ProductArea (the `questionnaire`
+    URL namespace already maps there - see `entitlements.capabilities.
+    ROUTE_NAMESPACE_TO_CAPABILITY`, unchanged by M009A)."""
+    # The REAL enforcement point is `questionnaire.upload_handler.
+    # QuestionnaireUploadSizeGuardMiddleware` (config/settings.py's
+    # MIDDLEWARE, placed before CsrfViewMiddleware) - installing the
+    # guard here, in the view, is too late for a real CSRF-enforced
+    # request (see that module's own docstring for the real-browser-
+    # reproduced reasoning). This call is a harmless, idempotent
+    # defence-in-depth no-op for the ordinary case where the middleware
+    # already installed it.
+    if request.method == "POST":
+        install_upload_size_guard(request)
+
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+
+    if request.method == "POST":
+        form = QuestionnaireImportUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                import_record = import_services.ingest_questionnaire_import(
+                    organisation=organisation,
+                    actor=request.user,
+                    uploaded_file=form.cleaned_data["file"],
+                    original_filename=getattr(form.cleaned_data["file"], "name", ""),
+                )
+            except QuestionnaireImportValidationError as exc:
+                form.add_error("file", str(exc))
+                messages.error(
+                    request, "The questionnaire file could not be uploaded. Please check the errors below."
+                )
+            else:
+                messages.success(request, "Questionnaire file uploaded.")
+                return redirect(
+                    "questionnaire:import_detail",
+                    organisation_id=organisation.id,
+                    import_id=import_record.id,
+                )
+        else:
+            messages.error(
+                request, "The questionnaire file could not be uploaded. Please check the errors below."
+            )
+    else:
+        form = QuestionnaireImportUploadForm()
+
+    imports = QuestionnaireImport.objects.filter(organisation=organisation)[:20]
+    return render(
+        request,
+        "questionnaire/import_upload.html",
+        {"organisation": organisation, "form": form, "imports": imports},
+    )
+
+
+@login_required
+@require_capability()
+def questionnaire_import_detail(request, organisation_id, import_id):
+    """Tenant-scoped import detail/status page (Correction 15) - display-
+    only. Shows only M009A-scoped information: safe display filename,
+    uploaded time, security-gate status, extraction status, counts of
+    question/excluded/failed items, extracted question text/source
+    location, and a clear failure/rejection reason. Deliberately NEVER
+    adds answer generation/review/export/DOCX/PDF/AI - see this view's own
+    template for the exact rendered surface."""
+    organisation, import_record = _get_member_import_or_404(request.user, organisation_id, import_id)
+    questions = list(import_record.questions.all())
+    return render(
+        request,
+        "questionnaire/import_detail.html",
+        {
+            "organisation": organisation,
+            "import_record": import_record,
+            "questions": questions,
+        },
+    )
+
+
+@login_required
+@require_capability()
+def questionnaire_import_retry(request, organisation_id, import_id):
+    """Explicit, distinct retry operation for an import stuck in
+    `security_gate_failed` (WO-M009A "Import lifecycle") - POST only,
+    mirroring `questionnaire_response_accept`'s own
+    `HttpResponseNotAllowed(["POST"])` pattern."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    organisation, import_record = _get_member_import_or_404(request.user, organisation_id, import_id)
+
+    try:
+        import_services.retry_security_gate(import_record, actor=request.user)
+    except import_services.SecurityGateTransitionError:
+        messages.error(request, "This import is not currently awaiting a security-gate retry.")
+    else:
+        messages.success(request, "Security gate retried.")
+
+    return redirect(
+        "questionnaire:import_detail", organisation_id=organisation.id, import_id=import_record.id
     )
