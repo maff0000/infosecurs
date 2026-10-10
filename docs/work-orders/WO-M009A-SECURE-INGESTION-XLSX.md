@@ -2,7 +2,7 @@
 
 **Parent PID:** `docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`
 **Exact base SHA:** `93acc86405597641c46b050dd603ab335ebb60d1`
-**Status:** DRAFT — awaiting Architect review. **Do not dispatch an Implementer against this Work Order until it is accepted.**
+**Status:** ARCHITECT ACCEPTED — AUTHORISED FOR DELIVERY CONTROLLER DISPATCH
 
 ## Scope — exactly this, nothing more
 
@@ -45,9 +45,9 @@ The M009A models live inside the existing `questionnaire` Django app. **Do not c
 | `file_format` | `CharField`, choices | `xlsx` is the only value this Work Order's validation accepts; **immutable after creation** |
 | `sha256_hash` | `CharField(max_length=64)` | computed streaming, chunk-by-chunk; **immutable after creation** |
 | `size_bytes` | `PositiveBigIntegerField` | **immutable after creation** |
-| `security_gate_status` | `CharField`, choices: `pending`, `passed`, `rejected` | mutable only via the domain service's governed transitions (see "Service-owned state transitions" below) |
-| `security_gate_result` | `JSONField` | structured rejection reason(s) / structural inspection summary — never raw file content |
-| `status` | `CharField`, choices: `uploaded`, `security_gate_pending`, `security_gate_rejected`, `extracting`, `extracted`, `extraction_failed` | this Work Order populates/transitions only these six; mutable only via governed service transitions |
+| `security_gate_status` | `CharField`, choices: `pending`, `passed`, `rejected`, `failed` | mutable only via the domain service's governed transitions (see "Service-owned state transitions" below) |
+| `security_gate_result` | `JSONField` | structured rejection reason(s) / structural inspection summary / scanner provenance (see Final Correction B) — never raw file content |
+| `status` | `CharField`, choices: `uploaded`, `security_gate_pending`, `security_gate_rejected`, `security_gate_failed`, `extracting`, `extracted`, `extraction_failed` | this Work Order populates/transitions only these seven; mutable only via governed service transitions |
 | `extraction_summary` | `JSONField`, nullable | bounded structured summary — see "Import-level extraction summary" below |
 | `supersedes` | self-FK, nullable, **`SET_NULL`** | set when a re-upload is intended to replace a prior import; the prior import and all its questions remain, untouched and inspectable |
 | `created_at`/`updated_at` | timestamps | |
@@ -87,6 +87,31 @@ The M009A models live inside the existing `questionnaire` Django app. **Do not c
 
 `question_cell` replaces the earlier generic `cell` field name so its meaning is unambiguous. `answer_cell` may be `null` where no destination can be safely determined — if null, M009A may still normalise the question, but **M009D must not invent or fuzzy-match an answer destination later; a send-ready round-trip export cannot rely on rediscovering the destination from question text.** Validated against this schema before being persisted; **if a candidate's location cannot be expressed in this exact schema, it fails closed** — `extraction_status=failed` or `disposition=excluded_other`, `raw_extracted_text` still populated, never proceeding as if a valid location existed. `schema_version` exists so a future format (DOCX) adds a new, separately-validated shape rather than overloading this one.
 
+## Import lifecycle — security rejection vs. scanner failure distinguished (Final Correction A)
+
+Deterministic artifact rejection and temporary scanner/backend failure are not the same state and must never be conflated:
+
+```text
+uploaded
+  → security_gate_pending
+      → security_gate_rejected    (terminal for these bytes)
+      → security_gate_failed      (retryable)
+      → extracting
+          → extracted
+          → extraction_failed     (retryable)
+```
+
+- **`security_gate_rejected`** = deterministic artifact rejection — invalid XLSX, macro content, external relationship, malware detected, hostile package structure, a resource-limit violation. Terminal for those bytes.
+- **`security_gate_failed`** = the security decision could not be completed safely because the scanner or another required security component was unavailable or errored. **Retryable.** A scanner result of `UNAVAILABLE` or `ERROR` must therefore: never advance to `passed`; never advance to extraction; place the import in `security_gate_failed`; retain the uploaded bytes privately so the gate can be retried without forcing re-upload. **Do not treat infrastructure failure as evidence that a customer's workbook itself was malicious.** An explicit service operation for retrying the security gate is required (e.g. `retry_security_gate(import_id)`), distinct from re-upload.
+
+## Original-artifact retention — reconciled, binding (Final Correction H)
+
+- For an artifact whose security gate **PASSES**: original bytes are retained; byte identity is immutable; extraction never modifies them; later export (M009D) never overwrites them.
+- For an artifact deterministically **REJECTED** by the security gate: audit metadata (hash, size, rejection reason, timestamps) is retained permanently; the hostile/invalid bytes themselves may be deleted per the documented cleanup policy (immediately, or after a short bounded retention window — implementation's choice, documented).
+- For an artifact in **`security_gate_failed`**: bytes are retained privately for retry — this is not a rejection and must not be treated as one.
+
+Use this three-way distinction consistently everywhere "immutable original" or "cleanup" is discussed in this Work Order.
+
 ## Customer Zero reset reconciliation — mandatory, in scope for this Work Order (Correction 3)
 
 The existing reset system enumerates every direct FK to `Organisation` and deliberately fails closed on model drift. Adding `QuestionnaireImport.organisation` without reconciling the reset manifest **will break the existing Customer Zero reset by design.** This Work Order explicitly authorises the bounded reset reconciliation this new model requires — and only this:
@@ -125,7 +150,26 @@ Also reconcile the existing backup/restore mechanism and runbook so questionnair
 - **UNAVAILABLE** — fail closed; do not parse/extract.
 - **ERROR** — fail closed; do not parse/extract.
 
-A deterministic fake scanner is allowed in unit/evaluation tests. A development/runtime "scanner unavailable" implementation may exist to make absence explicit, but **it must BLOCK upload processing, never allow it through.** M009A cannot close GREEN with a runtime file-security gate that claims `passed` while malware scanning is merely a logging stub. If integrating a concrete scanner cleanly requires architecture beyond this Work Order: **STOP and return to Architect** rather than silently weakening the gate.
+A deterministic fake scanner is allowed in unit/evaluation tests. A development/runtime "scanner unavailable" implementation may exist to make absence explicit, but **it must BLOCK upload processing, never allow it through.** M009A cannot close GREEN with a runtime file-security gate that claims `passed` while malware scanning is merely a logging stub. If the scanner reports itself unhealthy or unable to give a trustworthy result, that maps to `UNAVAILABLE`/`ERROR` and fails closed via `security_gate_failed` (see "Import lifecycle" above), not to a silent pass.
+
+### Scanner deployment shape — frozen, not an Implementer choice (Final Correction B)
+
+**ClamAV / clamd as an internal Docker Compose service.** Requirements:
+
+- use the official ClamAV container family;
+- exact release/version and immutable image digest pinned by implementation — no floating `latest`/`stable` tag as durable project authority;
+- no ClamAV port published to the host — reachable only over the internal Compose network;
+- FreshClam/signature-update capability enabled;
+- a Docker health check required;
+- the signature database may use its own persistent Docker volume — signature data is operational/cache data, not customer data, and does not need to enter INFOSECURS business-data backup sets;
+- the web/application scanner abstraction talks only to the internal scanner service — no cloud malware scanning, no questionnaire bytes sent to any external SaaS/provider;
+- this topology applies to both the normal development Compose architecture and the standalone release Compose architecture — **M009A is not a dev-only capability.** A release artifact in which Customer Assurance upload always fails because no scanner exists is not M009A GREEN.
+
+The scanner result retains bounded operational provenance in `security_gate_result`: scanner backend; engine/version where available; signature/database version or timestamp where available; scan result; scan completion time. **Never persist file content in scanner-result metadata.**
+
+At least one real ClamAV-backed acceptance test must demonstrate: a legitimate XLSX receives `CLEAN`; a standard safe anti-malware test specimen (e.g. the EICAR test file) is detected rather than allowed through.
+
+If integrating this cleanly requires architecture beyond this Work Order: **STOP and return to Architect** rather than silently weakening the gate.
 
 ## OOXML container gate — hardened (Correction 7)
 
@@ -146,6 +190,14 @@ Before `openpyxl` sees the artifact, bounded container inspection must cover at 
 
 **Do not extract ZIP members onto the filesystem merely to inspect them.** Reject malformed/ambiguous package structures. Hostile fixtures for each of the above are required (see "Evaluation corpus" below).
 
+### External relationships — not only `xl/externalLinks/` (Final Correction D)
+
+`xl/externalLinks/` alone is too narrow — OOXML external relationships can exist outside that directory. The security gate must inspect **every relevant `.rels` relationship document** and reject any relationship with external targeting, including conceptually `TargetMode="External"`. **Do not permit an external hyperlink/image/object simply because no `xl/externalLinks/` package member exists.** Internal relationship targets must also be normalised and proven to remain inside the package namespace; malformed relationship targets fail closed; required workbook/worksheet relationships must resolve to actual package members. Fixtures required (see "Evaluation corpus"): `xl/externalLinks/`; external `TargetMode`; a malformed/internal-traversal relationship target; a missing relationship target.
+
+### XML hardening before `openpyxl` (Final Correction E)
+
+M009A processes attacker-controlled OOXML. Use **`defusedxml`** with `openpyxl`. The bounded pre-parse package gate must reject OOXML XML parts containing prohibited DTD/entity constructs rather than forwarding them into the semantic parser. Test at minimum: DOCTYPE-bearing OOXML XML; ENTITY/billion-laughs-style input; malformed XML. **The evidence must prove the hardened parser path is actually active** (e.g. a billion-laughs-shaped fixture genuinely rejected end to end), not merely that `defusedxml` is listed in `requirements.txt`.
+
 ## Security limits — frozen for M009A-v1 (Correction 8)
 
 Not "proposed." Frozen:
@@ -156,6 +208,14 @@ Not "proposed." Frozen:
 - maximum per-entry decompressed/compressed ratio: **100:1**
 
 Implementation must correctly handle zero-sized/zero-compressed edge cases without division errors. If legitimate test evidence shows a limit is inappropriate: **STOP and return to Delivery Controller/Architect with evidence before weakening it.** A more conservative implementation limit is also an architectural change if it materially narrows supported customer files — do not silently alter these values either direction.
+
+### Enforcement against actual streamed bytes, not just metadata (Final Correction F)
+
+Do not rely exclusively on ZIP central-directory metadata for bomb defence. Before semantic parsing: inspect advertised compressed/uncompressed sizes; enforce the frozen ratio/count/total limits above; when any package member is read, use bounded streaming reads and actual decompressed-byte counters; abort immediately if actual bytes exceed the permitted budget; **never call an unbounded read on an attacker-controlled archive member.** The total actual decompressed bytes consumed during gate inspection must remain bounded — this prevents malicious/inconsistent ZIP metadata from bypassing the intended resource limits.
+
+### Upload size limit is streaming, not post-hoc (Final Correction G)
+
+The 10 MiB upload limit is enforced **while consuming the uploaded stream**, not after the fact. Do not call an unbounded `.read()`; do not load the whole upload into memory; do not copy unlimited bytes into questionnaire storage and only check the size afterward. Compute SHA-256 and byte count during the same bounded streaming pass used to persist/quarantine the file. Once the counter exceeds 10 MiB: stop processing; fail/reject cleanly; do not continue storing the body as a valid import. Document how Django's upload/temp-file behaviour interacts with this limit in the M009A evidence.
 
 ## Semantic extraction resource limits — frozen for M009A-v1 (Correction 9)
 
@@ -205,6 +265,10 @@ Do not claim semantic certainty the deterministic extractor does not possess. `h
 
 Views must not freely mutate `security_gate_status`, import `status`, the extraction summary, or any artifact-identity field. Implement the upload/security/extraction lifecycle through bounded domain services with explicit allowed transitions; invalid transitions fail closed. The UI calls services — it never directly manipulates lifecycle fields.
 
+### State consistency between `security_gate_status` and `status` (Final Correction J)
+
+Because both fields exist, their permitted combinations must be explicit and tested. The domain service must never create contradictory states such as: gate `rejected` + lifecycle `extracting`; gate `pending` + lifecycle `extracted`; gate `failed` + lifecycle `extracting`. Service tests must enumerate valid transition/state combinations. Use database constraints where they remain simple and valuable; otherwise model/service fail-closed validation plus exhaustive tests is acceptable. Views still never mutate lifecycle fields directly.
+
 ## Minimal real customer entry surface (Correction 15)
 
 This Work Order includes the minimal product surface needed to prove the feature, on the existing **Customer Assurance** page:
@@ -218,6 +282,10 @@ The import detail page shows only M009A-scoped information: original safe displa
 
 Real Chromium acceptance at 1280px/768px/375px is required for these changed user-facing surfaces. Direct URL entitlement tests must prove: PAUSED denied; FOUNDATION denied; MONTHLY allowed; PRO allowed.
 
+### Untrusted XLSX content rendered in the UI — XSS browser proof required (Final Correction I)
+
+M009A renders external workbook content (extracted question text, source-location data) in the Customer Assurance UI. Add hostile display cases containing, at minimum: `<script>`; HTML tags; event-handler payloads; very long strings; quotes/entity-like content. Prove in real Chromium that: content renders as inert text; no script/event executes; HTML is not interpreted as product markup; no horizontal overflow occurs at 375px; source-location data also renders safely. Django auto-escaping is expected to provide much of this protection, but **acceptance requires proof, not assumption.**
+
 ## No async infrastructure (Correction 16)
 
 M009A does not authorise Celery, Redis queues, workers, or any new job platform merely for XLSX parsing. The bounded V1 file/resource limits above make synchronous processing acceptable for this milestone. If implementation evidence proves synchronous processing cannot safely satisfy the bounded product contract: **STOP and return to Architect** — do not solve that by inventing infrastructure.
@@ -226,9 +294,18 @@ M009A does not authorise Celery, Redis queues, workers, or any new job platform 
 
 Explicit tests must prove: web-container recreation does not lose questionnaire files; Customer Zero reset removes M009A database state; Customer Zero reset removes the fixture tenant's questionnaire file directory; another tenant's questionnaire rows/files remain untouched by that reset; backup/restore includes questionnaire artifact bytes and their matching database metadata; the original artifact's SHA-256 remains identical after extraction. This extends the existing operational guarantees — it does not redesign them.
 
-## Dependency: `openpyxl`
+## Dependencies — corrected, not "openpyxl only" (Final Correction C)
 
-The only dependency this Work Order introduces. MIT-licensed. Load mode mandated: `read_only=True, data_only=False` (see formula handling above — corrected from the earlier draft). Exact version/pin/hash via the normal `pip-compile` relock cycle; dependency scan, licence review, and parser-security tests required per `docs/runbooks/BUILD-REPRODUCIBILITY.md` before this Work Order's own Independent Audit.
+The earlier claim that `openpyxl` is the only dependency this Work Order introduces is **withdrawn — it is false.** M009A explicitly authorises:
+
+- **`openpyxl`** — XLSX parser. Load mode mandated: `read_only=True, data_only=False` (see formula handling above — corrected from the earlier draft).
+- **`defusedxml`** — XML hardening required for hostile XLSX processing (see "XML hardening before `openpyxl`" above).
+
+Both must be exact pinned/hash-locked runtime dependencies with licence review, dependency scan, and build-reproducibility evidence per `docs/runbooks/BUILD-REPRODUCIBILITY.md` before this Work Order's own Independent Audit.
+
+If a small, maintained Python client dependency is required to communicate safely with `clamd`, it is permitted under this Work Order, subject to the same pin/hash/licence/security review. **Do not write a bespoke unsafe network protocol merely to preserve an artificial "one Python dependency" rule.**
+
+The ClamAV container itself is also a runtime dependency and requires: exact image version/digest; provenance; vulnerability/container scan evidence (per the deployment shape frozen under "Scanner deployment shape" above).
 
 ## Verification before reporting back — full repository gate (Correction 19)
 
@@ -271,11 +348,19 @@ New fixtures/harness (e.g. `questionnaire/eval/m009a_ingestion_corpus.py`), cove
 - a legitimate re-upload/`supersedes` case;
 - cross-tenant access attempts;
 - the immutable-original before/after byte-identity proof;
-- an XML/parser-hostility case appropriate to the chosen `openpyxl`/XML stack (e.g. a billion-laughs-shaped entity expansion attempt), so the Independent Auditor can verify malicious XML does not reach an unsafe parser path.
+- an XML/parser-hostility case appropriate to the chosen `openpyxl`/XML stack (e.g. a billion-laughs-shaped entity expansion attempt), so the Independent Auditor can verify malicious XML does not reach an unsafe parser path;
+- an OOXML relationship with external `TargetMode` outside `xl/externalLinks/` (Final Correction D);
+- a malformed/internal-traversal relationship target and a missing relationship target (Final Correction D);
+- a DOCTYPE-bearing OOXML XML part and an ENTITY/billion-laughs-style part, proving `defusedxml` hardening is genuinely active (Final Correction E);
+- a crafted-metadata ZIP where advertised sizes understate actual decompressed bytes, proving enforcement is against real streamed bytes, not just central-directory metadata (Final Correction F);
+- an upload exceeding 10 MiB proving the stream is aborted mid-transfer, not measured post-hoc (Final Correction G);
+- a real ClamAV `CLEAN` result on a legitimate file and a real ClamAV detection on a standard safe test specimen (e.g. EICAR) (Final Correction B);
+- a simulated scanner `UNAVAILABLE`/`ERROR` condition proving the import lands in `security_gate_failed` (retryable), not `security_gate_rejected` (Final Correction A);
+- hostile display content (`<script>`, HTML tags, event-handler payloads, very long strings, quote/entity-like content) proving inert rendering in real Chromium (Final Correction I).
 
 ## Required durable evidence
 
-`docs/evidence/M009A-SECURE-INGESTION-XLSX.md` — implementation rationale, the full security-gate verification (each hostile fixture in the evaluation corpus demonstrably rejected), the immutable-original proof, tenant-isolation test results, Customer Zero reset reconciliation proof, backup/restore proof, dependency/licence/build evidence, the complete M005-corpus-unchanged confirmation, and real-browser acceptance evidence for the Customer Assurance upload/status surface.
+`docs/evidence/M009A-SECURE-INGESTION-XLSX.md` — implementation rationale, the full security-gate verification (each hostile fixture in the evaluation corpus demonstrably rejected, including the Final-Correction-specific fixtures above), the immutable-original proof (including the three-way rejected/failed/passed retention distinction), tenant-isolation test results, Customer Zero reset reconciliation proof, backup/restore proof, dependency/licence/build evidence for `openpyxl`/`defusedxml`/any `clamd` client/the ClamAV container image, the complete M005-corpus-unchanged confirmation, real-browser acceptance evidence for the Customer Assurance upload/status surface including the XSS-inertness proof, and the state-consistency test matrix for `security_gate_status`×`status`.
 
 ## STOP conditions
 
@@ -285,14 +370,22 @@ New fixtures/harness (e.g. `questionnaire/eval/m009a_ingestion_corpus.py`), cove
 - Any need for an export/write-back capability.
 - Any ambiguity in the security-gate contract that cannot be resolved by the frozen rules above without weakening them.
 - Any indication synchronous processing cannot safely satisfy the bounded product contract (do not reach for async infrastructure — stop instead).
-- Any indication a concrete malware scanner cannot be integrated cleanly within this Work Order's scope.
+- Any indication a concrete malware scanner cannot be integrated cleanly within this Work Order's frozen ClamAV/clamd deployment shape.
 
 ## Delivery sequence
 
 1. Confirm exact base SHA before touching anything.
-2. Implementer builds the two new models + migration (in the existing `questionnaire` app), the security gate, XLSX extraction, storage layer, tenant isolation, the Customer Zero reset reconciliation, the backup/restore reconciliation, the minimal Customer Assurance upload/status surface, the M009A evaluation corpus, and the immutable-original proof — strictly within this Work Order's scope.
-3. Delivery Controller review (independent spot-check of the highest-risk claims: security-gate rejections actually reject each hostile fixture live, scanner result semantics genuinely fail closed on UNAVAILABLE/ERROR, immutable-original proof genuinely re-reads from disk, tenant isolation genuinely returns 404, Customer Zero reset genuinely removes the new model's rows and files without weakening any existing gate).
+2. Implementer builds the two new models + migration (in the existing `questionnaire` app), the security gate (including the ClamAV/clamd deployment, `defusedxml` hardening, external-relationship inspection, and streaming enforcement), XLSX extraction, storage layer, tenant isolation, the Customer Zero reset reconciliation, the backup/restore reconciliation, the minimal Customer Assurance upload/status surface (including the XSS-inertness proof), the M009A evaluation corpus, and the immutable-original proof — strictly within this Work Order's scope.
+3. Delivery Controller review (independent spot-check of the highest-risk claims: security-gate rejections actually reject each hostile fixture live including the new Final-Correction fixtures, scanner result semantics genuinely distinguish `security_gate_failed` from `security_gate_rejected`, a real ClamAV scan genuinely detects a test specimen, immutable-original proof genuinely re-reads from disk, tenant isolation genuinely returns 404, Customer Zero reset genuinely removes the new model's rows and files without weakening any existing gate, untrusted content genuinely renders inert in a real browser).
 4. Fresh Independent Audit.
 5. PR, Architect Acceptance, merge, closure — normal chain.
+
+## Architect acceptance
+
+**Architect:** Central Architecture / Project Architect
+**Acceptance date:** 2026-10-10
+**Architecture base:** `93acc86405597641c46b050dd603ab335ebb60d1`
+**Reviewed WO head before final acceptance corrections:** `119148183c7a9faea34ba8226e881336276c2998`
+**Decision:** **ACCEPTED FOR IMPLEMENTER DISPATCH**, conditional on the final A–J corrections in this revision being the only delta.
 
 **This Work Order is DRAFT. No Implementer may be dispatched against it until the Architect accepts it.**
