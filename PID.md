@@ -147,7 +147,10 @@ Paste/input question, interpret intent, ground answer in tenant state, classify 
 ### M006 — Customer-Zero Beta Hardening
 Full workflow, UX polish, security hardening, AI eval, recovery, release evidence.
 
-Future work such as supplier management, incident response, arbitrary XLSX/DOCX questionnaire upload, billing, Huntress/uSecure integration, GDPR and full ISO tooling is outside Beta 0.1 unless separately authorised.
+### M009 — Customer Assurance / Questionnaire Completion
+Extends M005 (never replaces it): secure bulk questionnaire-file ingestion (XLSX first-class, DOCX/PDF per the accepted format contract), deterministic source provenance, bulk orchestration of the existing grounded-answer engine, exception-first review, and versioned export/write-back. Architecture/PID authorised (`docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`); implementation requires its own Work Orders.
+
+Future work such as supplier management, incident response, billing, Huntress/uSecure integration, GDPR and full ISO tooling is outside Beta 0.1 unless separately authorised.
 
 ---
 
@@ -168,6 +171,9 @@ M004 Policy  M005 Questionnaire Assurance
       └────┬────┘
            ▼
      M006 Beta Hardening
+           │
+           ▼
+     M009 Customer Assurance / Questionnaire Completion
 ```
 
 ---
