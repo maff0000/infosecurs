@@ -38,7 +38,9 @@ from governance.services import assign_role
 from organisations.models import SECTOR_PROFESSIONAL_CONSULTING, Organisation, OrganisationMembership, OrganisationProfile
 from policy.models import PolicyDocument, PolicyVersion
 from policy.services import approve_policy_directly, create_new_draft_from_approved
-from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
+from questionnaire import import_services
+from questionnaire.eval.m009a_ingestion_corpus import valid_multi_sheet_workbook
+from questionnaire.models import QuestionnaireImport, QuestionnaireQuestion, QuestionnaireResponse
 from questionnaire.services import accept_questionnaire_response
 from security_baseline.services import record_structured_baseline_answer
 from security_baseline.structured_catalogue import STRUCTURED_OPTIONS
@@ -235,8 +237,40 @@ class Command(BaseCommand):
             )
             accept_questionnaire_response(r2, actor=user)
 
+        # --- M009A: a representative QuestionnaireImport, through the REAL
+        # ingest pipeline (real content-sniffing/security-gate/scanner/
+        # extraction - not a hand-rolled DB row), proving the backup/
+        # restore mechanism also covers questionnaire-storage bytes
+        # (WO-M009A-SECURE-INGESTION-XLSX.md "Questionnaire storage -
+        # persistent and recoverable"). Uses the REAL scanner service
+        # (CLAMAV_HOST, as set by docker-compose.yml for `web`) - this
+        # command is only ever run against a real disposable stack with a
+        # real `clamav` service reachable, never inside a unit test.
+        questionnaire_import = QuestionnaireImport.objects.filter(
+            organisation=organisation, original_filename="backup-restore-demo-questionnaire.xlsx"
+        ).first()
+        if questionnaire_import is None:
+            questionnaire_import = import_services.ingest_questionnaire_import(
+                organisation=organisation,
+                actor=user,
+                uploaded_file=SimpleUploadedFile(
+                    "backup-restore-demo-questionnaire.xlsx",
+                    valid_multi_sheet_workbook(),
+                    content_type="application/octet-stream",
+                ),
+                original_filename="backup-restore-demo-questionnaire.xlsx",
+            )
+
         self.stdout.write(self.style.SUCCESS(f"organisation_id={organisation.id}"))
         self.stdout.write(self.style.SUCCESS(f"evidence_item_id={evidence_item.id}"))
+        self.stdout.write(
+            self.style.SUCCESS(f"questionnaire_import_id={questionnaire_import.id}")
+        )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"questionnaire_import_security_gate_status={questionnaire_import.security_gate_status}"
+            )
+        )
         self.stdout.write(
             self.style.SUCCESS("Backup/restore demo fixture ready (idempotent, synthetic).")
         )

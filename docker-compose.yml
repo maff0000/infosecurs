@@ -25,6 +25,26 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 
+  # M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Scanner deployment shape -
+  # frozen", Final Correction B). Internal-only Compose service - NO
+  # `ports:` mapping anywhere in this file, reachable solely over the
+  # default internal Compose network by `web` (questionnaire.scanner).
+  # Exact version + immutable digest pinned (never a floating `latest`
+  # tag). FreshClam (signature updates) runs via this official image's own
+  # entrypoint; the signature database lives on its OWN named volume -
+  # operational/cache data, never INFOSECURS business data, so it is
+  # deliberately NOT included in scripts/backup.sh's backup set.
+  clamav:
+    image: clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
+    volumes:
+      - infosecurs_clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
   web:
     build: .
     command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
@@ -38,9 +58,19 @@ services:
       # any image rebuild, and must never be served from a public
       # static/media directory.
       EVIDENCE_STORAGE_ROOT: /data/evidence
+      # M009A: same discipline, same reasoning, a SEPARATE storage root
+      # from evidence (WO-M009A "Questionnaire storage - persistent and
+      # recoverable").
+      QUESTIONNAIRE_STORAGE_ROOT: /data/questionnaire
+      # M009A: the internal-only clamav service above, reached by its
+      # Compose service name over the internal network - never a host
+      # port, never an external/cloud scanner.
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
     volumes:
       - .:/app
       - infosecurs_evidence_data:/data/evidence
+      - infosecurs_questionnaire_data:/data/questionnaire
     ports:
       # Configurable host bind address (default stays loopback-only - a
       # normal clone is never reachable off the host unless someone
@@ -51,7 +81,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      clamav:
+        condition: service_healthy
 
 volumes:
   infosecurs_postgres_data:
   infosecurs_evidence_data:
+  infosecurs_questionnaire_data:
+  infosecurs_clamav_data:

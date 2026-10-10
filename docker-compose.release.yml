@@ -55,6 +55,24 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 
+  # M009A - same frozen deployment shape as docker-compose.yml's own
+  # `clamav` service (see that file's comment for the full reasoning):
+  # internal-only, no `ports:` mapping, exact pinned digest. "This topology
+  # applies to both the normal development Compose architecture and the
+  # standalone release Compose architecture" (WO-M009A Final Correction B)
+  # - a release artifact in which Customer Assurance upload always fails
+  # because no scanner exists is not M009A GREEN.
+  clamav:
+    image: clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
+    volumes:
+      - infosecurs_release_clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
   web:
     image: ${RELEASE_IMAGE:?RELEASE_IMAGE must be set to the exact-SHA-tagged release image, e.g. infosecurs-release:<git-sha> - see the file header comment above}
     # Static assets must be collected deterministically on every container
@@ -69,8 +87,12 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       EVIDENCE_STORAGE_ROOT: /data/evidence
+      QUESTIONNAIRE_STORAGE_ROOT: /data/questionnaire
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
     volumes:
       - infosecurs_release_evidence_data:/data/evidence
+      - infosecurs_release_questionnaire_data:/data/questionnaire
     ports:
       - "127.0.0.1:${WEB_HOST_PORT:-8000}:8000"
       # Reserved, normally idle, for the bounded single-hop TLS test
@@ -85,7 +107,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      clamav:
+        condition: service_healthy
 
 volumes:
   infosecurs_release_postgres_data:
   infosecurs_release_evidence_data:
+  infosecurs_release_questionnaire_data:
+  infosecurs_release_clamav_data:
