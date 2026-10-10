@@ -9,7 +9,8 @@
 | M005 | Questionnaire Assurance | PRODUCT_GREEN |
 | M006 | Customer-Zero Beta Hardening | PRODUCT_GREEN |
 | M007 | Dashboard Shell, Entitlements & Foundation Metrics | PRODUCT_GREEN |
-| M008 | Guided Security Foundations Experience Redesign | AUTHORISED — PID PREPARATION; catalogue/UX/policy design checkpoint mandatory before substantive workflow implementation (see `docs/pids/M008-FOUNDATIONS-EXPERIENCE-REDESIGN.md`) |
+| M008 | Guided Security Foundations Experience Redesign | CLOSED PRODUCT_GREEN — includes the M008E visual/UX design hardening extension (see `docs/evidence/M008-DEV-SCHEMA-DRIFT-CLOSURE.md`, `docs/evidence/M008E-CLOSURE.md`) |
+| M009 | Customer Assurance / Questionnaire Completion | ARCHITECTURE / PID AUTHORISED — implementation not yet authorised (see `docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`) |
 
 Do not pre-build later modules merely because they are listed here.
 
