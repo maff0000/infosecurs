@@ -3,6 +3,8 @@
 # pattern security_state/tests/conftest.py / security_baseline/tests/
 # conftest.py already use. Importing pytest fixtures re-exposes them to
 # this directory's tests.
+import pytest
+
 from organisations.tests.conftest import (  # noqa: F401
     client_a,
     client_b,
@@ -16,6 +18,19 @@ from organisations.tests.conftest import (  # noqa: F401
 )
 
 from ai_platform.testing import FakeQuestionnaireDraftingGateway, FakeQuestionnaireInterpretationGateway
+
+
+@pytest.fixture(autouse=True)
+def questionnaire_storage_root(tmp_path, monkeypatch):
+    """
+    M009A: every questionnaire test gets its own throwaway
+    QUESTIONNAIRE_STORAGE_ROOT, mirroring `evidence/tests/conftest.py`'s
+    identically-named autouse fixture 1:1.
+    """
+    root = tmp_path / "questionnaire-storage"
+    root.mkdir()
+    monkeypatch.setenv("QUESTIONNAIRE_STORAGE_ROOT", str(root))
+    return root
 
 
 class _CombinedFakeQuestionnaireGateway:
