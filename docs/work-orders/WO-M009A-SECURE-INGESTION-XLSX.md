@@ -6,7 +6,7 @@
 
 ## Scope — exactly this, nothing more
 
-Secure ingestion of an uploaded XLSX questionnaire file and deterministic normalisation of its candidate questions, with full source-location provenance. This Work Order is **not**:
+Secure ingestion of an uploaded XLSX questionnaire file, deterministic normalisation of its candidate questions with full source-location provenance, and the minimal real customer entry surface needed to prove the feature end to end. This Work Order is **not**:
 
 - bulk AI answer generation (M009B);
 - exception-first review (M009C);
@@ -22,32 +22,37 @@ If implementation work appears to require any of the above, or any change to `Qu
 - No answer generation of any kind — this Work Order extracts and normalises candidate questions only; it never calls `questionnaire.services.generate_questionnaire_response` or any AI orchestration module.
 - The originally uploaded workbook is immutable — never modified, never overwritten, retained exactly as uploaded.
 - Tenant isolation identical in discipline to `get_member_organisation_or_404` — a non-member or foreign UUID gets 404, never 403, never confirms existence.
-- No parser/extractor of any kind may run before the pre-parse security gate accepts the file. The security gate itself may perform only bounded container-level structural inspection (format/archive-member/expansion-ratio/macro/traversal checks) — not business/semantic parsing.
-- Questionnaire content is DATA. Nothing in this Work Order sends file content to an AI model — there is no AI call anywhere in M009A's scope.
+- No parser/extractor of any kind may run before the pre-parse security gate accepts the file. The security gate itself may perform only bounded container-level structural inspection — not business/semantic parsing.
+- Questionnaire content is DATA. M009A's own application/product paths make **zero AI invocations** — no new AI task, prompt, or invocation record. (The existing, unmodified M005 14-case regression corpus may continue using its own existing, already-governed deterministic fake/testing gateway — that is not a new AI path and is not affected by this rule.)
+
+## Domain placement — frozen (Correction 1)
+
+The M009A models live inside the existing `questionnaire` Django app. **Do not create a new Django app for questionnaire imports.** The conceptual artifact domain remains distinct from `EvidenceItem` (different purpose, different lifecycle — see the PID's M009-5), but it belongs inside the existing questionnaire bounded context, alongside `QuestionnaireQuestion`/`QuestionnaireResponse`.
 
 ## Frozen model contracts
 
 ### `QuestionnaireImport`
 
-New app or new models within the existing `questionnaire` app (Implementer's own choice, document the decision). Fields:
-
 | Field | Type | Notes |
 |---|---|---|
 | `id` | UUID, pk | |
-| `organisation` | FK → `Organisation`, `PROTECT` | tenant scope |
-| `uploaded_by` | FK → User, `PROTECT` | |
+| `organisation` | FK → `Organisation`, **`CASCADE`** | tenant-owned data; deleting the organisation must not be blocked by questionnaire history |
+| `uploaded_by` | FK → User, **`SET_NULL`, nullable** | user deletion/deactivation must not destroy the artifact or block identity lifecycle operations |
 | `uploaded_at` | `DateTimeField(auto_now_add=True)` | |
-| `original_filename` | `CharField` | display only, sanitised for display, never used in any filesystem/parsing decision |
-| `stored_filename` | `CharField` | opaque, server-generated `uuid4().hex`, matching `evidence/storage.py`'s own convention |
-| `detected_content_type` | `CharField` | from content-sniffing only (magic bytes + archive structure), never client-supplied |
-| `file_format` | `CharField`, choices | `xlsx` is the only value this Work Order's validation accepts; the field itself is defined broadly enough that M009D can add `docx`/`pdf` later without a schema change |
-| `sha256_hash` | `CharField(max_length=64)` | computed streaming, chunk-by-chunk |
-| `size_bytes` | `PositiveBigIntegerField` | |
-| `security_gate_status` | `CharField`, choices: `pending`, `passed`, `rejected` | |
+| `original_filename` | `CharField` | display only, sanitised for display, never used in any filesystem/parsing decision; **immutable after creation** |
+| `stored_filename` | `CharField` | opaque, server-generated `uuid4().hex`, matching `evidence/storage.py`'s own convention; **immutable after creation** |
+| `detected_content_type` | `CharField` | from content-sniffing only, never client-supplied; **immutable after creation** |
+| `file_format` | `CharField`, choices | `xlsx` is the only value this Work Order's validation accepts; **immutable after creation** |
+| `sha256_hash` | `CharField(max_length=64)` | computed streaming, chunk-by-chunk; **immutable after creation** |
+| `size_bytes` | `PositiveBigIntegerField` | **immutable after creation** |
+| `security_gate_status` | `CharField`, choices: `pending`, `passed`, `rejected` | mutable only via the domain service's governed transitions (see "Service-owned state transitions" below) |
 | `security_gate_result` | `JSONField` | structured rejection reason(s) / structural inspection summary — never raw file content |
-| `status` | `CharField`, choices: `uploaded`, `security_gate_pending`, `security_gate_rejected`, `extracting`, `extracted`, `extraction_failed` | this Work Order populates/transitions only these six; later increments add `ready_for_review`/`completed` etc. without a schema change to this field's choice list being treated as a truth-engine change |
-| `supersedes` | self-FK, nullable, `PROTECT` | set when a re-upload is intended to replace a prior import; the prior import and all its questions remain, untouched and inspectable |
+| `status` | `CharField`, choices: `uploaded`, `security_gate_pending`, `security_gate_rejected`, `extracting`, `extracted`, `extraction_failed` | this Work Order populates/transitions only these six; mutable only via governed service transitions |
+| `extraction_summary` | `JSONField`, nullable | bounded structured summary — see "Import-level extraction summary" below |
+| `supersedes` | self-FK, nullable, **`SET_NULL`** | set when a re-upload is intended to replace a prior import; the prior import and all its questions remain, untouched and inspectable |
 | `created_at`/`updated_at` | timestamps | |
+
+**Immutable artifact metadata, binding:** `organisation`, `stored_filename`, `original_filename`, `sha256_hash`, `size_bytes`, `detected_content_type`, `file_format` must be model/service-layer immutable after creation. Security/lifecycle state may advance; the identity of "which bytes were uploaded" may never silently change underneath an existing `QuestionnaireImport`.
 
 ### `QuestionnaireImportQuestion`
 
@@ -55,19 +60,17 @@ New app or new models within the existing `questionnaire` app (Implementer's own
 |---|---|---|
 | `id` | UUID, pk | |
 | `import` | FK → `QuestionnaireImport`, `CASCADE` | |
-| `question` | FK → `QuestionnaireQuestion`, nullable, `PROTECT` | set only when `disposition=question` and normalisation succeeds; **the existing M005 model, completely unmodified** |
-| `raw_extracted_text` | `TextField` | the literal extracted cell text, always populated regardless of disposition — this is what makes a non-question disposition auditable rather than silently dropped |
+| `question` | FK → `QuestionnaireQuestion`, nullable, **`SET_NULL`** | set only when `disposition=question` and normalisation succeeds; **the existing M005 model, completely unmodified**. The bridge must not prevent the existing `QuestionnaireQuestion` lifecycle or Customer Zero reset — if the linked M005 question disappears, source artifact/provenance remains intact with `question=NULL` |
+| `raw_extracted_text` | `TextField(max_length=32767)` | the literal extracted cell text, always populated regardless of disposition; capped at Excel's own cell maximum (32,767 characters) |
 | `source_location` | `JSONField` | the versioned contract below |
 | `extraction_order` | `PositiveIntegerField` | preserves original document order |
 | `extraction_status` | `CharField`, choices: `pending`, `extracted`, `failed` | |
 | `extraction_error` | `TextField`, nullable | |
-| `disposition` | `CharField`, choices: `question`, `heading`, `instructional_text`, `excluded_duplicate`, `excluded_other` | **explicit and auditable for every extracted row — never silently dropped**, per the PID's send-ready predicate requirement |
+| `disposition` | `CharField`, choices: `question`, `heading`, `instructional_text`, `excluded_duplicate`, `excluded_ambiguous`, `excluded_other` | **explicit and auditable for every extracted row — never silently dropped** |
 
 ### `QuestionnaireExport` — **deferred to M009D, not created by this Work Order**
 
-M009A has no export/output capability at all. Creating this model now would be scope creep against a capability this Work Order doesn't implement.
-
-### Source-location contract (versioned, validated, fail-closed)
+### Source-location contract — XLSX schema v1 (Correction 10)
 
 ```json
 {
@@ -75,80 +78,204 @@ M009A has no export/output capability at all. Creating this model now would be s
   "format": "xlsx",
   "sheet_name": "<string>",
   "sheet_index": <int>,
-  "cell": "<e.g. B14>",
+  "question_cell": "<e.g. B14>",
   "row": <int>,
-  "column": "<e.g. B>"
+  "question_column": "<e.g. B>",
+  "answer_cell": "<e.g. C14, or null>"
 }
 ```
 
-Validated against a schema check before being persisted. **If a candidate's location cannot be expressed in this exact schema, the row's `extraction_status` is `failed` (or `disposition=excluded_other` with `raw_extracted_text` still populated) — it must never proceed as if a valid location existed.** `schema_version` exists so a future format (DOCX's table/row/cell or paragraph addressing) adds a new, separately-validated shape rather than overloading this one.
+`question_cell` replaces the earlier generic `cell` field name so its meaning is unambiguous. `answer_cell` may be `null` where no destination can be safely determined — if null, M009A may still normalise the question, but **M009D must not invent or fuzzy-match an answer destination later; a send-ready round-trip export cannot rely on rediscovering the destination from question text.** Validated against this schema before being persisted; **if a candidate's location cannot be expressed in this exact schema, it fails closed** — `extraction_status=failed` or `disposition=excluded_other`, `raw_extracted_text` still populated, never proceeding as if a valid location existed. `schema_version` exists so a future format (DOCX) adds a new, separately-validated shape rather than overloading this one.
 
-## Import/artifact lifecycle (state machine — binding)
+## Customer Zero reset reconciliation — mandatory, in scope for this Work Order (Correction 3)
 
-```
-uploaded
-  → security_gate_pending
-      → security_gate_rejected   (terminal; stored bytes may be deleted immediately — see cleanup below)
-      → extracting
-          → extracted            (terminal for M009A; M009B+ advances status further)
-          → extraction_failed    (retryable — re-run extraction, never re-upload required)
-```
+The existing reset system enumerates every direct FK to `Organisation` and deliberately fails closed on model drift. Adding `QuestionnaireImport.organisation` without reconciling the reset manifest **will break the existing Customer Zero reset by design.** This Work Order explicitly authorises the bounded reset reconciliation this new model requires — and only this:
 
-## XLSX question/answer-cell identification rules
+- Update `organisations/reset_service.py` to classify `questionnaire.QuestionnaireImport` as synthetic tenant state deleted by Customer Zero reset.
+- Update the reset deletion manifest/evidence documentation accordingly.
+- Update reset service tests to cover the new model.
+- Delete `QuestionnaireImport` rows before the existing `QuestionnaireQuestion` deletion where ordering requires it; `QuestionnaireImportQuestion` rows disappear through the import's own `CASCADE`.
+- **Questionnaire file cleanup**: Customer Zero reset must also remove the target organisation's questionnaire-storage directory after the database transaction, using the same separate-filesystem-resource discipline already used for Evidence. A failure to clean questionnaire bytes must not be silently reported as a completely successful reset.
+- **Do not weaken any existing reset authority, typed-RESET confirmation, CSRF, environment gate, or fixture-identity gate.** This is a bounded extension of the existing manifest, not a redesign of the reset mechanism.
 
-The Implementer must propose and document a deterministic, testable extraction rule as part of implementation evidence — this Work Order does not freeze the exact heuristic, but binds its shape: **every extracted row must receive an explicit, auditable `disposition`; ambiguous content is excluded with a recorded reason, never guessed into a `question` disposition.** A reasonable starting point: a single designated "questions" worksheet (by name or position, implementation's choice, documented), iterating rows, treating a cell as a question candidate only if it is a literal text value (never a formula — see formula handling below) above a minimum length threshold; non-qualifying cells are recorded with `disposition=heading`/`instructional_text`/`excluded_other` as appropriate, never silently skipped from the `QuestionnaireImportQuestion` table entirely (every row the extractor visits gets a row in this table, even if excluded).
+## Questionnaire storage — persistent and recoverable (Correction 4)
 
-## Security-gate contract (binding, frozen at this Work Order)
+A new storage root cannot merely exist as an environment variable inside the web container. This Work Order must prove questionnaire source artifacts survive ordinary web-container recreation, mirroring the established private evidence-storage operational pattern:
 
-- **Allowlist**: only `.xlsx` accepted. Validated by content-sniffing: ZIP local-file-header magic bytes (`PK\x03\x04`) **and** confirmed presence of `xl/workbook.xml` inside the archive (true OOXML spreadsheet structure) — never filename extension or client Content-Type alone.
-- **Macro rejection**: reject if `xl/vbaProject.bin` is present in the archive, or if the detected structure indicates a macro-enabled workbook. Only plain `.xlsx` is accepted; `.xlsm` is always rejected regardless of extension.
-- **Size limit**: 10 MiB, matching the existing `evidence/storage.py::MAX_UPLOAD_BYTES` order of magnitude (exact figure confirmable/tunable in implementation evidence).
-- **Archive expansion limits** (ZIP-bomb defence): a maximum total uncompressed size (proposed: 200 MiB), a maximum per-entry compression ratio (proposed: reject any single archive member whose decompressed:compressed ratio exceeds 100:1), and a maximum archive entry count (proposed: 10,000). Exact figures are implementation-evidence-tunable but must exist and be enforced before any entry is fully decompressed.
-- **External-link handling**: reject any workbook containing `xl/externalLinks/` entries outright — fail closed, do not attempt to sanitise or strip.
-- **Formula handling at ingestion**: `openpyxl` must be loaded with `read_only=True, data_only=True` — never triggers formula recalculation, never evaluates a formula from an untrusted file. If a candidate cell contains a raw formula rather than a literal value, it is excluded (`disposition=excluded_other`), never guessed from a cached value alone without validation.
-- **Path-traversal defence**: reuse the `evidence_file_path` pattern exactly — reject any `stored_filename` containing `/`, `\`, or `.`/`..`, then re-resolve via `realpath` + `commonpath` containment against the organisation's storage directory.
-- **Malware scanning**: a scanner abstraction (e.g. `QuestionnaireFileScanner.scan(path) -> ScanResult`) must exist and be called unconditionally in the gate pipeline. A concrete backend (e.g. ClamAV) may be selected during implementation if the evidence supports it; if no concrete scanner is available in this environment, a documented stub that explicitly logs "malware scanning not yet integrated" is acceptable **but must never be silently absent or silently skipped** — the call site and its current behaviour must be visible in the code and in the evidence doc.
-- **Tenant isolation**: identical discipline to `get_member_organisation_or_404` throughout.
+- persistent storage mount/configuration (not container-ephemeral);
+- a private, tenant-scoped directory per organisation;
+- opaque filenames (`stored_filename`, as above);
+- explicit permissions (mode `0640`, matching evidence storage);
+- no static/media public serving path — ever.
 
-## Storage layout
+Also reconcile the existing backup/restore mechanism and runbook so questionnaire storage is backed up/restored alongside the database and evidence storage. The backup/restore proof may be narrow (one representative import), but **the new artifact class must not be omitted from recovery architecture.** A system that persists questionnaire metadata in PostgreSQL while silently losing the source workbook on container replacement is not acceptable.
 
-Mirrors `evidence/storage.py`'s proven pattern: a new lazy-loaded `QUESTIONNAIRE_STORAGE_ROOT` env var (same lazy-read-only-when-needed discipline as `EVIDENCE_STORAGE_ROOT`), files stored at `{QUESTIONNAIRE_STORAGE_ROOT}/{organisation_id}/{stored_filename}`, mode `0640`, `O_EXCL` no-clobber write.
+## Formula handling — corrected (Correction 5)
 
-## Safe cleanup / failure behaviour
+**The earlier `read_only=True, data_only=True` instruction was technically wrong and is withdrawn.** With `data_only=True`, `openpyxl` returns the cached result of a formula where one exists, not the formula itself — unsuitable when the requirement is to identify formula cells and never mistake their cached value for literal questionnaire text.
 
-- **Security-gate-rejected files**: the `QuestionnaireImport` metadata row (hash, size, rejection reason, timestamps) is retained permanently for audit. The stored bytes themselves may be deleted immediately after rejection (no legitimate ongoing need to retain hostile/rejected bytes) — implementation may choose immediate deletion or a short bounded retention window; either is acceptable if documented in the evidence.
-- **Extraction-failed imports**: the file passed the security gate (legitimately safe bytes) — stored bytes are retained, `status=extraction_failed`, and extraction is retryable without requiring re-upload.
+**Binding rule for M009A extraction**: use `read_only=True, data_only=False` (or an architecturally equivalent approach that preserves formula identity). `openpyxl` does not calculate formulas merely because `data_only=False` — formulas are never evaluated either way. Formula cells remain visibly formula cells to application code; they are never evaluated; their cached value is never treated as trustworthy literal questionnaire content; formula-bearing candidate cells are explicitly excluded/fail-classified; their disposition remains auditable. **Do not perform a second `data_only=True` read and substitute cached formula results into extracted questions.** M009D will separately govern formula-injection-safe output.
+
+## Malware scanning — fail-closed (Correction 6)
+
+**Withdrawn**: the earlier allowance for "a stub that logs 'malware scanning not yet integrated'" to mark the security gate PASSED. The scanner abstraction itself remains correct and required; its result must have explicit semantics:
+
+- **CLEAN** — only this result may advance the security gate to `passed`.
+- **INFECTED** — reject.
+- **UNAVAILABLE** — fail closed; do not parse/extract.
+- **ERROR** — fail closed; do not parse/extract.
+
+A deterministic fake scanner is allowed in unit/evaluation tests. A development/runtime "scanner unavailable" implementation may exist to make absence explicit, but **it must BLOCK upload processing, never allow it through.** M009A cannot close GREEN with a runtime file-security gate that claims `passed` while malware scanning is merely a logging stub. If integrating a concrete scanner cleanly requires architecture beyond this Work Order: **STOP and return to Architect** rather than silently weakening the gate.
+
+## OOXML container gate — hardened (Correction 7)
+
+Before `openpyxl` sees the artifact, bounded container inspection must cover at minimum:
+
+- `[Content_Types].xml` exists;
+- `_rels/.rels` exists;
+- `xl/workbook.xml` exists;
+- the workbook content type is a permitted non-macro XLSX type;
+- no `xl/vbaProject.bin`;
+- no macro-enabled workbook content type;
+- no `xl/externalLinks/` package parts;
+- no encrypted ZIP members;
+- no duplicate normalised archive member names;
+- no absolute/archive-traversal member names;
+- no `..` traversal after normalising path separators;
+- no NUL/invalid path tricks.
+
+**Do not extract ZIP members onto the filesystem merely to inspect them.** Reject malformed/ambiguous package structures. Hostile fixtures for each of the above are required (see "Evaluation corpus" below).
+
+## Security limits — frozen for M009A-v1 (Correction 8)
+
+Not "proposed." Frozen:
+
+- upload compressed size: **10 MiB**
+- total permitted uncompressed archive size: **200 MiB**
+- maximum archive entries: **10,000**
+- maximum per-entry decompressed/compressed ratio: **100:1**
+
+Implementation must correctly handle zero-sized/zero-compressed edge cases without division errors. If legitimate test evidence shows a limit is inappropriate: **STOP and return to Delivery Controller/Architect with evidence before weakening it.** A more conservative implementation limit is also an architectural change if it materially narrows supported customer files — do not silently alter these values either direction.
+
+## Semantic extraction resource limits — frozen for M009A-v1 (Correction 9)
+
+ZIP limits alone are insufficient — a valid XLSX can still create excessive CPU/database work through huge worksheet dimensions or cell counts. Frozen:
+
+- maximum worksheets inspected: **50**
+- maximum used rows per worksheet: **20,000**
+- maximum used columns per worksheet: **256**
+- maximum non-empty cells inspected across the workbook: **100,000**
+- maximum normalised question candidates per import: **5,000**
+- maximum persisted literal cell text: **32,767 characters** (Excel's own cell maximum)
+
+Exceeding a bound must fail closed with a clear extraction reason. **Do not partially claim a workbook is successfully extracted after silently truncating it at a resource limit.** These are M009A-v1 limits and may be amended later from real Customer Zero evidence.
+
+## XLSX v1 mapping rule — frozen, deterministic tabular questionnaires only (Correction 11)
+
+M009A-v1 supports deterministic **tabular XLSX questionnaires**. For each visible worksheet:
+
+1. Inspect a bounded header region.
+2. Normalise header strings by trimming whitespace and case-folding.
+3. Identify a question column only through the finite governed header vocabulary below.
+4. Identify an answer/response column separately through the finite governed header vocabulary below.
+5. If more than one plausible question column is present on the same sheet, **do not guess** — mark that sheet/import ambiguous (`excluded_ambiguous`).
+6. If no sheet contains a deterministically identifiable question column, the import ends `extraction_failed` with a useful reason.
+7. Process **every** unambiguous questionnaire sheet — never arbitrarily "the first worksheet" only.
+8. Literal non-empty values in the identified question column become candidates unless an explicit deterministic exclusion rule applies.
+9. Formula cells never become questions (per the formula-handling rule above).
+10. Exact normalised duplicates within the same import may be marked `excluded_duplicate`, while preserving the raw/source record.
+11. Blank rows do not require a `QuestionnaireImportQuestion` row.
+12. Do not persist arbitrary unrelated workbook cells merely because the extractor visited them.
+
+**V1 question-header vocabulary** (case-folded, whitespace-trimmed exact match): `question`, `security question`, `assessment question`, `control question`, `requirement`, `security requirement`, `question / requirement`, `control / question`.
+
+**V1 answer-header vocabulary**: `answer`, `response`, `your answer`, `your response`, `supplier response`, `vendor response`, `company response`.
+
+**Do not include vague columns such as generic `notes` or `comments` as answer destinations automatically.** If actual fixture evidence during implementation proves an additional header alias is clearly needed, document it in the implementation evidence and bring it to Delivery Controller review — **do not introduce fuzzy/AI-based header interpretation in M009A.**
+
+## Non-question dispositions — deterministic only (Correction 12)
+
+Do not claim semantic certainty the deterministic extractor does not possess. `heading` or `instructional_text` may only be assigned when there is a deterministic *structural* rule supporting that disposition (e.g. an obvious merged section row may be structurally classified as a heading). **Do not decide that arbitrary prose "looks instructional" using undocumented natural-language heuristics.** If content in the identified question column cannot be safely classified as a question or a specific structural non-question, use the explicit conservative `excluded_other` disposition with a recorded reason. **No AI classifier in M009A.**
+
+## Import-level extraction summary (Correction 13)
+
+`QuestionnaireImport.extraction_summary` (bounded `JSONField`) must record, at minimum: sheets discovered; sheets processed; sheets skipped and the deterministic reason; question count; excluded count by disposition; failed count; whether an answer destination was found for at least one question. **Do not store arbitrary workbook body content in this summary.** This prevents "a sheet was silently ignored" from becoming invisible product behaviour.
+
+## Service-owned state transitions (Correction 14)
+
+Views must not freely mutate `security_gate_status`, import `status`, the extraction summary, or any artifact-identity field. Implement the upload/security/extraction lifecycle through bounded domain services with explicit allowed transitions; invalid transitions fail closed. The UI calls services — it never directly manipulates lifecycle fields.
+
+## Minimal real customer entry surface (Correction 15)
+
+This Work Order includes the minimal product surface needed to prove the feature, on the existing **Customer Assurance** page:
+
+- an XLSX upload control, with clear accepted-format/size wording;
+- CSRF-protected POST;
+- **Monthly+ entitlement enforcement** (reuse the existing `customer_assurance` ProductArea — do not create a new entitlement family);
+- a tenant-scoped import detail/status page.
+
+The import detail page shows only M009A-scoped information: original safe display filename; uploaded time; security-gate status; extraction status; counts of question/excluded/failed items; extracted question text/source location where safe; a clear failure/rejection reason. **It must NOT add** answer generation, answer review, bulk accept, export/write-back, DOCX/PDF, or AI.
+
+Real Chromium acceptance at 1280px/768px/375px is required for these changed user-facing surfaces. Direct URL entitlement tests must prove: PAUSED denied; FOUNDATION denied; MONTHLY allowed; PRO allowed.
+
+## No async infrastructure (Correction 16)
+
+M009A does not authorise Celery, Redis queues, workers, or any new job platform merely for XLSX parsing. The bounded V1 file/resource limits above make synchronous processing acceptable for this milestone. If implementation evidence proves synchronous processing cannot safely satisfy the bounded product contract: **STOP and return to Architect** — do not solve that by inventing infrastructure.
+
+## Backup / reset / storage tests — acceptance-gating (Correction 17)
+
+Explicit tests must prove: web-container recreation does not lose questionnaire files; Customer Zero reset removes M009A database state; Customer Zero reset removes the fixture tenant's questionnaire file directory; another tenant's questionnaire rows/files remain untouched by that reset; backup/restore includes questionnaire artifact bytes and their matching database metadata; the original artifact's SHA-256 remains identical after extraction. This extends the existing operational guarantees — it does not redesign them.
 
 ## Dependency: `openpyxl`
 
-The only dependency this Work Order introduces. MIT-licensed (compatible, no special licence action beyond the standard review step). Load mode **mandated**: `read_only=True, data_only=True`. Exact version/pin/hash via the normal `pip-compile` relock cycle; dependency scan, licence review, and parser-security tests required per `docs/runbooks/BUILD-REPRODUCIBILITY.md` before this Work Order's own Independent Audit.
+The only dependency this Work Order introduces. MIT-licensed. Load mode mandated: `read_only=True, data_only=False` (see formula handling above — corrected from the earlier draft). Exact version/pin/hash via the normal `pip-compile` relock cycle; dependency scan, licence review, and parser-security tests required per `docs/runbooks/BUILD-REPRODUCIBILITY.md` before this Work Order's own Independent Audit.
 
-## Tenant-isolation tests (required)
+## Verification before reporting back — full repository gate (Correction 19)
 
-Every query path for `QuestionnaireImport`/`QuestionnaireImportQuestion` must prove: a non-member or foreign-organisation UUID returns 404 (never 403, never confirms existence); a `QuestionnaireImportQuestion` is never reachable independent of its parent `QuestionnaireImport`'s own organisation-scoped lookup.
+Because M009A adds models, migrations, storage, entitlement-visible UI, and necessarily reconciles the fail-closed Customer Zero reset graph, this Work Order requires **the full repository test suite**, not merely "apps touched plus core." Also required:
 
-## M009A-specific evaluation corpus (required, new — does not touch the existing M005 corpus)
-
-New fixtures/harness (e.g. `questionnaire/eval/m009a_ingestion_corpus.py`) covering at minimum: a well-formed multi-question workbook with mixed headings/instructional text; a candidate cell containing a formula; a workbook with an external link; a macro-enabled file (including one renamed with a `.xlsx` extension, to prove content-sniffing — not extension — is what rejects it); an oversized file; a ZIP-bomb-shaped archive (crafted high-ratio entry); a non-XLSX file renamed with a `.xlsx` extension; a corrupted/truncated archive; a legitimate re-upload (`supersedes`) scenario; cross-tenant access-attempt cases.
-
-## Immutable-original proof (required)
-
-A direct, mechanical test: upload a file, compute its hash, run extraction, then re-read the stored original bytes from disk and confirm the hash is unchanged. Not "we didn't write code that touches it" — an actual before/after byte-identity proof.
-
-## Verification before reporting back
-
-- The full existing test suite for every app touched, plus `core`, green.
-- `makemigrations --check --dry-run` — a new migration for the two new models is expected and must be clean/consistent (no divergence between model state and migration).
-- `gitleaks detect` clean.
-- Dependency scan/licence review/build-reproducibility evidence for `openpyxl`.
-- The M009A-specific evaluation corpus green.
-- The existing M005 14-case golden corpus run and confirmed unchanged/green (even though this Work Order never calls the truth engine, this proves no accidental interference).
-- No AI call made anywhere during this Work Order's own verification.
+- the new M009A evaluation corpus GREEN;
+- the existing M005 14-case corpus unchanged and GREEN;
+- `makemigrations --check --dry-run` clean after the intended committed migration;
+- `gitleaks detect` clean;
+- all seven GitHub CI/security checks GREEN;
+- `openpyxl` licence/dependency/build-reproducibility evidence;
+- real-browser upload/status acceptance at 1280/768/375;
+- tenant-isolation adversarial tests;
+- the reset regression tests above;
+- the backup/restore regression tests above;
+- **AI-call verification, corrected wording**: M009A application/product paths make zero AI invocations; no live/external model call is made during M009A verification; the unchanged M005 regression corpus may use its existing, already-governed deterministic fake/testing gateway — that is not a new AI path;
 - DARWIN untouched.
+
+## Evaluation corpus (Correction 20)
+
+New fixtures/harness (e.g. `questionnaire/eval/m009a_ingestion_corpus.py`), covering at minimum:
+
+- a well-formed multi-question, multi-sheet workbook (tests the "process every unambiguous sheet" rule);
+- a candidate cell containing a formula;
+- an external-link workbook;
+- a macro-bearing workbook, including one renamed with a `.xlsx` extension (proves content-sniffing, not extension, rejects it);
+- an oversized upload;
+- a high-expansion-ratio ZIP (zip-bomb shape);
+- an archive with too many members;
+- a non-XLSX file renamed with a `.xlsx` extension;
+- a corrupt/truncated ZIP;
+- an archive with duplicate member names;
+- an archive with a traversal/absolute member name;
+- an archive with an encrypted member;
+- a malformed `[Content_Types].xml`;
+- a workbook missing required OOXML relationships;
+- a semantic-extraction-resource-limit breach (e.g. too many rows);
+- a sheet with multiple plausible question columns (ambiguous);
+- a workbook with no identifiable question column;
+- a legitimate re-upload/`supersedes` case;
+- cross-tenant access attempts;
+- the immutable-original before/after byte-identity proof;
+- an XML/parser-hostility case appropriate to the chosen `openpyxl`/XML stack (e.g. a billion-laughs-shaped entity expansion attempt), so the Independent Auditor can verify malicious XML does not reach an unsafe parser path.
 
 ## Required durable evidence
 
-`docs/evidence/M009A-SECURE-INGESTION-XLSX.md` — implementation rationale, the exact extraction-rule heuristic chosen and why, full security-gate verification (including a demonstrated rejection of each hostile fixture in the evaluation corpus), the immutable-original proof, tenant-isolation test results, dependency/licence/build evidence, and the complete M005-corpus-unchanged confirmation.
+`docs/evidence/M009A-SECURE-INGESTION-XLSX.md` — implementation rationale, the full security-gate verification (each hostile fixture in the evaluation corpus demonstrably rejected), the immutable-original proof, tenant-isolation test results, Customer Zero reset reconciliation proof, backup/restore proof, dependency/licence/build evidence, the complete M005-corpus-unchanged confirmation, and real-browser acceptance evidence for the Customer Assurance upload/status surface.
 
 ## STOP conditions
 
@@ -157,13 +284,15 @@ A direct, mechanical test: upload a file, compute its hash, run extraction, then
 - Any need for DOCX/PDF handling.
 - Any need for an export/write-back capability.
 - Any ambiguity in the security-gate contract that cannot be resolved by the frozen rules above without weakening them.
+- Any indication synchronous processing cannot safely satisfy the bounded product contract (do not reach for async infrastructure — stop instead).
+- Any indication a concrete malware scanner cannot be integrated cleanly within this Work Order's scope.
 
 ## Delivery sequence
 
 1. Confirm exact base SHA before touching anything.
-2. Implementer builds the two new models + migration, the security gate, XLSX extraction, storage layer, tenant isolation, the M009A evaluation corpus, and the immutable-original proof — strictly within this Work Order's scope.
-3. Delivery Controller review (independent spot-check of the highest-risk claims: security-gate rejections actually reject each hostile fixture live, immutable-original proof genuinely re-reads from disk, tenant isolation genuinely returns 404).
+2. Implementer builds the two new models + migration (in the existing `questionnaire` app), the security gate, XLSX extraction, storage layer, tenant isolation, the Customer Zero reset reconciliation, the backup/restore reconciliation, the minimal Customer Assurance upload/status surface, the M009A evaluation corpus, and the immutable-original proof — strictly within this Work Order's scope.
+3. Delivery Controller review (independent spot-check of the highest-risk claims: security-gate rejections actually reject each hostile fixture live, scanner result semantics genuinely fail closed on UNAVAILABLE/ERROR, immutable-original proof genuinely re-reads from disk, tenant isolation genuinely returns 404, Customer Zero reset genuinely removes the new model's rows and files without weakening any existing gate).
 4. Fresh Independent Audit.
 5. PR, Architect Acceptance, merge, closure — normal chain.
 
-**This Work Order is DRAFT. No Implementer may be dispatched against it until the Architect accepts it, and not before PR #101 has merged and the base SHA above is set to the exact resulting canonical main SHA.**
+**This Work Order is DRAFT. No Implementer may be dispatched against it until the Architect accepts it.**
