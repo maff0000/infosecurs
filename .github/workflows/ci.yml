@@ -88,6 +88,7 @@ jobs:
           questionnaire/tests/test_m009a_extraction.py
           questionnaire/tests/test_m009a_security_gate.py
           questionnaire/tests/test_m009a_scanner.py
+          questionnaire/tests/test_m009a_clamav_image_pin.py
           organisations/tests/test_m009a_reset_reconciliation.py
 
   integration:

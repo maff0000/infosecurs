@@ -94,3 +94,38 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+      # M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Scanner deployment shape
+      # - frozen", Final Correction B) introduced ClamAV as a new
+      # security-critical runtime dependency - Central Architecture
+      # Blocker 3 correction to PR #102 (2026-10-11): this job must also
+      # scan that image, not only the INFOSECURS application image above.
+      # Resolved directly from docker-compose.yml so CI always scans
+      # whatever is actually pinned there, rather than a value that could
+      # drift out of sync with a hand-copied literal in this file.
+      - name: Resolve pinned ClamAV image reference
+        id: clamav_image
+        run: |
+          set -euo pipefail
+          IMAGE=$(grep -oP 'clamav/clamav:\S+@sha256:[0-9a-f]{64}' docker-compose.yml | head -n1)
+          if [ -z "$IMAGE" ]; then
+            echo "Could not resolve a digest-pinned clamav/clamav image from docker-compose.yml" >&2
+            exit 1
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      # Same governed Trivy version, same CRITICAL,HIGH severity gate,
+      # same --ignore-unfixed policy, same fail-the-job-on-findings
+      # discipline as the application-image scan above - scanning the
+      # exact immutable image reference pinned in docker-compose.yml,
+      # never a floating tag. This does NOT weaken the application-image
+      # scan above in any way - it is an additional, independent step.
+      - name: Trivy scan (ClamAV runtime image)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: ${{ steps.clamav_image.outputs.image }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
