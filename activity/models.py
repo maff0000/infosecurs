@@ -158,6 +158,17 @@ class ActivityEvent(models.Model):
     EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED = "questionnaire_response_accepted"
     EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED = "questionnaire_response_superseded"
 
+    # M009A (WO-M009A-SECURE-INGESTION-XLSX.md) - the questionnaire
+    # ARTIFACT ingestion lifecycle, a distinct event family from the
+    # EVENT_QUESTION_*/EVENT_QUESTIONNAIRE_RESPONSE_* family above (which
+    # covers the completely separate, unmodified M005 truth engine).
+    EVENT_QUESTIONNAIRE_IMPORT_UPLOADED = "questionnaire_import_uploaded"
+    EVENT_QUESTIONNAIRE_IMPORT_GATE_PASSED = "questionnaire_import_gate_passed"
+    EVENT_QUESTIONNAIRE_IMPORT_GATE_REJECTED = "questionnaire_import_gate_rejected"
+    EVENT_QUESTIONNAIRE_IMPORT_GATE_FAILED = "questionnaire_import_gate_failed"
+    EVENT_QUESTIONNAIRE_IMPORT_EXTRACTED = "questionnaire_import_extracted"
+    EVENT_QUESTIONNAIRE_IMPORT_EXTRACTION_FAILED = "questionnaire_import_extraction_failed"
+
     EVENT_TYPE_CHOICES = [
         (EVENT_CONTROL_ANSWER_CHANGED, "Control answer changed"),
         (EVENT_EVIDENCE_CREATED, "Evidence created"),
@@ -185,6 +196,12 @@ class ActivityEvent(models.Model):
         (EVENT_QUESTIONNAIRE_RESPONSE_EDITED, "Questionnaire response edited"),
         (EVENT_QUESTIONNAIRE_RESPONSE_ACCEPTED, "Questionnaire response accepted"),
         (EVENT_QUESTIONNAIRE_RESPONSE_SUPERSEDED, "Questionnaire response superseded"),
+        (EVENT_QUESTIONNAIRE_IMPORT_UPLOADED, "Questionnaire import uploaded"),
+        (EVENT_QUESTIONNAIRE_IMPORT_GATE_PASSED, "Questionnaire import security gate passed"),
+        (EVENT_QUESTIONNAIRE_IMPORT_GATE_REJECTED, "Questionnaire import security gate rejected"),
+        (EVENT_QUESTIONNAIRE_IMPORT_GATE_FAILED, "Questionnaire import security gate failed"),
+        (EVENT_QUESTIONNAIRE_IMPORT_EXTRACTED, "Questionnaire import extracted"),
+        (EVENT_QUESTIONNAIRE_IMPORT_EXTRACTION_FAILED, "Questionnaire import extraction failed"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

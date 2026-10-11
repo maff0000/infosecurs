@@ -46,4 +46,24 @@ class QuestionnaireResponseEditForm(forms.Form):
     )
 
 
-__all__ = ["QuestionnaireResponseEditForm"]
+class QuestionnaireImportUploadForm(forms.Form):
+    """
+    M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Minimal real customer entry
+    surface", Correction 15) - deliberately a plain `forms.Form` with
+    exactly one field. `questionnaire.views.questionnaire_import_upload`
+    reads ONLY `form.cleaned_data["file"]` and passes it straight to
+    `questionnaire.import_services.ingest_questionnaire_import`, which
+    performs its OWN content-sniffing/size-streaming/security-gate
+    validation (this form never pre-judges file type by extension or
+    client-supplied Content-Type - WO-M009A: "No parser/extractor of any
+    kind may run before the pre-parse security gate accepts the file",
+    and this form is not a parser, just a required-field presence check).
+    """
+
+    file = forms.FileField(
+        help_text="XLSX only, up to 10 MiB. The file's actual content is checked by the "
+        "security gate - not its filename or browser-reported type.",
+    )
+
+
+__all__ = ["QuestionnaireResponseEditForm", "QuestionnaireImportUploadForm"]

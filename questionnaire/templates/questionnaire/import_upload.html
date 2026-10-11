@@ -1,0 +1,93 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Upload questionnaire — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .import-row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .import-row {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .import-row__body { flex: 1 1 320px; min-width: 0; }
+  .import-row__title { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+  .import-row__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: var(--space-1) 0 0 0; }
+  .import-row__action { flex: none; }
+  .badge--gate-passed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--gate-rejected { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--gate-failed { background: #fdf1d6; color: #8a5a00; }
+  .badge--gate-pending { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Upload a questionnaire</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+{% if form.non_field_errors %}
+    <ul class="messages" role="alert">
+        {% for error in form.non_field_errors %}
+            <li class="message message--error">{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <fieldset class="form-section">
+        <legend>Questionnaire workbook</legend>
+        <p class="form-section__help">
+            XLSX only, up to 10 MiB. The file's actual content is checked by the security gate
+            — not its filename or browser-reported type. Formulas, macros, external links and
+            encrypted/oversized archives are rejected.
+        </p>
+
+        <div class="field {% if form.file.errors %}field--error{% endif %}">
+            <label for="{{ form.file.id_for_label }}">File <span class="required-marker" aria-hidden="true">*</span></label>
+            {{ form.file }}
+            {% for error in form.file.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </fieldset>
+
+    <div class="form-actions form-actions--sticky">
+        <button type="submit" class="button button--primary">Upload questionnaire</button>
+    </div>
+</form>
+
+{% if imports %}
+    <section class="form-section">
+        <h2 class="form-section__heading">Recent uploads</h2>
+        <ul class="import-row-list">
+            {% for item in imports %}
+                <li class="import-row">
+                    <div class="import-row__body">
+                        <p class="import-row__title">{{ item.original_filename }}</p>
+                        <p class="import-row__meta">Uploaded {{ item.uploaded_at|date:"Y-m-d H:i" }} UTC</p>
+                    </div>
+                    <div class="import-row__action">
+                        {% if item.security_gate_status == "passed" %}
+                            <span class="badge badge--gate-passed">Gate passed</span>
+                        {% elif item.security_gate_status == "rejected" %}
+                            <span class="badge badge--gate-rejected">Gate rejected</span>
+                        {% elif item.security_gate_status == "failed" %}
+                            <span class="badge badge--gate-failed">Gate failed</span>
+                        {% else %}
+                            <span class="badge badge--gate-pending">Gate pending</span>
+                        {% endif %}
+                        <a class="button button--secondary" href="{% url 'questionnaire:import_detail' organisation.id item.id %}">View</a>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+{% endblock %}

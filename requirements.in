@@ -23,3 +23,14 @@ reportlab==5.0.1
 # topology. See config/settings.py's WHITENOISE_* block and
 # docs/evidence/M006-RELEASE.md for the full reasoning.
 whitenoise==6.11.0
+# M009A (WO-M009A-SECURE-INGESTION-XLSX.md, Final Correction C - "the
+# earlier claim that openpyxl is the only dependency this Work Order
+# introduces is withdrawn, it is false"). XLSX parser for secure
+# questionnaire artifact ingestion - load mode mandated by the Work Order:
+# `read_only=True, data_only=False` (questionnaire/xlsx_extraction.py).
+# MIT licensed.
+openpyxl==3.1.5
+# M009A - XML hardening required before any attacker-controlled OOXML XML
+# part reaches openpyxl's parser (questionnaire/security_gate.py). PSF
+# licensed.
+defusedxml==0.7.1

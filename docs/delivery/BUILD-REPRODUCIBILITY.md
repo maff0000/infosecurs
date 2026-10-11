@@ -173,6 +173,57 @@ container. **Exactly two package version lines changed in each of
 (`65.19.4`→`65.19.6`) and `oauthlib` (`3.3.1`→`4.0.0`, its hashes
 included). `pyjwt` and every other dependency were unaffected.
 
+### New dependencies: `openpyxl` / `defusedxml` (M009A, WO-M009A-SECURE-INGESTION-XLSX.md)
+
+WO-M009A's own Final Correction C withdrew the earlier draft's claim that
+`openpyxl` was the only dependency it introduced — both `openpyxl` and
+`defusedxml` are explicitly authorised, direct, pinned, hash-locked
+runtime dependencies (`requirements.in`), not dev-only.
+
+| Package | Version | Licence | Purpose |
+|---|---|---|---|
+| `openpyxl` | `3.1.5` | MIT | XLSX parser — `questionnaire.xlsx_extraction`, loaded `read_only=True, data_only=False` per the WO's binding formula-handling rule. |
+| `defusedxml` | `0.7.1` | PSF-2.0 | XML hardening in front of OOXML XML parts — `questionnaire.security_gate`, before any content reaches a semantic parser. |
+| `et-xmlfile` | `2.0.0` | MIT | Transitive — `openpyxl`'s own XML-writing dependency (not otherwise used by this codebase). |
+
+Both direct entries were added to `requirements.in`, then `pip-compile
+--generate-hashes` was re-run inside the same pinned-digest container
+convention this file already establishes, against BOTH `requirements.in`
+and `requirements-dev.in` (the dev lock also transitively includes the
+production graph via `-r requirements.in`). The resulting diffs added
+exactly these three new locked entries (with full `--hash=sha256:...`
+integrity hashes) to each `.txt` file — no other package version moved.
+
+No bespoke malware-scanner Python client was added as a fourth dependency
+— `questionnaire.scanner.ClamdScanner` talks to `clamd`'s documented
+`INSTREAM` protocol directly over a plain, bounded, timed-out TCP socket
+(see that module's own docstring for the full "small protocol vs. small
+dependency" reasoning, explicitly permitted either way by WO-M009A).
+
+**Vulnerability scan:** `pip-audit -r requirements.txt` (same tool/version
+this repository's `security/dependencies` CI job already uses) found zero
+known vulnerabilities for `openpyxl==3.1.5`, `defusedxml==0.7.1`, or
+`et-xmlfile==2.0.0` at the time of this change.
+
+### ClamAV container image (M009A)
+
+| Component | Explicit version | Immutable digest | Used in |
+|---|---|---|---|
+| ClamAV/clamd | `clamav/clamav:1.4.4` | `sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3` | `docker-compose.yml`, `docker-compose.release.yml` (`clamav` service, both topologies) |
+
+Resolved directly from the registry (`docker pull` + `docker inspect
+--format='{{index .RepoDigests 0}}'`) at the time of this change, against
+the explicit `1.4.4` tag — not a floating `latest`/`stable` alias.
+`1.4.3` was tried first and Trivy-scanned (32 HIGH + 2 CRITICAL,
+`--ignore-unfixed`); `1.4.4` scanned strictly better (0 CRITICAL, 15
+HIGH) and was pinned instead — see `docs/evidence/
+M009A-SECURE-INGESTION-XLSX.md`'s "Dependency / licence / build-
+reproducibility evidence" section for the full before/after and the
+residual-15-HIGH disclosure. The signature database (FreshClam-managed,
+its own named volume) is operational/cache data, not a pinned build input
+and not part of either Docker Compose stack's backup set — see
+`docs/runbooks/BACKUP-RESTORE.md`.
+
 ### Pip-audit suppression discipline
 
 **Current state (WI0.1, 2026-10-01): no suppression is active.**
