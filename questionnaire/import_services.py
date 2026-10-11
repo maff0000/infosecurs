@@ -29,6 +29,7 @@ from questionnaire import import_storage, security_gate, xlsx_extraction
 from questionnaire.models import (
     QuestionnaireImport,
     QuestionnaireImportQuestion,
+    QuestionnaireImportValidationError,
     QuestionnaireQuestion,
 )
 from questionnaire.scanner import STATE_CLEAN, STATE_INFECTED, get_scanner
@@ -39,6 +40,52 @@ class SecurityGateTransitionError(Exception):
     permit (e.g. `retry_security_gate` on an import that is not currently
     `security_gate_failed`) - a programming-error guard, not a normal user
     -facing validation error."""
+
+
+def _validate_supersedes_target(supersedes, organisation):
+    """
+    Fail-closed tenant guard for `ingest_questionnaire_import(supersedes=
+    ...)` (Central Architecture Blocker 1 correction to PR #102, 2026-10-
+    11). A `supersedes` reference that is not an already-persisted
+    `QuestionnaireImport` row belonging to this EXACT SAME organisation is
+    a security-relevant input and must raise
+    `QuestionnaireImportValidationError` - never silently ignored, never
+    silently proceeding with the new row's `supersedes` landing as `NULL`
+    while the rest of the ingest otherwise succeeds, and never permitting
+    a cross-tenant `supersedes` linkage to be created even transiently.
+
+    Deliberately a single combined (pk, organisation) existence query,
+    never trusting the in-memory `supersedes.organisation_id` attribute on
+    its own - the same tenant-isolation discipline as
+    `_get_member_import_or_404` elsewhere in this app (a foreign/invalid
+    reference just fails closed, never confirming the row exists at all,
+    let alone under a different tenant). This also correctly rejects an
+    UNSAVED `QuestionnaireImport` instance: `QuestionnaireImport.id` is a
+    `UUIDField(default=uuid.uuid4)`, so an in-memory instance already has
+    a non-`None` `.pk` before `.save()` is ever called - `supersedes.pk is
+    None` would NOT detect that case; only a real DB lookup does.
+
+    This is deliberately a service-layer-only contract: Central
+    Architecture's explicit ruling on this correction is that M009A adds
+    NO re-upload/supersession UI - the upload surface stays exactly as
+    minimal as it already is. This function exists so the Work Order's
+    own required "legitimate re-upload/`supersedes` case" evaluation
+    corpus item is provable against the real domain/service contract
+    without any UI change.
+    """
+    exists = QuestionnaireImport.objects.filter(pk=supersedes.pk, organisation=organisation).exists()
+    if not exists:
+        # Fail the WHOLE ingest attempt closed before anything is created -
+        # consistent with how every other security-gate rejection in this
+        # module already behaves (never a partial/degraded success). One
+        # message covers both "does not exist" and "belongs to another
+        # organisation" deliberately - never confirming to the caller
+        # which case applies, mirroring this app's own tenant-isolation
+        # discipline of never distinguishing 404-shaped outcomes.
+        raise QuestionnaireImportValidationError(
+            "supersedes must reference an already-persisted QuestionnaireImport "
+            "belonging to this same organisation."
+        )
 
 
 def ingest_questionnaire_import(
@@ -52,6 +99,19 @@ def ingest_questionnaire_import(
     infrastructure). Returns the final `QuestionnaireImport` (whatever
     state the pipeline above ended at).
 
+    If `supersedes` is supplied, it is validated FIRST - before any bytes
+    are streamed/stored and before any new `QuestionnaireImport` row is
+    created - via `_validate_supersedes_target` above (Central Architecture
+    Blocker 1 correction, 2026-10-11): it must be a persisted
+    `QuestionnaireImport` belonging to this exact same `organisation`. A
+    foreign-organisation (or otherwise invalid) reference raises
+    `QuestionnaireImportValidationError` and the whole ingest attempt fails
+    closed for those specific input bytes - no row is created, nothing is
+    stored, and no cross-tenant relationship is ever created. On a
+    legitimate same-organisation `supersedes`, the prior import and all of
+    its questions are never touched - only the NEW row's own `supersedes`
+    FK is set.
+
     If the uploaded bytes are not even ZIP-shaped (the cheapest possible
     deterministic rejection - WO-M009A evaluation corpus: "a non-XLSX file
     renamed with a .xlsx extension"), the row is still created (so the
@@ -60,6 +120,9 @@ def ingest_questionnaire_import(
     heavier container gate below never runs against content that could
     not possibly be a ZIP/OOXML container in the first place.
     """
+    if supersedes is not None:
+        _validate_supersedes_target(supersedes, organisation)
+
     stored_filename, size_bytes, sha256_hex, is_zip_shaped = (
         import_storage.store_and_hash_uploaded_file(organisation.id, uploaded_file)
     )
