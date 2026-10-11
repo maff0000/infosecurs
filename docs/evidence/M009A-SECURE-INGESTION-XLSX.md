@@ -3,7 +3,15 @@
 **Work Order:** `docs/work-orders/WO-M009A-SECURE-INGESTION-XLSX.md`
 **Parent PID:** `docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`
 **Branch:** `wo/M009A-work-order` (base `4fe38b91bde5e859d19da8a9a1c489ccc3cb7f41`)
-**Status:** Implementer-complete — awaiting Delivery Controller review, fresh Independent Audit, PR, Architect Acceptance.
+**PR:** `#102` (`https://github.com/maff0000/infosecurs/pull/102`, base `main`@`93acc86405597641c46b050dd603ab335ebb60d1`)
+**Status:** Implementer-complete, PR #102 opened, Central Architecture
+independently reviewed PR #102 and required three bounded blocking
+corrections plus two documentation corrections (2026-10-11) - see
+"Central Architecture independent-review corrections (2026-10-11)" below
+for the full account of what changed and why. This document now describes
+the corrected state on top of the original six implementation commits -
+still awaiting fresh Delivery Controller re-review, fresh Independent
+Audit, Architect Acceptance, merge.
 
 This is the required durable evidence document (WO-M009A's own "Required
 durable evidence" section). It covers implementation rationale, the full
@@ -19,6 +27,246 @@ Compose stack, project name `m009a` (`WEB_HOST_PORT=18900`,
 `POSTGRES_HOST_PORT=18901`) — never the canonical `infosecurs-relocation`
 deployment (port 8884) and never any other stack already running on that
 host.
+
+## Central Architecture independent-review corrections (2026-10-11)
+
+Central Architecture independently reviewed PR #102 after the original
+six implementation commits (`b13e8aa`..`a810a8f`) and found it
+substantively strong but required three bounded blocking corrections plus
+two documentation corrections before merge. This dispatch covers exactly
+those five corrections against worktree HEAD `a810a8f736a7ea82736eff1dcd
+9054dc9f911504` (confirmed via `git rev-parse HEAD` before any change was
+made) - no ingestion architecture was reopened, no re-upload/supersession
+UI was added, and no M009B/C/D/E work was started.
+
+### Blocker 1 — `supersedes` made real and tenant-safe (service-layer only)
+
+**Finding:** `ingest_questionnaire_import(...)` accepted a `supersedes=`
+kwarg, but nothing validated it belonged to the same organisation as the
+new import, and no test proved the actual supersession contract.
+
+**Architect's explicit ruling, followed literally:** no re-upload/
+supersession UI was added. The upload UI remains exactly as minimal as it
+was before this correction (upload → security gate → extraction/status).
+`questionnaire/views.py`'s `questionnaire_import_upload` view still never
+passes `supersedes=` to the service - it is not reachable from any
+product surface today, exactly as before.
+
+**Fix** (`questionnaire/import_services.py`): a new `_validate_supersedes_
+target(supersedes, organisation)` helper, called at the very top of
+`ingest_questionnaire_import` - before any bytes are streamed/stored and
+before any `QuestionnaireImport` row is created. It runs a single,
+combined `QuestionnaireImport.objects.filter(pk=supersedes.pk,
+organisation=organisation).exists()` query (never trusting the caller's
+in-memory `supersedes.organisation_id` attribute alone) and raises the
+existing `questionnaire.models.QuestionnaireImportValidationError` if the
+reference does not resolve - which `questionnaire/views.py` already
+imports and catches around this exact call site, so the error-handling
+path required zero view changes.
+
+A real, non-theoretical edge case was found and fixed during this
+dispatch's own verification: `QuestionnaireImport.id` is a
+`UUIDField(default=uuid.uuid4)`, so an UNSAVED in-memory instance already
+has a non-`None` `.pk` before `.save()` is ever called - an initial `if
+supersedes.pk is None` check would NOT have detected an unpersisted
+reference. Confirmed by writing
+`TestSupersedesContract::test_supersedes_an_unpersisted_import_fails_
+closed`, watching it fail with a database-level `IntegrityError` on a
+dangling `supersedes_id` foreign key (the naive check let the row through),
+and fixing the guard to do a real DB-scoped existence check instead - the
+version now committed.
+
+**New test** (`questionnaire/tests/test_m009a_import_services.py::
+TestSupersedesContract`, 3 tests, all GREEN), proving the full contract
+step by step exactly as required:
+
+1. ingests a legitimate original workbook (`corpus.valid_multi_sheet_
+   workbook()`), reaching `security_gate_status=passed`/`status=extracted`;
+2. records its row id, `sha256_hash`, the stored bytes read directly off
+   disk, and the full set of its extracted `QuestionnaireImportQuestion`
+   ids/texts - BEFORE the second ingest touches anything;
+3. ingests a second, distinct legitimate workbook
+   (`corpus.workbook_with_duplicate_question_text()`) with
+   `supersedes=<first import>`;
+4. proves two distinct `QuestionnaireImport` rows now exist
+   (`QuestionnaireImport.objects.filter(organisation=org_a).count() == 2`);
+5. proves `second.supersedes_id == first.id`;
+6. re-reads the first import's row from the DB and its stored bytes from
+   disk (not merely the DB hash field) and proves both, plus every one of
+   its extracted questions (ids and texts), are byte-for-byte/row-for-row
+   unchanged after the second ingest;
+7. a second test proves that `supersedes` pointing at an import belonging
+   to a DIFFERENT organisation (`org_b`) raises
+   `QuestionnaireImportValidationError` and that the WHOLE ingest attempt
+   fails closed for `org_a` - no new `QuestionnaireImport` row is created
+   at all (never a degraded success with `supersedes` silently landing as
+   `NULL`), no file is left orphaned on disk, and no
+   `QuestionnaireImport` anywhere ends up with `supersedes` pointing at
+   the foreign row; a third test proves an unpersisted `supersedes`
+   reference is rejected the same way.
+
+All three tests pass against the real pipeline (real fake-scanner-backed
+gate, real extraction, real storage) - see "Full test run output" below.
+
+**Linked-supersession UX is deliberately deferred, not forgotten:** the
+domain/service contract this evaluation-corpus item requires is now
+proven end to end; a future Work Order may add an actual re-upload/
+"supersede this import" control to the Customer Assurance UI, but M009A
+itself adds none, per Central Architecture's explicit ruling above.
+
+### Blocker 2 — ClamAV 1.4.6 evaluation: STOPPED, pin unchanged, finding reported
+
+**Finding:** the current pin, `clamav/clamav:1.4.4@sha256:a52f45e427
+53dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3`, is stale -
+1.4.5 and 1.4.6 both shipped security fixes, and 1.4.6 is the current LTS
+patch.
+
+**What was actually done, live, on dell-debian (no fabricated digest):**
+
+```text
+$ docker pull clamav/clamav:1.4.6
+Digest: sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
+
+$ docker inspect --format '{{index .RepoDigests 0}}' clamav/clamav:1.4.6
+clamav/clamav@sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
+```
+
+So the real, resolved candidate reference is `clamav/clamav:1.4.6@sha256:
+57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23`.
+
+**Trivy scan of the exact candidate image** (`aquasec/trivy:0.70.0 image
+--severity CRITICAL,HIGH --ignore-unfixed`, this repo's own existing
+`security/container` invocation style):
+
+```text
+Total: 1 (HIGH: 1, CRITICAL: 0)
+
+Library  Vulnerability    Severity  Status  Installed  Fixed     Title
+pcre2    CVE-2026-103111  HIGH      fixed   10.48-r0   10.49-r0  pcre2: Out-of-bounds
+                                                                   write via crafted
+                                                                   regular expression
+```
+
+This is a genuine FIXABLE HIGH finding (`Status: fixed`, a newer package
+version exists) on the real, current official `1.4.6` tag. Per this
+dispatch's own explicit instruction - "If the real, current official
+1.4.6 image still reports any fixable CRITICAL or HIGH finding: STOP this
+specific sub-task... Do not create an undocumented exception" - **this
+sub-task is STOPPED.** `docker-compose.yml`/`docker-compose.release.yml`
+are UNCHANGED by this correction: the pin remains `clamav/clamav:1.4.4@
+sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3`.
+No different/undocumented image tag was substituted, and no ad-hoc
+overlay (of the kind `docs/delivery/BUILD-REPRODUCIBILITY.md`'s
+"Temporary exact-version security overlay" section documents as a
+Central-Architecture-authorised exception for the Python base image) was
+invented unilaterally for ClamAV - that pattern exists and could in
+principle apply here, but authorising a NEW overlay is an Architecture
+decision this Implementer dispatch is not authorised to make on its own.
+
+**For context, re-verified live in the same pass** (not from memory - a
+fresh scan of the currently-pinned digest, same Trivy invocation):
+
+```text
+$ docker pull clamav/clamav@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
+(already up to date)
+
+Total: 15 (HIGH: 15, CRITICAL: 0)
+  c-ares (CVE-2026-33630), libcrypto3/libssl3 (CVE-2026-14456), libcurl x7
+  (CVE-2026-11352/11586/12064/8286/8458/8925/9547), pcre2 x4
+  (CVE-2026-103111/86145/89157/89161) - all Status: fixed.
+```
+
+So the currently-pinned `1.4.4` image carries 15 pre-existing fixable
+HIGH findings (0 CRITICAL) that were already disclosed in this document's
+earlier revision but were never wired into CI (see Blocker 3 below - that
+gap is now closed, with a real consequence disclosed there). `1.4.6`
+would have been a strict improvement (15 → 1 HIGH) but is not itself
+clean, and this dispatch's own governing instruction requires a STOP
+rather than accepting "better but not clean" as a silent decision. This
+is returned to Central Architecture/Delivery Controller as an open
+question: either author an Architecture-governed temporary overlay (same
+shape as the existing Python-base-image precedent) for whichever
+individual package(s) remain unfixed on the best available official tag,
+or accept the residual risk explicitly and documented, or hold M009A's
+ClamAV pin at a decision point until upstream publishes a fully clean
+tag. No outcome was chosen unilaterally here.
+
+Because the pin is unchanged, the scanner topology itself (no published
+port, healthcheck, FreshClam, `CLAMAV_HOST=clamav` wiring,
+`UnavailableScanner` fail-closed-when-unset behaviour) is byte-identical
+to before this dispatch - re-confirmed, not re-invented: `docker compose
+-p m009a ps` shows `m009a-clamav-1` exposing `3310/tcp, 7357/tcp` with NO
+host-port mapping, and `questionnaire/tests/test_m009a_scanner.py::
+TestRealClamdBackend` (`test_ping`/`test_legitimate_xlsx_is_clean`/
+`test_eicar_test_file_is_detected`) was re-run against the real, unchanged
+`clamav` service in a freshly recreated disposable `m009a` stack and all
+3 still pass for real (see "Full test run output" below) - this dispatch
+did not merely assume the existing proof still held, it re-ran it.
+
+### Blocker 3 — ClamAV image now enters the durable container CI gate
+
+`.github/workflows/security.yml`'s `security/container` job previously
+only built+scanned the INFOSECURS application image. It now ALSO scans
+the exact pinned ClamAV image, resolved directly from
+`docker-compose.yml` (never a hand-copied literal that could drift out of
+sync with the real pin) via a new `Resolve pinned ClamAV image reference`
+step, then a second, independent `aquasecurity/trivy-action` step at the
+identical pinned Trivy version (`v0.70.0`), identical severity gate
+(`CRITICAL,HIGH`), identical `--ignore-unfixed` policy, and identical
+fail-the-job-on-findings discipline (`exit-code: "1"`) as the existing
+application-image scan - which is completely unmodified, not weakened in
+any way.
+
+**A real, disclosed consequence, not a silent one:** because Blocker 2's
+ClamAV version bump was STOPPED (see above) and the currently-pinned
+`1.4.4` image carries 15 pre-existing fixable HIGH findings, enabling
+this new gate means `security/container` WILL fail on its next real
+GitHub Actions run against this exact pin, until Central Architecture
+resolves the open question left at the end of Blocker 2 (an authorised
+temporary overlay, an accepted/documented residual-risk exception, or a
+revisited pin decision). This Implementer dispatch deliberately did NOT
+weaken the new gate's severity/ignore-unfixed/exit-code settings to avoid
+that outcome - doing so would have been exactly the kind of "silently
+decide it's acceptable" response this dispatch's own instructions
+prohibit. Flagging this plainly for Delivery Controller/Architect
+decision, consistent with this evidence document's own established
+practice of disclosing real findings rather than engineering around them
+unilaterally (see the pre-existing "CI wiring" and "A verification-
+environment flakiness finding" sections below, both carried over
+unchanged from the original dispatch).
+
+**Drift guard** (new `questionnaire/tests/test_m009a_clamav_image_pin.py`,
+wired into `.github/workflows/ci.yml`'s `ci/unit` job): a small,
+dependency-free regex-based check (deliberately no new YAML-parsing
+dependency for this alone) proving `docker-compose.yml` and
+`docker-compose.release.yml` declare the IDENTICAL digest-pinned
+`clamav/clamav` image reference, and that neither ever regresses to a
+floating `latest`/`stable` tag. 3/3 tests pass (see "Full test run
+output" below).
+
+### Governance correction — stale Work Order status sentence fixed
+
+`docs/work-orders/WO-M009A-SECURE-INGESTION-XLSX.md`'s header already
+correctly said `ARCHITECT ACCEPTED — AUTHORISED FOR DELIVERY CONTROLLER
+DISPATCH` and carried the durable Architect Acceptance record at the
+bottom, but its FINAL sentence still read "This Work Order is DRAFT. No
+Implementer may be dispatched against it until the Architect accepts
+it." - stale and self-contradicting the rest of the document. Corrected,
+in a new commit, to state the document's governance state unambiguously
+(accepted; implementation in progress/under correction). No historical
+commit was rewritten or deleted.
+
+### Evidence correction — this document
+
+This section, plus the targeted updates elsewhere in this document
+(status line above; "Dependency / licence / build-reproducibility
+evidence" below now records the 1.4.6 evaluation and STOP; "Full test run
+output" below now records this correction pass's real run), reconcile
+this evidence document to the actual final state - without erasing any
+of the original dispatch's real history (the original "CI wiring" gap
+disclosure, the real upload-form/CSRF-middleware-ordering bug found and
+fixed, and the `/dev/shm` browser-flakiness finding below are all
+UNCHANGED, because they are still true and still happened).
 
 ## Implementation rationale (file-by-file)
 
@@ -173,6 +421,30 @@ host.
   CI does not discover tests automatically — see "CI wiring" below for an
   important pre-existing gap this surfaced).
 
+**Added 2026-10-11 (Central Architecture independent-review corrections
+to PR #102 — see that section above for the full account):**
+
+- `questionnaire/import_services.py` — new `_validate_supersedes_target`
+  fail-closed tenant guard, called first inside
+  `ingest_questionnaire_import` (Blocker 1).
+- `questionnaire/tests/test_m009a_import_services.py` — new
+  `TestSupersedesContract` (3 tests): the full same-organisation
+  supersession contract, the cross-organisation rejection, and the
+  unpersisted-reference rejection (Blocker 1).
+- `questionnaire/tests/test_m009a_clamav_image_pin.py` — new drift guard
+  proving `docker-compose.yml`/`docker-compose.release.yml` pin the
+  identical ClamAV image digest (Blocker 3).
+- `.github/workflows/security.yml` — `security/container` now also scans
+  the exact pinned ClamAV image (Blocker 3).
+- `.github/workflows/ci.yml` — the new drift-guard test wired into
+  `ci/unit`'s curated list.
+- `docs/work-orders/WO-M009A-SECURE-INGESTION-XLSX.md` — one stale
+  sentence corrected (governance correction).
+- `docs/evidence/M009A-SECURE-INGESTION-XLSX.md` — this document,
+  reconciled (evidence correction).
+- `docker-compose.yml`/`docker-compose.release.yml` — deliberately
+  **UNCHANGED** (Blocker 2 STOPPED — see above).
+
 ## CI wiring — an important pre-existing gap, noted not fixed
 
 `.github/workflows/ci.yml`'s two jobs each run a HAND-CURATED list of
@@ -241,6 +513,15 @@ These three tests are skipped automatically wherever `CLAMAV_HOST` is
 unset (e.g. a bare `pytest` run outside the Compose stack, or GitHub
 Actions CI) — they ran for real inside the `m009a-web-1` container, which
 has `CLAMAV_HOST=clamav` from `docker-compose.yml`.
+
+**Re-confirmed 2026-10-11** (Central Architecture independent-review
+correction pass): since Blocker 2's version bump was STOPPED (the ClamAV
+pin is unchanged), this proof was re-run, not merely assumed still valid,
+against a freshly recreated disposable `m009a` stack - `docker compose -p
+m009a ps` showed `m009a-clamav-1` exposing `3310/tcp, 7357/tcp` with no
+host-port mapping, and all three `TestRealClamdBackend` tests passed
+again for real (`test_ping`, `test_legitimate_xlsx_is_clean`,
+`test_eicar_test_file_is_detected`).
 
 ## Immutable-original retention — three-way proof (Final Correction H)
 
@@ -344,17 +625,36 @@ the full table. Summary:
   CRITICAL / 15 HIGH — strictly better, so `1.4.4` was pinned instead of
   `1.4.3`. **The residual 15 HIGH findings on `1.4.4` are OS-package CVEs
   inside ClamAV's own official upstream Alpine-based image** (not
-  anything this Work Order's own code introduces) and are NOT currently
-  covered by this repository's `security/container` CI job, which only
-  builds+scans the APPLICATION image from this repo's own `Dockerfile` —
-  it has never scanned the pulled `postgres` image either, for the same
-  "we don't rebuild this, upstream owns its own patch cadence" reason.
-  Flagged here for Delivery Controller/Architect visibility, not silently
-  fixed or silently ignored — a future obligation to re-pin once ClamAV
-  publishes a tag with these fixed, mirroring this repo's own existing
+  anything this Work Order's own code introduces).
+  ~~are NOT currently covered by this repository's `security/container`
+  CI job~~ **CORRECTED 2026-10-11 (Central Architecture independent
+  review, Blocker 3):** this is now wired into `security/container` (see
+  "Central Architecture independent-review corrections" above) - the gap
+  is closed, not merely flagged, though the real consequence is that the
+  job will now fail against these 15 pre-existing findings until
+  Architecture resolves that separately (see Blocker 3 above for the full
+  account; this struck-through sentence is left visible deliberately so
+  the historical state - what this evidence said before the correction -
+  remains legible rather than silently vanishing). The `postgres` image
+  is still not scanned by this CI job, for the same unchanged "we don't
+  rebuild this, upstream owns its own patch cadence" reasoning - that
+  reasoning was never in question for `postgres`, only ClamAV's own
+  scanning coverage was the finding.
+  **Also re-evaluated 2026-10-11:** `1.4.6` (the current LTS patch) was
+  pulled and scanned live - resolved digest `sha256:57deb108fc4c72778aa
+  83eafbca7bb7153e28c3f57c005afd38d31f16da86f23` - scoring 0 CRITICAL / 1
+  HIGH (`CVE-2026-103111`/`pcre2`, `Status: fixed`). Per this dispatch's
+  own governing instruction, ANY fixable CRITICAL/HIGH on the real
+  current official tag is a STOP condition, so the pin was NOT advanced
+  to `1.4.6` despite it being a strict improvement over `1.4.4` (15 HIGH
+  → 1 HIGH) - see "Central Architecture independent-review corrections"
+  above for the full finding and the open question returned to Central
+  Architecture/Delivery Controller. The obligation to re-pin once ClamAV
+  publishes a genuinely clean tag (mirroring this repo's own existing
   "temporary exact-version security overlay" precedent for exactly this
-  class of situation (`docs/delivery/BUILD-REPRODUCIBILITY.md`'s Python
-  base-image section).
+  class of situation, `docs/delivery/BUILD-REPRODUCIBILITY.md`'s Python
+  base-image section) remains open and is now sharper: `1.4.6` is close
+  but not yet clean.
 - **Application image Trivy scan (this Work Order's own code added to the
   existing, already-accepted application image):** `docker build` from
   this repo's `Dockerfile` (openpyxl/defusedxml/et-xmlfile now included)
@@ -540,7 +840,7 @@ procedure) and re-running the full suite is the controlling verification
 this evidence document reports below - this finding is disclosed for
 transparency, not swept aside.
 
-## Full test run output
+## Full test run output (original dispatch, 2026-10-10)
 
 This is the controlling, authoritative run - against a freshly recreated
 `web` container (clean `/dev/shm`, no accumulated browser-process state -
@@ -612,3 +912,166 @@ which this disposable `DJANGO_ENV=test` stack provides - each test's own
 skip message names the exact alternative run procedure and the pre-
 existing evidence document that already carries its real-stack proof).
 The 1 xfail is also pre-existing and unrelated to M009A.
+
+## Full test run output — correction pass (2026-10-11)
+
+Built and verified on dell-debian inside the SAME disposable `m009a`
+Compose stack discipline as the original dispatch (project name `m009a`,
+`WEB_HOST_PORT=18900`, `POSTGRES_HOST_PORT=18901`) - never
+`infosecurs-relocation` (port 8884) and never any other stack already
+running on that host. Confirmed worktree `git rev-parse HEAD` ==
+`a810a8f736a7ea82736eff1dcd9054dc9f911504` before any change was made.
+
+```text
+$ git rev-parse HEAD
+a810a8f736a7ea82736eff1dcd9054dc9f911504   (confirmed BEFORE any change)
+```
+
+**New/changed tests, M009A-focused run** (Blocker 1's new
+`TestSupersedesContract`, plus the rest of the service-layer suite that
+exercises the same code path):
+
+```text
+$ docker compose -p m009a exec -T web pytest -q questionnaire/tests/test_m009a_import_services.py
+15 passed in 16.10s
+```
+
+**New drift-guard test standalone:**
+
+```text
+$ docker compose -p m009a exec -T web pytest -q questionnaire/tests/test_m009a_clamav_image_pin.py
+3 passed in 0.07s
+```
+
+**Full M009A evaluation corpus + M005 14-case golden corpus together**
+(non-browser; the browser-dependent M009A acceptance tests are covered in
+the full-suite run below, together with every other browser test in the
+repository, for a single controlling browser-environment proof):
+
+```text
+$ docker compose -p m009a exec -T web pytest -q \
+    questionnaire/tests/test_m009a_models.py \
+    questionnaire/tests/test_m009a_storage.py \
+    questionnaire/tests/test_m009a_security_gate.py \
+    questionnaire/tests/test_m009a_extraction.py \
+    questionnaire/tests/test_m009a_scanner.py \
+    questionnaire/tests/test_m009a_import_services.py \
+    questionnaire/tests/test_m009a_views.py \
+    questionnaire/tests/test_m009a_entitlement.py \
+    organisations/tests/test_m009a_reset_reconciliation.py \
+    questionnaire/tests/test_eval_harness.py \
+    questionnaire/tests/test_eval_golden_corpus.py \
+    questionnaire/tests/test_eval_command.py
+154 passed in 55.75s
+```
+
+(the last three files are the M005 14-case golden corpus - still
+byte-for-byte untouched by this correction pass, still GREEN.)
+
+**Real ClamAV scanner re-proof** (Blocker 2 STOPPED - pin unchanged -
+re-run, not merely assumed, against the real, unchanged `clamav` 1.4.4
+service):
+
+```text
+$ docker compose -p m009a exec -T web pytest questionnaire/tests/test_m009a_scanner.py -v
+TestUnavailableScanner::test_always_returns_unavailable_never_clean PASSED
+TestUnavailableScanner::test_ping_is_false PASSED
+TestGetScannerFailsClosedOnAbsence::test_no_clamav_host_returns_unavailable_stub PASSED
+TestClamdScannerConnectionFailure::test_unreachable_host_returns_unavailable_not_exception PASSED
+TestRealClamdBackend::test_ping PASSED
+TestRealClamdBackend::test_legitimate_xlsx_is_clean PASSED
+TestRealClamdBackend::test_eicar_test_file_is_detected PASSED
+7 passed in 0.31s
+```
+
+`docker compose -p m009a ps` at the time: `m009a-clamav-1` exposes
+`3310/tcp, 7357/tcp` with NO host-port mapping - confirmed, not merely
+unchanged by assumption.
+
+**`makemigrations --check --dry-run`:**
+
+```text
+$ docker compose -p m009a exec -T web python manage.py makemigrations --check --dry-run
+No changes detected
+```
+
+**`pip-audit`** (installed into this disposable container's writable
+layer for this check - the repository's own application image never
+bakes in pip-audit; no `requirements.txt`/`requirements.in` change was
+made by this correction pass, so this re-confirms the existing-dependency
+baseline rather than evaluating anything new):
+
+```text
+$ pip-audit -r requirements.txt
+No known vulnerabilities found
+```
+
+**Application image Trivy scan** (re-built from this corrected worktree -
+no dependency changed by this correction pass, confirming the existing
+baseline is unaffected):
+
+```text
+$ docker build -t infosecurs:m009a-dispatch .
+$ trivy image --severity CRITICAL,HIGH --ignore-unfixed infosecurs:m009a-dispatch
+0 vulnerabilities   (matches the pre-correction baseline exactly)
+```
+
+**ClamAV runtime image Trivy scan** - see "Central Architecture
+independent-review corrections" above for the full finding: the currently
+-pinned `1.4.4` image (`clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9f
+d09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3`) scores **15 HIGH / 0
+CRITICAL** (all `Status: fixed`); the evaluated-but-not-pinned `1.4.6`
+candidate (`clamav/clamav:1.4.6@sha256:57deb108fc4c72778aa83eafbca7bb7153
+e28c3f57c005afd38d31f16da86f23`) scores **1 HIGH / 0 CRITICAL**
+(`CVE-2026-103111`/`pcre2`, `Status: fixed`) - a real, fixable finding on
+the current official tag, which is this correction pass's own STOP
+condition. Reported in full above, not summarised away.
+
+**Full repository test suite** - the controlling, authoritative run for
+this correction pass, against a freshly recreated `web` container (clean
+`/dev/shm`, Chromium reinstalled fresh, mirroring the exact remediation
+procedure the original dispatch's own "A verification-environment
+flakiness finding" section above already documents for this same shared,
+loaded host):
+
+```text
+$ docker compose -p m009a exec -T web pytest -q
+2343 passed, 7 skipped, 1 xfailed, 788 warnings in 1633.40s (0:27:13)
+[exit code 0]
+```
+
+**A verification-environment flakiness finding, disclosed, not hidden**
+(this correction pass's own occurrence of the SAME class the original
+dispatch's own evidence already documents above): the FIRST full-suite
+run attempted during this correction pass, against the `m009a-web-1`
+container that had already been up for a while (real backup/restore
+proof, Trivy builds, and several preceding targeted test runs all ran in
+it first), reported **49 failed, 2294 passed, 7 skipped, 1 xfailed** in
+1462.19s - every single one of the 49 failures was a real-Chromium
+browser test (this dispatch's own new/re-run `questionnaire/tests/
+test_m009a_browser_acceptance.py` tests, PLUS pre-existing, unrelated
+browser tests across `core`/`evidence`/`key_assets`/`organisations`/
+`remediation`/`risk_register` - e.g. `test_wi6_sidebar_drawer_
+acceptance.py`, `test_narrow_viewport_regression.py`). `free -h` at the
+time showed swap 975Mi/975Mi (100%) full - the same symptom the original
+dispatch's own flakiness finding names. Zero non-browser test failed in
+that run, and zero of the 49 failing tests touch any file this correction
+pass changed. Applying the SAME remediation the original dispatch's
+evidence already documents for this exact failure class - `docker
+compose -p m009a stop web && rm -f web && up -d web`, then `playwright
+install --with-deps chromium` into the fresh container's writable layer -
+and re-running the FULL suite produced the clean result above: **0
+failed**. This is reported as a real, recurring characteristic of
+sustained browser-test load on this shared, loaded host (54+ other
+containers running concurrently), not a defect in any code this
+correction pass touched.
+
+**Controlling, authoritative result for this correction pass: 2343
+passed, 7 skipped, 1 xfailed, 0 failed.** The skip/xfail counts and
+reasons are identical to the original dispatch's own documented set
+(6 in `core/tests/test_production_config.py`, 1 in `core/tests/
+test_static_files.py`, 1 pre-existing xfail) - unaffected by this
+correction pass. The pass count (2343) is 6 higher than the original
+dispatch's own controlling run (2337): 3 new `TestSupersedesContract`
+tests (Blocker 1) + 3 new `TestClamavImagePinDriftGuard` tests (Blocker
+3) = 6, fully accounted for.
