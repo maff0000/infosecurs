@@ -388,4 +388,4 @@ New fixtures/harness (e.g. `questionnaire/eval/m009a_ingestion_corpus.py`), cove
 **Reviewed WO head before final acceptance corrections:** `119148183c7a9faea34ba8226e881336276c2998`
 **Decision:** **ACCEPTED FOR IMPLEMENTER DISPATCH**, conditional on the final A–J corrections in this revision being the only delta.
 
-**This Work Order is DRAFT. No Implementer may be dispatched against it until the Architect accepts it.**
+**This Work Order is ARCHITECT ACCEPTED (see "Status" and "Architect acceptance" above). Implementation is in progress/under correction against PR #102 - this document's governance state is unambiguous: accepted, not draft.**
