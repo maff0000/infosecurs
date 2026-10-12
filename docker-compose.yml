@@ -35,7 +35,7 @@ services:
   # operational/cache data, never INFOSECURS business data, so it is
   # deliberately NOT included in scripts/backup.sh's backup set.
   clamav:
-    image: clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
+    image: clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
     volumes:
       - infosecurs_clamav_data:/var/lib/clamav
     healthcheck:

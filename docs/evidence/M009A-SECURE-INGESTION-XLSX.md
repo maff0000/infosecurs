@@ -8,10 +8,13 @@
 independently reviewed PR #102 and required three bounded blocking
 corrections plus two documentation corrections (2026-10-11) - see
 "Central Architecture independent-review corrections (2026-10-11)" below
-for the full account of what changed and why. This document now describes
-the corrected state on top of the original six implementation commits -
-still awaiting fresh Delivery Controller re-review, fresh Independent
-Audit, Architect Acceptance, merge.
+for the full account of what changed and why. Of those three blockers,
+Blocker 2 (the pinned ClamAV runtime image) was STOPPED on 2026-10-11
+pending an Architect ruling; the Architect has now ruled and Blocker 2 is
+RESOLVED 2026-10-12 - see "Blocker 2 — RESOLVED 2026-10-12" below. This
+document now describes the fully corrected state on top of the original
+six implementation commits - still awaiting fresh Delivery Controller
+re-review, fresh Independent Audit, Architect Acceptance, merge.
 
 This is the required durable evidence document (WO-M009A's own "Required
 durable evidence" section). It covers implementation rationale, the full
@@ -26,7 +29,12 @@ All work was built and verified on dell-debian inside a disposable Docker
 Compose stack, project name `m009a` (`WEB_HOST_PORT=18900`,
 `POSTGRES_HOST_PORT=18901`) — never the canonical `infosecurs-relocation`
 deployment (port 8884) and never any other stack already running on that
-host.
+host. The Blocker 2 resolution pass (2026-10-12, see below) found the
+`m009a` project still up from the prior correction pass and so used a
+further distinct disposable project name, `m009ab2fix` (`WEB_HOST_PORT=
+19000`, `POSTGRES_HOST_PORT=19534`) — again never `infosecurs-relocation`
+and never colliding with `m009a` or any other stack already running on
+the host.
 
 ## Central Architecture independent-review corrections (2026-10-11)
 
@@ -114,7 +122,24 @@ proven end to end; a future Work Order may add an actual re-upload/
 "supersede this import" control to the Customer Assurance UI, but M009A
 itself adds none, per Central Architecture's explicit ruling above.
 
-### Blocker 2 — ClamAV 1.4.6 evaluation: STOPPED, pin unchanged, finding reported
+### Blocker 2 — ClamAV 1.4.6 evaluation: ~~STOPPED, pin unchanged, finding reported~~ SUPERSEDED 2026-10-12
+
+**SUPERSEDED 2026-10-12 — do not treat this section as the final state.**
+Everything below in this section is left fully intact, byte-for-byte, as
+the real, true account of what this dispatch found and did on 2026-10-11
+— nothing here is deleted or rewritten. The Architect has since ruled on
+the open question this section raised, and a fresh, independent
+re-resolution superseded this STOP; see "Blocker 2 — RESOLVED 2026-10-12"
+immediately below this section for the current, controlling state. In
+short: the `clamav/clamav:1.4.6` tag is a floating tag and moved between
+2026-10-11 and 2026-10-12 — the digest this section recorded
+(`sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23`)
+genuinely scored 1 fixable HIGH on 2026-10-11 exactly as reported; a later,
+different build published under the same `1.4.6` tag
+(`sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`)
+is what the Architect's required fresh re-resolution found on 2026-10-12,
+and it is genuinely clean. Both findings are true of their respective
+digests at their respective times; neither contradicts the other.
 
 **Finding:** the current pin, `clamav/clamav:1.4.4@sha256:a52f45e427
 53dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3`, is stale -
@@ -203,6 +228,97 @@ TestRealClamdBackend` (`test_ping`/`test_legitimate_xlsx_is_clean`/
 3 still pass for real (see "Full test run output" below) - this dispatch
 did not merely assume the existing proof still held, it re-ran it.
 
+### Blocker 2 — RESOLVED 2026-10-12 (Architect ruling + fresh re-resolution, overlay NOT needed)
+
+**Architect's ruling** on the open question the STOPPED section above
+returned: re-resolve upstream fresh (never trust any cached/previously-
+recorded digest) before building any overlay; if a current official tag
+is already 0 CRITICAL/0 HIGH, pin that directly — no overlay required.
+
+**Fresh re-resolution, done live on dell-debian for this correction pass
+(no fabricated or memorised digest — independently re-pulled and
+re-scanned by this Implementer dispatch, not merely taken from the
+Delivery Controller's own re-resolution immediately preceding it):**
+
+```text
+$ docker pull clamav/clamav:1.4.6
+Digest: sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+Status: Image is up to date for clamav/clamav:1.4.6
+
+$ docker image inspect clamav/clamav:1.4.6 --format '{{.RepoDigests}}'
+[clamav/clamav@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469]
+```
+
+This is a DIFFERENT, newer digest than the one the STOPPED section above
+recorded for the same `1.4.6` tag on 2026-10-11
+(`sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23`)
+— direct, mechanical confirmation that the tag is floating and has moved,
+exactly as the Architect's instruction anticipated it might.
+
+**Version/OS facts confirmed inside the new digest, live:**
+
+```text
+$ docker run --rm clamav/clamav:1.4.6@sha256:b5b910ce... clamscan --version
+ClamAV 1.4.6/28150/Sun Oct 11 06:26:01 2026
+
+$ cat /etc/alpine-release
+3.24.2
+
+$ cat /etc/apk/repositories
+https://dl-cdn.alpinelinux.org/alpine/v3.24/main
+https://dl-cdn.alpinelinux.org/alpine/v3.24/community
+
+$ apk policy pcre2
+pcre2 policy:
+  10.49-r0:
+    lib/apk/db/installed
+    https://dl-cdn.alpinelinux.org/alpine/v3.24/main
+```
+
+`pcre2` — the exact package that carried the one fixable HIGH on the
+2026-10-11 digest (`CVE-2026-103111`, fixed in `10.49-r0`) — is already at
+`10.49-r0` on this new digest, sourced from the image's own stable `v3.24/
+main` repository (no edge repo added, no manual package pin needed).
+
+**Fresh Trivy scan of the exact new digest** (`aquasec/trivy:0.70.0 image
+--severity CRITICAL,HIGH --ignore-unfixed`, this repo's own existing
+`security/container` invocation style — identical tool, identical
+version, identical flags to every prior scan in this document):
+
+```text
+$ trivy image --severity CRITICAL,HIGH --ignore-unfixed \
+    clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+
+Report Summary
+┌────────────────────────────────────────────┬────────┬─────────────────┐
+│ Target                                      │  Type  │ Vulnerabilities │
+├────────────────────────────────────────────┼────────┼─────────────────┤
+│ clamav/clamav:1.4.6@sha256:b5b910ce... (alpine 3.24.2) │ alpine │        0        │
+└────────────────────────────────────────────┴────────┴─────────────────┘
+Legend: '0' = Clean (no security findings detected)
+```
+
+**0 CRITICAL / 0 HIGH — genuinely clean.** Per the Architect's ruling,
+this is pinned directly:
+`docker-compose.yml`/`docker-compose.release.yml`'s `clamav` service
+`image:` line is now
+`clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`
+— no `Dockerfile.clamav`, no derived/overlay image of any kind was built.
+**The obligation note the STOPPED section above carried forward** (echoing
+`docs/delivery/BUILD-REPRODUCIBILITY.md`'s "temporary exact-version
+security overlay" precedent — "re-pin once ClamAV publishes a genuinely
+clean tag") **no longer applies and is explicitly retired here**: no
+overlay was ever built for ClamAV, so there is nothing to later replace —
+a future reader should not go looking for a `Dockerfile.clamav` that was
+never created. The scanner topology itself (no published port,
+healthcheck, FreshClam, `CLAMAV_HOST=clamav` wiring, `UnavailableScanner`
+fail-closed-when-unset behaviour) is otherwise byte-identical to before —
+only the `image:` line's tag and digest changed, in both compose files,
+identically. Full re-proof (scanner health/ping/CLEAN/INFECTED, drift
+guard, `makemigrations --check`, full suite) against the new pinned image
+is in "Full test run output — Blocker 2 resolution correction pass
+(2026-10-12)" below.
+
 ### Blocker 3 — ClamAV image now enters the durable container CI gate
 
 `.github/workflows/security.yml`'s `security/container` job previously
@@ -234,6 +350,16 @@ practice of disclosing real findings rather than engineering around them
 unilaterally (see the pre-existing "CI wiring" and "A verification-
 environment flakiness finding" sections below, both carried over
 unchanged from the original dispatch).
+
+**RESOLVED 2026-10-12** — this paragraph's predicted consequence is now
+moot, not realised: Blocker 2 is no longer STOPPED (see "Blocker 2 —
+RESOLVED 2026-10-12" above). The pin is now the genuinely clean
+`clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`,
+so `security/container`'s next real GitHub Actions run will scan a 0
+CRITICAL/0 HIGH image and pass, not fail. This paragraph is left intact
+because it was a true, honest prediction at the time it was written — it
+is simply superseded by the Architect's subsequent ruling and the fresh
+re-resolution that followed it.
 
 **Drift guard** (new `questionnaire/tests/test_m009a_clamav_image_pin.py`,
 wired into `.github/workflows/ci.yml`'s `ci/unit` job): a small,
@@ -649,12 +775,29 @@ the full table. Summary:
   to `1.4.6` despite it being a strict improvement over `1.4.4` (15 HIGH
   → 1 HIGH) - see "Central Architecture independent-review corrections"
   above for the full finding and the open question returned to Central
-  Architecture/Delivery Controller. The obligation to re-pin once ClamAV
-  publishes a genuinely clean tag (mirroring this repo's own existing
-  "temporary exact-version security overlay" precedent for exactly this
-  class of situation, `docs/delivery/BUILD-REPRODUCIBILITY.md`'s Python
-  base-image section) remains open and is now sharper: `1.4.6` is close
-  but not yet clean.
+  Architecture/Delivery Controller. ~~The obligation to re-pin once ClamAV
+  publishes a genuinely clean tag ... remains open and is now sharper:
+  `1.4.6` is close but not yet clean.~~ **RESOLVED 2026-10-12:** the
+  Architect ruled that a fresh re-resolution (never trusting a cached
+  digest) must be done before building any overlay, and that a current
+  official tag already at 0 CRITICAL/0 HIGH should be pinned directly. A
+  fresh `docker pull clamav/clamav:1.4.6` on 2026-10-12 resolved to a
+  DIFFERENT, newer digest than the one recorded immediately above —
+  `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`
+  (the `1.4.6` tag is floating and had moved) — `clamscan --version`
+  reports `ClamAV 1.4.6/28150/Sun Oct 11 06:26:01 2026`, Alpine
+  `3.24.2`, and `apk policy pcre2` shows the installed `pcre2` is already
+  `10.49-r0` from the image's own stable `v3.24/main` repo (the exact
+  package/version that carried the sole HIGH finding above). A fresh
+  Trivy scan of this exact new digest
+  (`aquasec/trivy:0.70.0 image --severity CRITICAL,HIGH --ignore-unfixed`)
+  reports **0 vulnerabilities total** — genuinely clean. Per the
+  Architect's ruling this is pinned DIRECTLY, with no overlay:
+  `docker-compose.yml`/`docker-compose.release.yml` now pin
+  `clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`.
+  No `Dockerfile.clamav` or any derived scanner image exists in this
+  repository — none was needed. See "Blocker 2 — RESOLVED 2026-10-12"
+  above for the full account and re-proof.
 - **Application image Trivy scan (this Work Order's own code added to the
   existing, already-accepted application image):** `docker build` from
   this repo's `Dockerfile` (openpyxl/defusedxml/et-xmlfile now included)
@@ -1075,3 +1218,214 @@ correction pass. The pass count (2343) is 6 higher than the original
 dispatch's own controlling run (2337): 3 new `TestSupersedesContract`
 tests (Blocker 1) + 3 new `TestClamavImagePinDriftGuard` tests (Blocker
 3) = 6, fully accounted for.
+
+## Full test run output — Blocker 2 resolution correction pass (2026-10-12)
+
+Architect ruling implemented: re-resolve upstream `clamav/clamav`
+fresh, pin a current official tag directly if it is already 0
+CRITICAL/0 HIGH, no overlay. Built and verified on dell-debian inside a
+NEW disposable Compose stack, project name `m009ab2fix` (`WEB_HOST_PORT=
+19000`, `POSTGRES_HOST_PORT=19534`) - distinct from the still-running
+`m009a` project left up from the prior correction pass, and never
+`infosecurs-relocation` (port 8884) or any other stack already running on
+the host. Worktree `git rev-parse HEAD` confirmed at
+`86d83bfa8f3218115ff926c7dd1d1bcac70e6649` before any change in this
+pass was made.
+
+**Fresh digest re-resolution (independently re-pulled and re-scanned by
+this Implementer dispatch, not merely trusted from the Delivery
+Controller's own immediately-preceding re-resolution):**
+
+```text
+$ docker pull clamav/clamav:1.4.6
+Digest: sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+
+$ docker image inspect clamav/clamav:1.4.6 --format '{{.RepoDigests}}'
+[clamav/clamav@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469]
+
+$ docker run --rm clamav/clamav:1.4.6@sha256:b5b910ce... clamscan --version
+ClamAV 1.4.6/28150/Sun Oct 11 06:26:01 2026
+
+$ cat /etc/alpine-release
+3.24.2
+
+$ cat /etc/apk/repositories
+https://dl-cdn.alpinelinux.org/alpine/v3.24/main
+https://dl-cdn.alpinelinux.org/alpine/v3.24/community
+
+$ apk policy pcre2
+pcre2 policy:
+  10.49-r0:
+    lib/apk/db/installed
+    https://dl-cdn.alpinelinux.org/alpine/v3.24/main
+```
+
+**Fresh Trivy scan of the exact new digest**
+(`aquasec/trivy:0.70.0 image --severity CRITICAL,HIGH --ignore-unfixed`):
+
+```text
+Report Summary
+┌────────────────────────────────────────────────────────┬────────┬─────────────────┐
+│ Target                                                  │  Type  │ Vulnerabilities │
+├────────────────────────────────────────────────────────┼────────┼─────────────────┤
+│ clamav/clamav:1.4.6@sha256:b5b910ce... (alpine 3.24.2)  │ alpine │        0        │
+└────────────────────────────────────────────────────────┴────────┴─────────────────┘
+0 vulnerabilities total - genuinely clean.
+```
+
+**Compose re-pin** (both topologies, no other line changed):
+
+```diff
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+-    image: clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
++    image: clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+
+--- a/docker-compose.release.yml
++++ b/docker-compose.release.yml
+-    image: clamav/clamav:1.4.4@sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3
++    image: clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+```
+
+**Disposable stack brought up against the new pin:**
+
+```text
+$ docker compose -p m009ab2fix -f docker-compose.yml up -d --build
+...
+Container m009ab2fix-db-1       Healthy
+Container m009ab2fix-clamav-1   Healthy
+Container m009ab2fix-web-1      Started
+
+$ docker compose -p m009ab2fix ps
+m009ab2fix-clamav-1   clamav/clamav:1.4.6@sha256:b5b910ce...   Up (healthy)   3310/tcp, 7357/tcp
+m009ab2fix-db-1       postgres:16.6-alpine@sha256:1d04b9ba...  Up (healthy)   127.0.0.1:19534->5432/tcp
+m009ab2fix-web-1      m009ab2fix-web                            Up            127.0.0.1:19000->8000/tcp
+```
+
+`m009ab2fix-clamav-1` exposes `3310/tcp, 7357/tcp` with NO host-port
+mapping - confirmed directly via `docker inspect
+--format '{{json .NetworkSettings.Ports}}'`, both values `null`.
+
+**clamd ping, both directly and over the internal Compose network as the
+application itself reaches it:**
+
+```text
+$ docker exec m009ab2fix-clamav-1 sh -c 'echo PING | nc -w 2 localhost 3310'
+PONG
+
+$ docker exec m009ab2fix-web-1 python -c "
+import socket
+s = socket.create_connection(('clamav', 3310), timeout=5)
+s.sendall(b'PING\n'); print(s.recv(100)); s.close()"
+b'PONG\n'
+```
+
+**Real scanner re-proof against the new image**
+(`questionnaire/tests/test_m009a_scanner.py`):
+
+```text
+$ docker exec m009ab2fix-web-1 python -m pytest questionnaire/tests/test_m009a_scanner.py -v
+TestUnavailableScanner::test_always_returns_unavailable_never_clean PASSED
+TestUnavailableScanner::test_ping_is_false PASSED
+TestGetScannerFailsClosedOnAbsence::test_no_clamav_host_returns_unavailable_stub PASSED
+TestClamdScannerConnectionFailure::test_unreachable_host_returns_unavailable_not_exception PASSED
+TestRealClamdBackend::test_ping PASSED
+TestRealClamdBackend::test_legitimate_xlsx_is_clean PASSED
+TestRealClamdBackend::test_eicar_test_file_is_detected PASSED
+7 passed in 0.40s
+```
+
+All four scanner states are covered: `UNAVAILABLE` (no host set),
+`UNAVAILABLE` on connection failure (fails closed, not an exception),
+real `CLEAN` (legitimate XLSX against the real new clamd), and real
+`INFECTED` (EICAR test string against the real new clamd) - each of
+these is what `questionnaire/import_services.py`'s `security_gate_failed`
+path depends on; that code is unchanged by this pass, and this re-run
+proves it still behaves correctly against the new image, not merely
+assumed.
+
+**Drift guard re-run** (`questionnaire/tests/test_m009a_clamav_image_pin.py`):
+
+```text
+$ docker exec m009ab2fix-web-1 python -m pytest questionnaire/tests/test_m009a_clamav_image_pin.py -v
+TestClamavImagePinDriftGuard::test_dev_and_release_compose_pin_the_identical_clamav_image PASSED
+TestClamavImagePinDriftGuard::test_pinned_clamav_image_is_never_a_floating_tag[docker-compose.yml] PASSED
+TestClamavImagePinDriftGuard::test_pinned_clamav_image_is_never_a_floating_tag[docker-compose.release.yml] PASSED
+3 passed in 0.06s
+```
+
+Still passes unchanged, because both compose files still agree,
+byte-for-byte, on one identical digest-pinned reference - now `1.4.6`/
+`sha256:b5b910ce...` instead of `1.4.4`/`sha256:a52f45e4...`.
+
+**`makemigrations --check --dry-run`** (rerun fresh for this final
+candidate per the Architect's explicit requirement, not taken from any
+earlier evidence document):
+
+```text
+$ docker exec m009ab2fix-web-1 python manage.py makemigrations --check --dry-run
+No changes detected
+```
+
+**CI wiring re-confirmed, no code change needed:**
+`.github/workflows/security.yml`'s `security/container` job's `Resolve
+pinned ClamAV image reference` step runs `grep -oP
+'clamav/clamav:\S+@sha256:[0-9a-f]{64}' docker-compose.yml` - a fully
+generic pattern with no hand-copied tag/digest literal anywhere in the
+workflow file. Rereading it against the new `docker-compose.yml` content
+confirms it will resolve the new `1.4.6` pin automatically on its next
+run; neither `.github/workflows/security.yml` nor `.github/workflows/
+ci.yml` needed any change for this correction.
+
+**Chromium pre-flight, done before the full suite** (this exact pitfall
+is named in this document's own "A verification-environment flakiness
+finding" above and bit this correction pass too, on the first check):
+
+```text
+$ docker exec m009ab2fix-web-1 python -c "from playwright.sync_api import sync_playwright; ..."
+playwright._impl._errors.Error: BrowserType.launch: Executable doesn't exist at
+/root/.cache/ms-playwright/chromium_headless_shell-1243/.../chrome-headless-shell
+[Playwright was just installed/updated; run `playwright install`]
+
+$ docker exec m009ab2fix-web-1 python -m playwright install --with-deps chromium
+Chrome for Testing 153.0.8010.12 (playwright chromium v1243) downloaded ...
+Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243) downloaded ...
+
+$ docker exec m009ab2fix-web-1 python -c "from playwright.sync_api import sync_playwright; ..."
+chromium-ok 153.0.8010.12
+```
+
+Host resource health checked at the same time: `free -h` showed `Mem:
+62Gi total, 41Gi used, 2.5Gi free, 19Gi buff/cache, 20Gi available` and
+`Swap: 975Mi total, 975Mi used, 0B free` (swap still fully saturated on
+this shared, loaded host, the same symptom this document's existing
+flakiness finding names), and the container's own `/dev/shm` was `64M,
+0 used`. Despite swap being saturated, Chromium launched successfully
+once genuinely installed - this pass's earlier Chromium failure was the
+missing-binary pitfall, not the swap-saturation flakiness class.
+
+**Full repository test suite, run once, no retry needed:**
+
+```text
+$ docker exec m009ab2fix-web-1 python -m pytest -q
+2343 passed, 7 skipped, 1 xfailed, 1 warning in 1622.28s (0:27:02)
+[exit code 0]
+```
+
+**Matches the controlling count exactly** (2343 passed, 0 failed, 7
+skipped, 1 xfailed) - identical to the pre-existing controlling run on
+this branch. No discrepancy to explain: unlike the prior correction
+pass's own documented browser-flakiness occurrence (same class, "A
+verification-environment flakiness finding" above), this run needed no
+retry, because Chromium was proactively installed and confirmed
+launchable before the full suite was started rather than after a failure
+was first observed. The 1 warning (a `zipfile` `UserWarning: Duplicate
+name: 'xl/workbook.xml'` from `TestRejectsHostileContainers::
+test_duplicate_member_names_rejected`, a deliberately-crafted hostile
+fixture exercising `security_gate.py`'s own duplicate-member-name
+rejection) is pre-existing, expected, and unrelated to this correction.
+
+**Controlling, authoritative result for the Blocker 2 resolution
+correction pass: 2343 passed, 7 skipped, 1 xfailed, 0 failed** - identical
+in every count to the pass/skip/xfail baseline this document already
+established above; only the pinned ClamAV image changed.
