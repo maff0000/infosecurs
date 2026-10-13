@@ -209,20 +209,35 @@ known vulnerabilities for `openpyxl==3.1.5`, `defusedxml==0.7.1`, or
 
 | Component | Explicit version | Immutable digest | Used in |
 |---|---|---|---|
-| ClamAV/clamd | `clamav/clamav:1.4.4` | `sha256:a52f45e42753dca691b6c9fd09fe68d6ca9ac22fa8cd6a8a45d9237e188049e3` | `docker-compose.yml`, `docker-compose.release.yml` (`clamav` service, both topologies) |
+| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469` | `docker-compose.yml`, `docker-compose.release.yml` |
 
-Resolved directly from the registry (`docker pull` + `docker inspect
---format='{{index .RepoDigests 0}}'`) at the time of this change, against
-the explicit `1.4.4` tag — not a floating `latest`/`stable` alias.
-`1.4.3` was tried first and Trivy-scanned (32 HIGH + 2 CRITICAL,
-`--ignore-unfixed`); `1.4.4` scanned strictly better (0 CRITICAL, 15
-HIGH) and was pinned instead — see `docs/evidence/
-M009A-SECURE-INGESTION-XLSX.md`'s "Dependency / licence / build-
-reproducibility evidence" section for the full before/after and the
-residual-15-HIGH disclosure. The signature database (FreshClam-managed,
-its own named volume) is operational/cache data, not a pinned build input
-and not part of either Docker Compose stack's backup set — see
-`docs/runbooks/BACKUP-RESTORE.md`.
+The final accepted image was re-resolved from the official upstream
+`1.4.6` tag during the PR #102 security-correction cycle and pinned by
+immutable digest. The accepted image contains `pcre2 10.49-r0` from its
+own stable Alpine repository. Final governed Trivy scan: **0 CRITICAL /
+0 HIGH**. The repository's `security/container` GitHub check now scans
+this exact ClamAV runtime image in addition to the INFOSECURS
+application image, using the same governed CRITICAL/HIGH,
+`ignore-unfixed`, fail-the-job policy. The signature database
+(FreshClam-managed, its own named volume) is operational/cache data, not
+a pinned build input and not part of either Docker Compose stack's
+backup set — see `docs/runbooks/BACKUP-RESTORE.md`.
+
+### M009A scanner-image hardening history
+
+The initial M009A candidate used ClamAV 1.4.4 and disclosed 15 HIGH
+findings. Central Architecture rejected that state for merge. An initial
+re-resolution of ClamAV 1.4.6 reduced this to one fixable HIGH (`pcre2`),
+so merge remained blocked. Before a derived security overlay was built,
+the official upstream `1.4.6` tag was re-resolved again and had been
+republished with `pcre2 10.49-r0`. That exact clean image was pinned by
+immutable digest and independently verified at 0 CRITICAL / 0 HIGH. No
+local package overlay was therefore required. Do not erase the
+historical evidence documents describing the earlier 1.4.4 / intermediate
+1.4.6 findings — they remain correct historical evidence, preserved in
+`docs/evidence/M009A-SECURE-INGESTION-XLSX.md`'s "Central Architecture
+independent-review corrections" section. This change reconciles only the
+authoritative current-state build ledger.
 
 ### Pip-audit suppression discipline
 
