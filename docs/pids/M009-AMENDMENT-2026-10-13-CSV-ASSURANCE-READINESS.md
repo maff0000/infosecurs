@@ -1,6 +1,6 @@
 # M009 — Amendment 2026-10-13: CSV-First Delivery + Assurance Readiness Gate
 
-**Document status:** DRAFT — Central Architecture reconciliation, for Product Authority and Architect review. Not an implementation authorisation.
+**Document status:** **ARCHITECT ACCEPTED — AUTHORISED FOR MERGE.** Accepted head `53e86c2757fa002b2fe8ba9ce41370d5ad806419` (see §12 for the full durable Architect Acceptance record). This document is now canonical M009 architecture, superseding the relevant parts of the master PID per §1; it remains an architecture record, not an implementation authorisation — a separate M009B Work Order requires its own Architect Acceptance before any FORGE dispatch.
 **Baseline:** `23fcd6ea21173bb50b4185611c509bad4aacdcfa`
 **Parent PID:** `docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`
 **Truth-engine PID:** `docs/pids/M005-QUESTIONNAIRE-ASSURANCE.md`
@@ -555,3 +555,14 @@ Once accepted and merged, the next action is a revised M009B Work Order (superse
 Per Central Architecture's standing requirement, every PID amendment, Work Order, and implementation PR from this point forward carries a durable GitHub engineering note (a structured PR comment, in addition to this committed document) covering: architecture/PID and baseline SHA; scope, exclusions, and ownership; exact implementation modules and interfaces; engineering decisions and trade-offs; acceptance tests and evidence; independent audit findings; STOP conditions and their resolutions; CI/security conclusions; Architect Acceptance and closure evidence.
 
 For this PR (#105), that note is posted as a PR comment on `https://github.com/maff0000/infosecurs/pull/105`, cross-referencing this document's section numbers for each item, with "acceptance tests and evidence," "independent audit findings," and "CI/security conclusions" explicitly marked not-yet-applicable (this PR is architecture only — no implementation exists to test or audit yet) rather than omitted, so the template's shape is established now and filled in as this milestone actually proceeds through a Work Order and implementation.
+
+## 12. Architect Acceptance
+
+**Decision:** **PR #105 ARCHITECT ACCEPTED — AUTHORISED FOR MERGE.**
+**Accepted head:** `53e86c2757fa002b2fe8ba9ce41370d5ad806419`.
+**Review history:** draft (`1d86df9`) → correction round 1, C1–C5 + additional decisions (`f31e5c5`) → correction round 2, A/B (`a209131`) → correction round 3, C6 (`9783bfc`) → correction round 4, bounded documentation fixes (`53e86c2`, this accepted head).
+**Verification at acceptance:** all seven GitHub CI/security checks GREEN (`CodeQL`, `ci/unit`, `ci/integration`, `security/container`, `security/dependencies`, `security/sast`, `security/secrets`); documentation-only scope confirmed at every round (each correction's diff verified to touch only this one file); PR #104 confirmed untouched throughout the entire review.
+
+**Engineering decision, summarised:** this amendment establishes CSV as M009's first end-to-end format, gated by a new Assurance Readiness predicate built entirely on the existing, unmodified `entitlements.metrics.get_security_foundations_completion`; separates organisation-level readiness from question-level answerability; moves readiness enforcement to the correct point in the Django request pipeline (a pre-CSRF `process_view` hook); hardens the CSV export contract (minimal default columns, provenance/encoding separation, real-spreadsheet-verified formula-injection defense, no draft-export exception); redesigns bulk-answer concurrency around a genuinely atomic claim-and-persist transaction, requiring one narrowly scoped, behaviour-preserving M005 extract-method refactor (`prepare_questionnaire_response`/`persist_prepared_response`), proof-gated on the unchanged M005 golden corpus; and replaces a human-edit-shaped answer-composition write path with one carrying explicit, non-human-attributed machine-composition provenance. No M005 schema, truth-engine logic, or outcome vocabulary changes. No M009A implementation change.
+
+This record is durable, canonical, and merged into main alongside this document — not only a PR comment.
