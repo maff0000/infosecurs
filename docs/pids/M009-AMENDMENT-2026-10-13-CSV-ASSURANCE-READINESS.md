@@ -11,6 +11,8 @@
 
 **Revision note (2026-10-13, correction round 2):** Central Architecture reviewed the round-1 correction (head `f31e5c55edbbbeb573d6ed7081b2adb9e15cfd74`) and found two further genuine design gaps, both corrected below, not merely re-documented: **(A)** round 1's claim-expiry mechanism (§6) only governed who could currently *attempt* work — it did not prevent two genuinely concurrent `generate_questionnaire_response` calls (one from a reclaim after expiry, while the original caller's AI call was still actually running) from each independently persisting a real `QuestionnaireResponse`, since M005's own persist step has no awareness of M009B's claim ledger at all. §6 now adds a second, permanent (never-expiring) database constraint — "commit-time fencing" — checked immediately after each caller's AI call returns, which deletes the losing caller's own orphaned response rather than leaving two standing (§6.1a, §6.1b, new). **(B)** round 1's proposal to apply composed answer text via the existing `edit_questionnaire_response_text` human-edit API was withdrawn as a genuine audit-provenance mismatch, not merely a labelling nitpick — M009B now owns its own write path, its own permanent `answer_composition_method` provenance field, and its own distinctly-named, non-human-attributed activity event, plus a new, independent adversarial evaluation corpus for the composition function itself (§5, corrected). §11 (new) commits this delivery to a durable, structured GitHub engineering note per Central Architecture's standing governance requirement.
 
+**Revision note (2026-10-13, correction round 3 — C6):** Central Architecture accepted B but found round 2's fencing design (§6.1b, as it then was) still insufficient: it detected a losing claim only *after* `generate_questionnaire_response` had already durably committed a real `QuestionnaireResponse`, relying on deleting that commit afterwards — detection-with-cleanup, not an atomic guarantee, and a crash in that exact window left an untracked orphan. Corrected (§6.1a–§6.1c, rewritten) by investigating, as the Architect's own instruction explicitly authorised, a narrowly scoped M005 extract-method refactor: reading `questionnaire/services.py` directly confirms `_persist_response` is *already* M005's own sole atomic unit, taking a fully-prepared bundle as plain arguments — exposing it (renamed, identical body) as `persist_prepared_response`, alongside a new `prepare_questionnaire_response` wrapping the pre-existing AI-call sequence, lets M009B's own transaction perform the claim-ownership check and the response INSERT as one indivisible unit. A losing claim's response is now never committed at all, so there is nothing to delete and no orphan-sweep logic is needed — that logic is removed by this correction, not merely retained as a backstop. `generate_questionnaire_response`'s external behaviour is unchanged (a two-line composition of the two extracted functions), proof required via the unchanged M005 golden corpus and its own existing test suite passing byte-identically.
+
 ## 0. Decision sought
 
 Ratify a change to the previously accepted M009 delivery sequence: the first *complete end-to-end* Customer Assurance workflow becomes **CSV in, CSV out**, gated by a new deterministic **Security Foundations Assurance Readiness** predicate, before any bulk-answer export capability exists. M009A's XLSX secure-ingestion capability is preserved exactly as closed — not replaced, not silently exposed as a finished answer/export path, not deleted.
@@ -24,7 +26,7 @@ Every claim below about what already exists in this codebase was independently v
 | XLSX is the first-class, first-delivered end-to-end format | **Superseded.** CSV becomes the first end-to-end format. XLSX (M009A) remains delivered and closed, but its answer-generation/export path is now scheduled *after* CSV's, not before it. |
 | M009B = bulk answer generation, no gating beyond the existing `customer_assurance` tier | **Superseded.** A new Assurance Readiness predicate is now a hard precondition, additional to and independent of package-tier entitlement. The M009B draft in PR #104 did not include this gate and must be revised. |
 | Questionnaire interpretation selects from the existing `questionnaire.catalogue` (unchanged) | **Confirmed, not superseded.** Verified: the catalogue is a small (29-entry), deliberately curated, versioned allowlist — not a database-reflection mechanism. This amendment reuses it exactly as-is (§4). |
-| M005 truth engine, outcome vocabulary, immutability (`questionnaire.services`/`grounding`/`outcome`) | **Confirmed, not superseded.** Untouched by this amendment; see §2 for the specific, previously under-scoped safeguard this amendment must design around rather than weaken. |
+| M005 truth engine, outcome vocabulary, immutability (`questionnaire.services`/`grounding`/`outcome`) | **Confirmed, not superseded, with one narrowly scoped, Architect-authorised exception.** `questionnaire.grounding`/`outcome` and the model schema remain fully untouched. `questionnaire.services` gains a pure extract-method refactor (§6.1b) — `generate_questionnaire_response` is decomposed into `prepare_questionnaire_response` + `persist_prepared_response`, with byte-identical external behaviour, proven by the unchanged golden corpus — required to make the concurrency fix (C6) genuinely atomic rather than detect-and-delete. No semantic change to any M005 behaviour. |
 | M009C (review), M009D (export) scope boundaries | **Narrowed, not superseded.** M009D now additionally owns CSV export/formula-injection hardening as its first deliverable, with XLSX write-back deferred inside M009D as a separately-scoped increment (§8). |
 | M009B/C/D as three independent Work Orders | **Confirmed.** This amendment explicitly forbids collapsing them into one implementation Work Order (§8). |
 
@@ -258,81 +260,107 @@ def claim_next_eligible_question(import_record, *, actor) -> Optional[Questionna
             return None
 ```
 
-**AI work happens entirely outside this transaction** — `generate_questionnaire_response` is called only after the claim row is durably committed, never inside a transaction holding a database lock across a network call to an external AI gateway.
+### 6.1a Why detect-and-delete is not atomicity, and what C6 requires instead
 
-### 6.1a The gap in the first draft of this section, and why claim expiry alone does not prevent a duplicate response
+**Round 2's "finalisation" step is withdrawn as insufficient, per the Architect's own correct finding.** It called the unmodified `generate_questionnaire_response` — which internally performs its own, already-complete, already-committed `@transaction.atomic` insert of a real `QuestionnaireResponse` — and only afterwards checked whether this attempt's claim was still valid, deleting the response if not. **Between those two steps, a losing caller's `QuestionnaireResponse` is genuinely, durably committed to the database** — visible to any other concurrent reader, however briefly — before being deleted. That is detection with manual cleanup, not an atomic persistence guarantee, and a crash in that exact window leaves a real orphan with no attempt record. This is the precise defect named: "the current approach detects competing attempts after M005 has already persisted the responses."
 
-**This correction withdraws the previous "Finalisation" step above as insufficient, per the Architect's own finding, confirmed correct on re-analysis.** The `claimed`-row uniqueness constraint only ever guarantees *at most one active claim at a time* — it says nothing about what happens once a claim **expires while its AI call is still genuinely in flight**. Concretely: Caller 1 claims question Q, starts its (unusually slow) call to `generate_questionnaire_response`. Before Caller 1 returns, `claim_expires_at` passes. Caller 2's next `claim_next_eligible_question` call runs the opportunistic-expiry sweep, marks Caller 1's row `failed`/`claim_expired`, and — because the unique constraint on `outcome="claimed"` no longer has anything to conflict with — successfully claims the *same* question Q and starts its *own* call to `generate_questionnaire_response`. **Both callers are now genuinely, concurrently running the full M005 pipeline for the same question.** `generate_questionnaire_response`'s own persist step has zero awareness of M009B's claim ledger — it does not consult it, was never designed to, and this amendment does not propose changing it to. Whichever caller's AI call finishes, M005 persists a brand-new `QuestionnaireResponse` for Q, unconditionally. **If both finish, two `QuestionnaireResponse` rows now exist for one question** — exactly the duplicate the claim mechanism exists to prevent, and the previous draft's finalisation step only detected this *after the fact*, in a comment ("Discard this result") that was never actually backed by code that discards anything. This is the precise flaw named: "since M005 creates its response before M009B finalises ownership, a stale caller can still persist a response."
+**The real fix requires the claim-ownership check and the response-creating `INSERT` to be the *same* database transaction** — so that a losing claim's response is never committed at all, because the whole transaction containing it rolls back as one atomic unit. That is only possible if the code that creates a `QuestionnaireResponse` can be invoked *from inside* M009B's own transaction, rather than only via `generate_questionnaire_response`'s own self-contained call (which opens and closes its own transaction internally, with no hook for an external ownership check in between).
 
-### 6.1b Commit-time fencing — a second, permanent constraint, checked after the AI call returns
+### 6.1b A narrowly scoped M005 extract-method refactor — investigated directly, confirmed low-risk, authorised by the Architect's own instruction
 
-The claim constraint (§6.1, `outcome="claimed"`) is necessarily *time-bounded*, because a claim must eventually expire to enable crash recovery. Correctness therefore cannot rest on that constraint alone — it needs a **second, permanent constraint that is never time-bounded and never expires**, checked at the one moment that actually matters: immediately after an AI call returns, before its result is allowed to count as "the" answer for that question.
+Reading `questionnaire/services.py` directly (not assumed) confirms this separation already exists, structurally, inside M005's own code — it only needs to be exposed, not invented:
+
+```python
+@transaction.atomic
+def _persist_response(organisation, question, *, interpretation, interpretation_record,
+                       outcome, outcome_warnings, grounding_snapshot, draft, drafting_record, actor) -> QuestionnaireResponse:
+    ...  # creates exactly one QuestionnaireResponse + fires EVENT_QUESTIONNAIRE_RESPONSE_GENERATED, nothing else
+
+def generate_questionnaire_response(organisation, question, *, actor, interpretation_gateway=None, drafting_gateway=None) -> QuestionnaireResponse:
+    ...  # interpret (AI call 1) -> record EVENT_QUESTION_INTERPRETED (plain create, unconditional, pre-existing, unrelated to this race) -> grounding -> derive_outcome -> build drafting_request -> draft (AI call 2)
+    return _persist_response(organisation, question, interpretation=interpretation, ..., actor=actor)
+```
+
+`_persist_response` is *already* the sole atomic unit, already receiving a fully-prepared, ready-to-persist bundle as plain keyword arguments, with zero dependency on anything that happens after it. **The proposed refactor is a pure extract-method — rename `_persist_response` to a public `persist_prepared_response` (identical body, identical `@transaction.atomic` decorator, identical behaviour), and wrap the existing "interpret → record event → ground → derive outcome → build drafting request → draft" sequence — already one contiguous, side-effect-bounded block inside `generate_questionnaire_response` today — into its own `prepare_questionnaire_response` function returning the same bundle of values `_persist_response` already takes as arguments.** `generate_questionnaire_response` itself becomes a two-line composition of the two, **with byte-identical external behaviour for every existing caller** — the single-question UI flow, `questionnaire_response_regenerate`, and the M005 golden corpus all call `generate_questionnaire_response` exactly as today and observe no difference whatsoever. This is the "narrowly scoped M005 preparation/persistence separation" the Architect's own instruction authorised investigating — confirmed here, directly, to be a rename-and-extraction of code that is already structured this way, not a new design imposed on M005. **Acceptance requires the unchanged M005 14-case golden corpus and `generate_questionnaire_response`'s own existing test suite to pass byte-identically against the refactored code** — this is the proof the Architect's instruction requires, and this document treats it as a hard gate, not a formality.
+
+**Honest note on one pre-existing side effect, unrelated to the race:** `EVENT_QUESTION_INTERPRETED` fires unconditionally inside `prepare_questionnaire_response`, exactly as it already does today, independent of what happens later — so under a genuine double-claim race (§6.1a's scenario), *both* callers' interpretation steps still each fire their own `EVENT_QUESTION_INTERPRETED` event, even though only one ever goes on to have a `QuestionnaireResponse` actually committed. This is pre-existing, unchanged M005 behaviour (its own docstring already states interpretation-succeeding is recorded independent of later failure) and has no bearing on the duplicate-*response* problem this section fixes — stated here for transparency, not left for a reviewer to discover unmentioned.
+
+### 6.1c Atomic claim-check-and-persist — the actual fix
 
 ```python
 class Meta:
     constraints = [
         models.UniqueConstraint(fields=["import_question"], condition=models.Q(outcome="claimed"), name="one_active_claim_per_import_question"),
-        # The actual fence. Permanent - never expires, never superseded.
-        # At most one attempt row, EVER, for a given import_question, may
-        # reach outcome="succeeded". This is what "owns" the right for a
-        # QuestionnaireResponse to exist for that question, not the
-        # claimed-row constraint above, which only ever governs who may
-        # currently be TRYING.
+        # Permanent, never-expiring - defence in depth alongside the
+        # explicit, locked ownership check below, not a substitute for it.
         models.UniqueConstraint(fields=["import_question"], condition=models.Q(outcome="succeeded"), name="one_successful_response_per_import_question"),
     ]
 ```
 
-**Finalisation, corrected:**
-
 ```python
-def finalize_claim(attempt, *, response=None, failure_category=None, failure_detail=None):
-    with transaction.atomic():
-        attempt.refresh_from_db()
-        if attempt.outcome != "claimed":
-            # Our own claim already expired and the question may have
-            # been reclaimed by someone else. Falling through to the
-            # fencing insert below still protects correctness even in
-            # this branch (it is not actually reachable to cause harm -
-            # see the race walked through below), but there is nothing
-            # of ours left to finalise onto; discard our own result
-            # immediately rather than attempt a write against a row we
-            # no longer own.
-            if response is not None:
-                response.delete()  # our own orphaned, never-shown draft
-            return
-        try:
-            attempt.outcome = "succeeded" if response else "failed"
-            attempt.resulting_response = response
-            attempt.failure_category = failure_category
-            attempt.failure_detail = failure_detail
-            attempt.save(update_fields=["outcome", "resulting_response", "failure_category", "failure_detail"])
-            # The UniqueConstraint above is checked HERE, at save() time,
-            # by Postgres itself.
-        except IntegrityError:
-            # A DIFFERENT attempt (a concurrent reclaim after our own
-            # claim's expiry, per §6.1a) already won the permanent
-            # fence for this question first. We lost the race. Our own
-            # response - if we have one - is an orphan nobody should
-            # ever see or reference. Delete it, and record our own
-            # attempt honestly as superseded, never as succeeded.
-            if response is not None:
-                response.delete()
-            attempt.outcome = "failed"
-            attempt.failure_category = "superseded_by_concurrent_success"
-            attempt.save(update_fields=["outcome", "failure_category"])
+def claim_and_process_one_question(import_record, *, actor):
+    attempt = claim_next_eligible_question(import_record, actor=actor)  # §6.1's short claim transaction, unchanged
+    if attempt is None:
+        return None
+
+    # AI work - entirely OUTSIDE any transaction, exactly as
+    # generate_questionnaire_response already does internally today.
+    prepared = prepare_questionnaire_response(
+        attempt.import_question.question.organisation,
+        attempt.import_question.question,
+        actor=actor,
+    )
+
+    try:
+        with transaction.atomic():
+            # Re-verify OUR claim is still the live, non-expired owner,
+            # with a row lock - immediately before persistence, inside
+            # the SAME transaction the persist itself runs in. This is
+            # requirement 2 (verify ownership immediately before
+            # persistence) and requirement 1's complement: the AI calls
+            # already happened above, outside this block entirely.
+            current = QuestionnaireBulkResponseAttempt.objects.select_for_update().get(pk=attempt.pk)
+            if current.outcome != "claimed" or current.claim_expires_at < timezone.now():
+                raise ClaimNoLongerValid()
+
+            # The exact, unmodified M005 persist step, now called FROM
+            # INSIDE this transaction - Django nests this as a SAVEPOINT
+            # automatically; it is not a second, independent commit.
+            response = persist_prepared_response(prepared)
+
+            current.outcome = "succeeded"
+            current.resulting_response = response
+            current.save(update_fields=["outcome", "resulting_response"])
+            # If THIS raises IntegrityError (the permanent constraint),
+            # the entire "with" block - including persist_prepared_
+            # response's own INSERT above - rolls back as one unit.
+            # The losing caller's QuestionnaireResponse is NEVER
+            # committed to the database at all. Nothing to delete,
+            # because nothing was ever durably written.
+    except (ClaimNoLongerValid, IntegrityError):
+        # Django's atomic() context manager guarantees the connection is
+        # left in a clean, usable state after this exception propagates
+        # out of the "with" block (a savepoint rollback when nested, or
+        # the whole transaction when top-level) - this is documented
+        # Django behaviour, not something this design hand-rolls. A
+        # FRESH statement, outside the rolled-back block, now records
+        # the failure honestly.
+        QuestionnaireBulkResponseAttempt.objects.filter(pk=attempt.pk, outcome="claimed").update(
+            outcome="failed", failure_category="lost_claim_race_or_expired"
+        )
+        return None
+    return attempt
 ```
 
-**Why this closes the gap completely:** in the §6.1a scenario, both Caller 1 and Caller 2 eventually call `finalize_claim` with their own (distinct) `QuestionnaireResponse`. Exactly one of their two `attempt.save()` calls can satisfy `one_successful_response_per_import_question` — Postgres enforces this as a genuine constraint check at write time, not an application-level race. The other's `save()` raises `IntegrityError`, and that caller's branch **deletes its own orphaned response** before it is ever shown to a user, ever accepted, or ever exported — never two responses left standing, regardless of which caller's claim was "valid" at any particular moment or how the expiry/reclaim timing actually played out. This fencing check happens in a single short transaction, immediately after each caller's own AI call returns — no transaction is held open across any AI call, satisfying the explicit constraint.
+### 6.2 Why this satisfies each requirement of C6
 
-**A residual, named edge case — crash between AI success and `finalize_claim`:** if a process dies after `generate_questionnaire_response` successfully persists a `QuestionnaireResponse` but before `finalize_claim` ever runs, that response is a genuine orphan: not attached to any `succeeded` attempt, and (because it exists) it makes the question look "already answered" to §5's eligibility query, permanently, with no attempt record explaining why. This is addressed by extending the *same* opportunistic sweep `claim_next_eligible_question` already runs: alongside expiring stale `claimed` rows, it also finds `draft` `QuestionnaireResponse` rows, for questions this import owns, with `created_at` older than `CLAIM_TTL` and no corresponding `succeeded` attempt, and deletes them as abandoned orphans from an incomplete prior attempt — restoring the question to eligibility. This must be its own named test at Work Order stage (not merely implied by the rest of the design), specifically simulating a crash in this exact window.
-
-### 6.2 Why this satisfies each named requirement
-
-- **Uniqueness:** two Postgres constraints, not an application check — a time-bounded one governing who may currently attempt, and a permanent one governing who actually won. Genuinely race-safe under real concurrent transactions, including the expiry-during-active-call scenario (§6.1a), not merely "unlikely to collide."
-- **Claim expiry:** `CLAIM_TTL`, a frozen constant set comfortably above the same worst-case-AI-latency arithmetic (carried over from the superseded WO's own §6) already required to be grounded in a real measured number, not guessed — restated as a standing instruction in §8.
-- **Restart behaviour:** every claim attempt opportunistically expires stale claims (and now, orphaned draft responses — §6.1b) first, in the same transaction — a fresh process/request picking up after a crash needs no special "recovery mode," it is the same code path as every other call.
-- **Crash recovery:** named explicitly for all three failure windows — mid-AI-call (claim expires, reclaimable), post-AI-success-pre-finalise (orphan response swept on the next claim attempt), and the ordinary case (claim finalises cleanly). Acceptance testing (§9, extended) must exercise all three, plus the genuine double-claim race from §6.1a with two concurrent real (or realistically simulated) calls, not only a single-caller happy path.
-- **No new queue/worker infrastructure:** every piece above is a Django model field, two Postgres constraints, and two short ORM transactions around an unmodified `generate_questionnaire_response` call — nothing beyond what the project's existing synchronous-request-cycle architecture already uses.
+1. **Interpretation and drafting outside any transaction:** unchanged — `prepare_questionnaire_response` performs both AI calls exactly as `generate_questionnaire_response` already does, entirely before the `with transaction.atomic()` block above ever opens.
+2. **Claim ownership verified immediately before persistence:** the `select_for_update()` + outcome/expiry check is the literal first thing inside the transaction, before `persist_prepared_response` is ever called.
+3. **Atomic persist of the response + claim finalisation together:** both writes are inside one `with transaction.atomic()` block — Django/Postgres guarantee they commit together or not at all.
+4. **Stale claim holders prevented from persisting:** a stale/expired/already-reclaimed holder's `select_for_update()` check raises `ClaimNoLongerValid` *before* `persist_prepared_response` is ever invoked — no response is even attempted, let alone created, for a claim already known to be dead.
+5. **Never deletes unrelated or human-created drafts:** there is no delete-on-recovery code path left in this design *at all* — a losing attempt's response was never committed in the first place, so there is nothing to clean up, manually or otherwise, and therefore nothing that could ever be mistargeted at an unrelated row. Round 2's orphan-draft-sweep logic is removed entirely by this correction, not merely left in place as a backstop — it existed to solve exactly the detect-and-delete problem this redesign eliminates structurally, and retaining it would be both dead complexity and a residual risk of the exact kind requirement 5 warns against.
+6. **PostgreSQL uniqueness errors handled via correct transaction/savepoint behaviour:** the `IntegrityError` from the permanent constraint is caught *outside* the `with transaction.atomic()` block, exactly as Django's own documentation requires for continued use of the connection afterwards — the failure-recording `.update()` call that follows is a genuinely fresh statement against a clean transaction state, not a write attempted against an already-aborted one.
+7. **Correctness under claim expiry, concurrent execution, crashes and retry:** the only failure window remaining is a crash *before* `claim_and_process_one_question` ever reaches its `with transaction.atomic()` block (i.e., during the AI calls themselves) — in that case nothing is persisted at all, the claim row remains `claimed` until it expires, and the next call reclaims and retries cleanly; this is the ordinary, already-covered expiry/reclaim path, not a new case. §9's test matrix is revised accordingly: (a) two genuinely concurrent callers racing for the same question — assert exactly one `QuestionnaireResponse` ever exists afterward, at the database level, not merely at the end of one test's own view of it; (b) a claim artificially expired mid-AI-call via test instrumentation, followed by a reclaim and a second concurrent finaliser — same assertion; (c) a simulated crash between the claim and the AI calls completing — assert the claim expires and is cleanly reclaimed with zero `QuestionnaireResponse` created in the interim.
 
 ### 6.3 Readiness recheck, unchanged in placement
 
@@ -354,13 +382,14 @@ Call A (interpret) continues to receive the full 29-key catalogue (§2.2) — no
 | Fact catalogue / grounding | `questionnaire/catalogue.py`, `grounding.py` | Existing, reused unmodified |
 | Deterministic outcome | `questionnaire/outcome.py` | Existing, unmodified, untouchable without separate M005 review |
 | AI interpretation/drafting | `ai_platform.questionnaire_interpretation_orchestration`, `.questionnaire_drafting_orchestration` | Existing, reused unmodified |
+| Prepare/persist decomposition | `questionnaire/services.py` (`prepare_questionnaire_response`/`persist_prepared_response`, extracted from the existing `generate_questionnaire_response`/`_persist_response`) | Modified — §6.1b, per C6, pure extract-method, zero behaviour change, golden-corpus-proven |
 | Default answer-text composition | `questionnaire/services.py::_initial_current_answer_text` | Existing, unmodified — this amendment's §5 does not touch it |
 | Enriched answer-text composition (SUPPORTED/CONFIRM) | `questionnaire/bulk_orchestration.py::compose_detailed_safe_answer_text`, its own direct write path, its own `answer_composition_method` provenance field, and a new, distinctly-named `ActivityEvent` type (additive migration) | New — §5, per C5 and B, requires zero M005 change |
 | Bulk orchestration/attempt ledger/claim mechanism | `questionnaire/bulk_orchestration.py` (new) | New — §6, per C2 |
 | Review (exception handling) | out of this amendment's scope | M009C |
 | Export send-ready predicate | `questionnaire/csv_export.py` | New — §4.2, M009D |
 
-No concern appears in two places on this list. No existing module's responsibility is widened beyond what it already does. `questionnaire/bulk_orchestration.py` is deliberately one module owning three related-but-distinct concerns (answerability, answer-text enrichment, the claim ledger) rather than three separate files, because all three operate on the same `QuestionnaireBulkResponseAttempt` row's lifecycle and splitting them would scatter one object's state machine across files for no benefit — this is a Work Order-stage file-layout detail, not an architectural claim.
+No concern appears in two places on this list. No existing module's responsibility is widened beyond what it already does, with one named, Architect-authorised exception: `questionnaire/services.py` gains the extract-method decomposition in the row above — a structural rename/extraction, not a widening of what the module is responsible for (it still owns exactly the same pipeline, now exposed in two callable pieces instead of one). `questionnaire/bulk_orchestration.py` is deliberately one module owning three related-but-distinct concerns (answerability, answer-text enrichment, the claim ledger) rather than three separate files, because all three operate on the same `QuestionnaireBulkResponseAttempt` row's lifecycle and splitting them would scatter one object's state machine across files for no benefit — this is a Work Order-stage file-layout detail, not an architectural claim.
 
 ## 8. Milestone decomposition and Product Authority decision points
 
@@ -396,7 +425,9 @@ Every security control already specified in the superseded M009B draft Work Orde
 - Any attempt to implement §5's revised answer-text composition before it receives its own separate, explicit acceptance, or any version of it that reads `draft.answer_text` for `SUPPORTED`/`CONFIRM`.
 - Any attempt to overwrite, regenerate, or reprocess a CSV row's customer-supplied `answer` value (§4.1), decided.
 - Any `DEFAULT_BULK_BATCH_SIZE`/daily-ceiling/`CLAIM_TTL` value chosen without a real, measured runtime figure to ground it (§8, decision 2).
-- Any claim/concurrency design that relies only on the time-bounded `claimed` constraint without the second, permanent `succeeded`-only fencing constraint (§6.1b) — the two are not interchangeable, and the first alone was already shown insufficient.
+- Any concurrency design in which a `QuestionnaireResponse` is created and durably committed *before* the claim-ownership check that determines whether it should exist — detect-and-delete after a real commit does not satisfy C6, regardless of how quickly the deletion follows.
+- Any M005 change beyond the exact extract-method decomposition named in §6.1b — any version that alters `_persist_response`'s/`generate_questionnaire_response`'s existing logic, field set, or event behaviour, or that does not pass the unchanged golden corpus byte-identically, is out of scope and must return to the Architect.
+- Any `IntegrityError` handling for the permanent fencing constraint that is caught *inside* the same `transaction.atomic()` block it was raised in, rather than outside it — this leaves the connection in Postgres's "aborted transaction" state for any subsequent statement, which is itself a correctness bug, not a style preference.
 - Any composed answer text applied via `questionnaire.services.edit_questionnaire_response_text`, or via any write path that does not also record `answer_composition_method` and fire the dedicated, non-human-attributed activity event (§5).
 - Any claim to have tested the composition function's safety without the specific differential fact-containment and non-omission-of-adverse-facts tests named in §5's adversarial corpus.
 
