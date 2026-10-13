@@ -7,6 +7,7 @@
 **Disposition of M009A:** CLOSED GREEN, unaffected. Nothing in this amendment reopens, deletes, or reduces the M009A ingestion implementation or `docs/evidence/M009A-CLOSURE.md`.
 **Disposition of the draft M009B Work Order (PR #104):** superseded by this amendment once accepted; PR #104 itself is untouched by this document and must be reconciled or replaced under normal governance only after this amendment merges.
 **Written by:** Gunnar (Delivery Controller), per Central Architecture's architecture-reconciliation assignment of 2026-10-13. No application code, model, migration, runtime configuration, or dependency was touched to produce this document.
+**Revision note (2026-10-13, correction round):** Central Architecture reviewed the first draft (head `1d86df95f8075be4413d0efa6df402a7638e0862`) and required five corrections (C1–C5) plus several additional decisions, all incorporated below: C1 separates organisation-level readiness from question-level answerability (§3.5, new); C2 replaces an insufficient transactional-recheck argument with a genuine database-enforced claim mechanism (§6, rewritten); C3 analyses the real Django upload-middleware pipeline and moves readiness enforcement to a `process_view` hook ahead of CSRF's own body-parsing trigger (§3.3, rewritten); C4 hardens the CSV export contract (default columns reduced to `reference,question,answer`, provenance/export-encoding separated, formula-injection defense required to be proven against a real spreadsheet, no draft-export exception) (§4.2, rewritten); C5 replaces a single-control-sentence answer-composition proposal with one that uses the real, already-rich grounding-fact data `questionnaire.grounding` already returns, requiring zero M005 change (§5, rewritten). Nothing else in the document was altered beyond what these corrections required.
 
 ## 0. Decision sought
 
@@ -89,69 +90,185 @@ class AssuranceReadinessResult:
 
 `ReadinessBlocker` names the specific incomplete `FoundationRequirement` row(s) (`code`, `title`, and — critically — the real Foundations UI route to resolve it, taken from that requirement's own `product_area.destination_view_name`, never a hand-maintained second copy of the URL). No AI call. No new database write. No caching — evaluated fresh on every call, exactly like the two functions it's built on.
 
-### 3.2 Threshold — a Product Authority decision point, not Gunnar's to set
+### 3.2 Threshold — fixed at 100%, per Central Architecture's incorporated decision
 
-`get_security_foundations_completion` returns a percentage over 18 active rows. Two candidate thresholds, both consistent with "knowledge completeness, not compliance":
+`get_security_foundations_completion` returns a percentage over 18 active rows. **This amendment fixes the V1 threshold at 100% completion** (every row engaged — zero `unknown`s, every `DERIVED_MILESTONE` resolver satisfied) — per Central Architecture's explicit instruction to incorporate this as the decision, not merely a recommendation. A documented `no`/`partial`/`not_applicable` answer counts exactly the same as a `yes` for this threshold — `get_security_foundations_completion`'s own existing "only `unknown` is incomplete" logic already guarantees this; no change to that function is proposed or needed to honour it. There is no lower/softer threshold variant in this revision — the blocker-while-ready complexity a sub-100% threshold would have required (§3.1's `ReadinessBlocker` contract needing to describe "ready, but 2 items still unknown") is avoided entirely.
 
-- **100% completion** (every row engaged, zero `unknown`s, every `DERIVED_MILESTONE` resolver satisfied) — the cleanest, most defensible interpretation of "enough foundational coverage," and the one this amendment recommends as the default unless the Product Authority wants a softer bar.
-- **A lower frozen percentage** (e.g. 80%) — would require the blocker contract (§3.1) to still name every genuinely-unknown item even when the organisation is already "ready," since "ready" would no longer mean "nothing is unknown." This adds real complexity (the gate UI would need to say "ready, but note: 2 items are still unknown" rather than a clean pass/fail) for an unclear product benefit.
+### 3.3 Enforcement surface — including the exact point in the request pipeline, per C3
 
-**This amendment proposes 100% as the frozen threshold and flags the exact number as the single most consequential open decision in this document** (§8 restates it). Everything else in this section is designed to work identically whichever number is chosen.
+**View-level enforcement alone is too late, and this amendment does not assume otherwise (C3).** M009A's own `QuestionnaireUploadSizeGuardMiddleware` already had to solve exactly this class of problem for upload size, and the reasoning it documents is directly re-applicable here, verified by re-reading the actual Django middleware pipeline, not assumed: Django's `MIDDLEWARE` list order governs both `process_request` and `process_view` hooks, in the same top-to-bottom order, for the "incoming" direction. `CsrfViewMiddleware.process_view` runs *before* the target view function is ever called, and it reads `request.POST` to validate the CSRF token — which triggers Django's lazy multipart-parsing machinery (consuming `request.upload_handlers`) *before* the view function's first line of code ever executes. A readiness check placed only inside the view function therefore runs **after** the server has already received and parsed the entire request body — too late to prevent the server from doing that work for an unready organisation, even though (verified separately) Django's default upload handlers write multipart data to a process-local temp file or memory buffer, not into `questionnaire.import_storage`'s actual per-tenant persistent directory — so no *permanent* artifact is created by parsing alone, but real bandwidth, memory/disk, and CPU are already spent.
 
-### 3.3 Enforcement surface
+**Enforcement point, concretely:** a `process_view` hook — not `process_request` — because `organisation_id` is a URL keyword argument, and `process_view` is the first middleware hook Django calls *after* URL resolution has already bound `view_kwargs`, but *before* the view function (or any later middleware's `process_view`, including `CsrfViewMiddleware`'s) runs. Placed on the *same* existing `QuestionnaireUploadSizeGuardMiddleware` (extended, not duplicated — it already sits before `CsrfViewMiddleware` in `MIDDLEWARE` for exactly this class of reason) or a new sibling middleware positioned identically. The hook activates only for view functions explicitly marked as readiness-gated (a plain attribute set by a small decorator on the view, mirroring `require_capability`'s own "only acts on marked, organisation-scoped routes" discipline — never a blanket check applied to every request) — resolves `organisation_id` from `view_kwargs`, calls `evaluate_assurance_readiness`, and if `ready` is `False`, returns a response **immediately**, short-circuiting the view and every later middleware's `process_view` (including CSRF's) — so `request.POST` is never read, the multipart parser never runs, and zero bytes of the unready organisation's upload are ever received into memory or a temp file beyond whatever the WSGI server itself buffers before Django's middleware chain even starts (a pre-existing, unrelated boundary this amendment does not change).
 
-Every Customer Assurance entry point calls `evaluate_assurance_readiness` and fails closed if `ready` is `False`:
+This same hook protects every Customer Assurance entry point:
 
-- The upload page's GET (render blockers + links, no file-input control rendered at all — not merely disabled, since a disabled control can still be POSTed to directly).
-- The upload view's POST, *before* `import_storage`/the security gate ever reads a byte — mirroring M009A's own `_validate_supersedes_target`-first-statement idiom exactly: readiness is checked before any resource is touched, every time, never trusted from a prior page load.
-- Any API entry point equivalent to the above (none exists today beyond the Django views themselves; this is a forward-looking requirement should one be added).
-- Before `process_next_bulk_question`/`process_next_bulk_batch` (the M009B orchestration layer, §6) starts *and before each individual question's processing*, not just once at batch start — re-checked per question specifically to satisfy the "recheck before resume/retry" requirement and the "pause safely without erasing history" requirement: if readiness is lost mid-batch, the batch stops cleanly after whatever is already committed, with a clear "paused — Foundations readiness no longer met" status, never a partial-batch error treated as a crash.
+- GET renders blockers + links, no file-input control rendered at all — not merely disabled, since a disabled control can still be POSTed to directly (the `process_view` hook catches that POST regardless of what the rendered HTML looked like).
+- POST is rejected by the hook before CSRF's own `process_view`, as above — not as a second, redundant check inside the view (the view-level check from the original draft is removed as the *primary* mechanism and demoted to a defensive, cheap, redundant re-check only, since defence-in-depth costs nothing here but must never be mistaken for the actual enforcement point).
+- Before `process_next_bulk_question`/`process_next_bulk_batch` (§6) starts *and before each individual question's processing*, not just once at batch start — this path has no multipart body to worry about, so the check is a plain, synchronous function call at the top of each unit of work, not a middleware concern.
 
-Existing historical imports/responses remain fully viewable under existing authorisation rules regardless of current readiness — the gate blocks *new* work, never access to *already-produced* work.
+If readiness is lost mid-batch, the batch stops cleanly after whatever is already committed, with a clear "paused — Foundations readiness no longer met" status, never a partial-batch error treated as a crash. Existing historical imports/responses remain fully viewable under existing authorisation rules regardless of current readiness — the gate blocks *new* work, never access to *already-produced* work.
 
 ### 3.4 What this is explicitly not
 
 Not a second entitlement tier (the existing `customer_assurance` Monthly+ `ProductArea` gate is unchanged and is checked independently, in addition to readiness — both must pass). Not a compliance score. Not a guarantee any individual question is answerable (a ready organisation can still produce a correct `GAP` for a specific question — the gate is about having *engaged* with the baseline, not about every answer being `SUPPORTED`).
+
+### 3.5 Answerability — a separate, question-level signal, per C1
+
+**Readiness is an organisation-level precondition to start processing at all. It is not a prediction that any specific imported question can be answered.** A customer's CSV can legitimately ask something no catalogue key maps to at all (e.g. a sub-processor-specific question with no corresponding `control:`/`policy_section:`/`org:` entry) — that has nothing to do with whether the organisation has finished its Foundations baseline, and conflating the two would misreport genuinely unrelated failures as "not ready," which is both inaccurate and actively unhelpful (it would send the customer to fix Foundations items that have nothing to do with the actual problem).
+
+**Contract:** after Call A (interpretation) returns and `questionnaire.catalogue`/`QuestionnaireInterpretation.from_response_dict` have already validated `selected_keys` as a genuine subset of the catalogue, but *before* drafting runs, the bulk orchestration layer (never M005 itself — this is purely a classification over data M005 already produces, with zero new data source and zero change to `derive_outcome`'s own authority over the persisted outcome) computes:
+
+```python
+def assess_answerability(interpretation, grounding_snapshot) -> Answerability:
+    """
+    ANSWERABLE: selected_keys is non-empty AND at least one selected
+    key's grounding fact has a non-"unknown"/non-absent answer (a
+    control fact's "answer" != "unknown", a policy_section fact's
+    "section_present" is True, or an org fact resolves to a real
+    typed value - never a blank/None).
+    NOT_ANSWERABLE_FROM_AVAILABLE_FACTS: selected_keys is empty
+    (nothing in the 29-entry catalogue matches this question at all),
+    or every selected key resolved to an unknown/absent fact.
+    """
+```
+
+This is reported explicitly, never silently folded into `CONFIRM` (even though `derive_outcome` will, independently and correctly, also often reach `CONFIRM` in the `NOT_ANSWERABLE_FROM_AVAILABLE_FACTS` case) — the two signals answer different questions for different audiences: `derive_outcome`'s result is the customer-facing truth value; `Answerability` is an operator-facing diagnostic recorded on `QuestionnaireBulkResponseAttempt` (a new, additional field — not a new model) explaining *why* a question landed where it did, so a batch's progress report can distinguish "12 answered, 2 not currently answerable from recorded facts (no matching catalogue coverage), 1 failed" rather than collapsing the middle category into an undifferentiated "answered CONFIRM," which would hide a genuinely different, non-readiness-related gap (the catalogue itself not covering that topic) from whoever is triaging a batch's results.
+
+**This requires no new data source, no M005 change, and no new readiness computation** — it is a pure function over `interpretation.selected_keys` and the already-built `grounding_snapshot`, both of which `generate_questionnaire_response` already produces internally on every call; the orchestration layer only needs to read them, which requires `generate_questionnaire_response` to return (or the orchestration layer to independently re-derive, more likely the cleaner boundary) the intermediate `grounding_snapshot` it already built, not only the final `QuestionnaireResponse` — a small, additive, backward-compatible return-value note for Work Order stage, not a behavioural change to any existing caller.
 
 ## 4. CSV V1 contract
 
 ### 4.1 Import
 
 - UTF-8 only, optional UTF-8 BOM stripped before parsing; any other encoding is a deterministic rejection (not a best-effort re-decode attempt — silent mojibake is worse than a clear error). Standard library `csv` module only, comma delimiter, standard RFC 4180 quoting — frozen, not configurable.
-- Required header: `question`. Optional headers: `reference` (a customer-supplied stable identifier for export round-tripping) and `answer` (an existing answer the customer already has, carried as read-only provenance — M009B does not process pre-filled answers, it only generates new ones for rows without one; this is explicitly out of this amendment's own scope to design the exact semantics of — flagged in §8). Duplicate or case-ambiguous headers, an empty required header, or zero data rows are all deterministic rejections, each with its own named, test-pinned error — mirroring M009A's own named-rejection-reason discipline (`security_gate.py`'s per-fixture specific reasons), never one generic "invalid file" message.
+- Required header: `question`. Optional headers: `reference` (a customer-supplied stable identifier for export round-tripping) and `answer`. **Decided (per Central Architecture's incorporated instruction): a non-blank imported `answer` is read-only provenance and is never overwritten, regenerated, or treated as eligible for bulk processing by M009B** — a row with a non-blank `answer` is excluded from §6's eligibility query exactly like an already-accepted response (§5 of the superseded WO's own eligibility rule, extended here to cover this new entry path), and its original value is preserved byte-for-byte in any later export's `answer` column for that row unless a human reviewer (M009C, out of this amendment's scope) explicitly changes it. Duplicate or case-ambiguous headers, an empty required header, or zero data rows are all deterministic rejections, each with its own named, test-pinned error — mirroring M009A's own named-rejection-reason discipline (`security_gate.py`'s per-fixture specific reasons), never one generic "invalid file" message.
 - Blank `question` cells are recorded (never silently dropped — the row count must reconcile) but excluded from processing, same disposition shape M009A already uses (`excluded_other`-equivalent) — reusing the `disposition` enum's existing values rather than inventing CSV-specific ones.
 - Row order is the durable provenance locator (`extraction_order`, reusing the exact field M009A's `QuestionnaireImportQuestion` already has) — no fuzzy question-text matching for export reconciliation, ever.
 - Resource limits, frozen (exact numbers an Implementer must confirm are achievable within the same request-timeout arithmetic M009B's own draft already established in §6 of the superseded WO, not re-derived from scratch): bounded upload bytes (propose reusing M009A's existing 10 MiB ceiling — a CSV this large would already be an unusual customer file), bounded row count, bounded per-field length, bounded total text length. No silent truncation — exceeding any limit is a named rejection, not a quiet cut-off.
 - Storage: reuses M009A's `import_storage` module, security gate shape, and ClamAV CLEAN-only requirement unchanged — a CSV is not exempted from malware scanning merely because it is "plain text" (a CSV can still carry a payload if some downstream tool ever opens it as something else, and the scanning cost is negligible). SHA-256 computed and immutably recorded exactly as M009A already does. Filename/MIME are untrusted exactly as M009A already treats them.
 
-### 4.2 Export
+### 4.2 Export — hardened, per C4
 
 - A new, separate, immutable, versioned artifact per export action — never an in-place rewrite of the original upload (mirrors M009A's own "original always immutable" principle, now applied to the export side).
-- Deterministic columns, proposed (confirmed against the real `QuestionnaireResponse`/`QuestionnaireImportQuestion` fields, not invented): `reference,question,answer,outcome,review_status`. `reference` from the import row if supplied, else the stable `QuestionnaireImportQuestion.id`. `question` = the original `raw_extracted_text`, byte-identical, in original row order. `answer` = `QuestionnaireResponse.current_answer_text` for the response currently `accepted` for that question (never a `draft` — see "send-ready" below). `outcome`/`review_status` are the internal M005 vocabulary — whether this is appropriate to expose to the end customer verbatim, or whether it needs a separate, simpler external-facing label mapping, is a genuine Product Authority question (§8), not assumed here either way.
-- **Formula-injection defense is mandatory and must be verified against a real spreadsheet application, not just unit-tested against the raw string.** Any field beginning with `=`, `+`, `-`, `@`, tab, or carriage return (the known Excel/Sheets active-content trigger set) is prefixed with a single leading `'` (apostrophe) before being written — the standard, widely-documented defusal technique, reversible by the reader if they genuinely need the literal leading character, and inert to every spreadsheet application's formula engine. This applies to every exported text field sourced from untrusted content (`question`, `answer`) — never to `outcome`/`review_status`, which are always one of a small fixed internal enum and can never carry injected content.
-- **Strict `send_ready` predicate**, computed, not stored as a flag an operator could accidentally leave stale: every row with a non-blank `question` has exactly one current `accepted` response; every `CONFIRM` outcome has been reviewed and resolved (not left at the generic safe text — resolution is M009C's job, this amendment only states the export-time check); every `GAP` has been reviewed (acknowledged, not silently present); every `NOT_APPLICABLE` has been individually reviewed, not bulk-accepted; no row is missing entirely from the export that was present in the import. An export attempted before `send_ready` either refuses outright or — only if the Product Authority explicitly authorises it (§8) — produces a visibly watermarked "DRAFT — not yet reviewed" artifact, never an unmarked one indistinguishable from a true final export.
+- **Default customer-facing columns, decided: `reference,question,answer` only.** `outcome`/`review_status`/any other internal M005 vocabulary are **never** written to the customer-facing export file — they remain in INFOSECURS's own database only, visible to the organisation's users through the product UI (M009C's review surface), never shipped inside the ordinary response file a customer hands to a third party. This directly resolves the Product Authority question the original draft left open — there is no external-facing label mapping to design, because the internal vocabulary is simply not exported by default at all. `reference` = the customer's own imported `reference` value when supplied, else the stable `QuestionnaireImportQuestion.id` — never a newly-generated value that discards a customer-supplied identifier. `question` = the original `raw_extracted_text`, byte-identical, in original import row order (§4.1's `extraction_order`) — never re-ordered, never re-derived by matching text.
+- **Provenance and export encoding are two separate representations, never conflated.** The durable, persisted `raw_extracted_text`/`current_answer_text` values are never mutated for export purposes — they remain exactly as extracted/composed, forever, as M009A's own immutability principle already requires. A dedicated, pure `encode_for_csv_export(value: str) -> str` function is applied *only* at serialisation time, on an in-memory copy, producing the one-off defused string written into that specific export file — the database never stores a defused value, and a human reading the same text inside the product UI always sees the real, unmodified original.
+- **Formula-injection defense, concretely, and proven against real spreadsheet software, not only the raw string:** `encode_for_csv_export` prefixes any field beginning with `=`, `+`, `-`, `@`, tab, or carriage return with a single leading `'` (apostrophe) — the standard, documented defusal technique, inert to every spreadsheet formula engine. Applied to `question` and `answer` only — never to `reference` (a customer-supplied identifier, still passed through the same function defensively, since nothing prevents a customer from putting a hostile string in their own reference column either). **Acceptance requires an executable test that actually opens the produced CSV file in a real, scriptable spreadsheet application (LibreOffice Calc, already available for CI/local use, headless-invokable) and asserts the defused cell's evaluated/displayed value is the literal defused string, not a formula result** — a string-level unit test alone does not satisfy this Work Order's acceptance criterion.
+- **No draft export, ever — decided.** The strict `send_ready` predicate is now the *only* path to any export, with no watermarked-draft exception: every row with a non-blank `question` has exactly one current `accepted` response; every `CONFIRM` outcome has been reviewed and resolved (M009C's job; this amendment only states the export-time check); every `GAP` has been individually reviewed, not silently present; every `NOT_APPLICABLE` has been individually reviewed, not bulk-accepted; no row present in the import is missing from the export. An export attempted before `send_ready` is `True` is refused outright, unconditionally — the original draft's "Product-Authority-authorised watermarked draft" branch is removed by this correction, not merely deprioritised.
 
-## 5. Answer-quality evolution for SUPPORTED/CONFIRM — proposed, not yet approved
+## 5. Answer-quality contract for SUPPORTED/CONFIRM — revised, per C5
 
-The existing safeguard (§2.3) is correct and is not weakened by this proposal. The gap it leaves is real: at bulk scale, a customer receiving the same fixed sentence for every `SUPPORTED` question (regardless of which control it came from) reads as low-quality, even though it is safe.
+The original proposal (one fixed-shape sentence naming a single control) was correctly judged insufficient — it did not use the real richness of data M005 already produces. Re-reading `questionnaire/grounding.py` directly (not assumed) shows the grounding snapshot for a `control:<key>` fact already carries, for every selected key, far more than a single state value: `answer` (yes/no/partial/unknown/not_applicable), `answer_updated_at` (a real date — staleness is already knowable), `assurance_label` (an existing human-readable label), `active_supporting_evidence_count`/`active_contradicting_evidence_count`/`stale_evidence_count`, `open_remediation_count`, and `relevant_remediation` (a list of `{status, owner, target_date, treatment_summary}` — each already `None`/absent rather than invented when genuinely unknown, per M005's own existing "never invent owner/date" discipline). A `policy_section:<key>` fact similarly already carries `policy_exists`, `approved_version_number`, `section_present`, and the real `section_content` text. **None of this requires any new field, resolver, or M005 change — it is all already returned by the existing, unmodified `build_questionnaire_grounding_snapshot` and already persisted on every `QuestionnaireResponse.grounding_snapshot`.**
 
-**Proposed evolution** (explicitly gated on separate review, per the original instruction this amendment restates rather than bypasses): replace the two fixed strings with two **application-owned, parametrised templates**, filled *only* with already-validated, already-resolved, non-AI data:
+**Revised design:** a new, M009B-owned composition function, `questionnaire.bulk_orchestration.compose_detailed_safe_answer_text(response) -> Optional[str]`, reads `response.grounding_snapshot` (already persisted, read-only, the exact data `derive_outcome` itself used to reach the current outcome — not a new or different source) and, for `SUPPORTED`/`CONFIRM` outcomes only, deterministically composes a short, question-specific sentence enumerating **every** selected key's resolved fact (not just one, correcting the original proposal's narrower shape), e.g.:
 
+> "Supported by recorded answers: 'Do you encrypt data at rest?' — Yes (recorded 2026-09-02, 2 supporting evidence item(s) on file). Policy section 'encryption' is present in the approved policy. Please review before sending."
+
+> "Not yet confirmed: 'Do you have an incident response plan?' — Partial (recorded 2026-08-15). Open remediation: owner Jane Smith, target 2026-11-01, 'Finalise IR runbook.' Please review the underlying security state before sending a final response."
+
+Every interpolated value is read directly from the already-resolved fact dict — the control's own fixed catalogue question text, the literal `answer`/`assurance_label`, the literal `answer_updated_at` date, the literal evidence counts, the literal `relevant_remediation` entries (omitted entirely, not replaced with an invented placeholder, when the list is empty) — **zero characters of `draft.answer_text` are read, exactly as the existing safeguard already guarantees.** A fixed, shorter fallback sentence (closer to the original generic text) is used whenever a selected key's fact is sparse enough that the richer composition would read as empty or redundant (e.g. an `org:*` fact, which is a bare typed flag with no date/evidence/remediation structure to enumerate) — this is a presentation decision, not a safety one, and is left to Work Order-stage UX review.
+
+**Boundary with M005, resolved cleanly:** this function does **not** modify `questionnaire.services._initial_current_answer_text` or any other M005 file — `_initial_current_answer_text`'s existing fixed-text behaviour remains the untouched default for every caller that does not opt in. M009B's orchestration layer instead calls this new function *after* `generate_questionnaire_response` returns its (generic-text) `QuestionnaireResponse`, and — only if the composed text differs from the generic default — calls the **existing, unmodified** `questionnaire.services.edit_questionnaire_response_text(response, new_text=composed_text, actor=actor)` to apply it, exactly the same public API a human reviewer already uses to edit wording today. This produces one `EVENT_QUESTIONNAIRE_RESPONSE_EDITED` audit event per enrichment (actor = the bulk run's own actor identity) — an accurate, honest record of what happened, not a side effect to suppress. **Because this reuses M005's existing read-only grounding data and existing public edit API without altering either, this proposal requires zero M005 behavioural change and therefore needs no separate M005 regression/adversarial review beyond the standard testing this amendment's own Work Order will require for the new composition function itself** (adversarial cases: a fact with maximal remediation-list length, a fact with every optional field absent, a mixed batch of several selected keys per question). If Work-Order-stage implementation discovers a genuine need to expose a grounding field that does not yet exist (none was found in this research), *that* specific addition would be the separately-reviewed M005 change the original instruction anticipated — not this proposal as written.
+
+## 6. M009B orchestration — revised, with a genuine race-safe claim mechanism per C2
+
+**The superseded draft's concurrency argument was insufficient and is withdrawn.** It relied on "eligibility is re-checked inside the same transaction that persists the attempt record" — but that check happens *after* the (slow, externally-latent) AI calls, which is exactly the window a real race lives in: two concurrent requests can both pass the eligibility check, both then spend 10-40 real seconds calling the AI gateway, and only discover the conflict afterwards — by which point one of the two AI calls, and its cost, was always wasted, and (worse) the "first to commit wins" framing described but did not actually specify a mechanism that prevents the *second* caller from having already created its own competing response before the check runs. This correction replaces that argument with an explicit, database-enforced work-claim, established **before** any AI call, using Postgres itself as the mutual-exclusion primitive — no new queue, worker, or lock service, per the Architect's explicit restriction.
+
+### 6.1 Claim mechanism
+
+`QuestionnaireBulkResponseAttempt` (unchanged shape from the superseded WO's §3) gains two additional fields and one additional state, used only for this purpose:
+
+```python
+STATE_CLAIMED = "claimed"      # new: in addition to "succeeded"/"failed"
+outcome = models.CharField(max_length=16, choices=[..., (STATE_CLAIMED, "Claimed")])
+claimed_at = models.DateTimeField()
+claim_expires_at = models.DateTimeField()
 ```
-SUPPORTED: "Supported by the organisation's recorded answer to '{control_question_text}': {resolved_state_label}. This reflects recorded security state and does not by itself mean independent verification or attached evidence. Please review before sending."
-CONFIRM:   "Not yet confirmed. Recorded state for '{control_question_text}' is {resolved_state_label}, which is not sufficient to answer this requirement definitively. Please review the underlying security state before sending a final response."
+
+```python
+class Meta:
+    constraints = [
+        # Postgres partial unique index - at most one "claimed" row per
+        # import_question at any time, enforced by the database itself,
+        # not by an application-level check-then-act sequence. This is
+        # the actual race-safety mechanism; everything else in this
+        # section exists to use it correctly.
+        models.UniqueConstraint(
+            fields=["import_question"],
+            condition=models.Q(outcome="claimed"),
+            name="one_active_claim_per_import_question",
+        ),
+    ]
 ```
 
-`{control_question_text}` is the catalogue's own fixed description string for the specific key(s) `derive_outcome` actually used to reach this outcome — never AI-generated text, never a summary, the literal existing string already in `questionnaire.catalogue`/`security_baseline.catalogue`. `{resolved_state_label}` is the literal grounding-snapshot value (e.g. "Yes," "Partial," "Not applicable") — never AI-generated, never paraphrased. **Zero characters of `draft.answer_text` are read for these two outcomes under this proposal either** — the only change from today is that the *application* now composes a slightly richer, still 100%-non-AI sentence instead of one universal sentence. The anti-fabrication guarantee is structurally identical: no model-generated token ever reaches a SUPPORTED/CONFIRM customer-facing answer.
+**Claim step** (one short, fast, AI-free transaction — the only transaction that matters for race-safety):
 
-**This is a proposal for separate, explicit Architect/Product-Authority review, not an approval.** Until accepted, M009B implementation uses the existing fixed text unchanged, and the customer-facing limitation ("answers for Supported/Confirm questions use standard wording, not question-specific detail, until a reviewed enhancement ships") is stated plainly in the product UI — never silently implied to already exist.
+```python
+def claim_next_eligible_question(import_record, *, actor) -> Optional[QuestionnaireBulkResponseAttempt]:
+    with transaction.atomic():
+        # Opportunistic expiry sweep: any claim past its own expiry is
+        # relabelled "failed" (failure_category="claim_expired") before
+        # this same transaction looks for something to claim - a crashed
+        # worker's abandoned claim becomes reclaimable on the very next
+        # call, with no separate recovery step or operator action.
+        QuestionnaireBulkResponseAttempt.objects.filter(
+            outcome="claimed", claim_expires_at__lt=timezone.now()
+        ).update(outcome="failed", failure_category="claim_expired")
 
-## 6. M009B orchestration — revised
+        candidate = _next_eligible_import_question(import_record)  # §5's eligibility query, unchanged
+        if candidate is None:
+            return None
+        try:
+            return QuestionnaireBulkResponseAttempt.objects.create(
+                organisation=import_record.organisation,
+                import_question=candidate,
+                attempted_by=actor,
+                outcome="claimed",
+                claimed_at=timezone.now(),
+                claim_expires_at=timezone.now() + CLAIM_TTL,
+            )
+        except IntegrityError:
+            # Another request's transaction won the unique-constraint
+            # race for this exact question between our SELECT and our
+            # INSERT - the database caught it, not application logic.
+            # Return None for this candidate; the caller tries the next
+            # eligible question or ends the batch early. Never retried
+            # against the same candidate within this call.
+            return None
+```
 
-Per-question lifecycle unchanged in spirit from the superseded draft (one new ledger model, `QuestionnaireBulkResponseAttempt` — success/failure per attempt, justified because a failed `generate_questionnaire_response` call leaves zero trace today; see the superseded WO §3 for the exact shape, carried forward unchanged by this amendment since nothing in the new requirements affects it). Two things change:
+**AI work happens entirely outside this transaction** — `generate_questionnaire_response` is called only after the claim row is durably committed, so a crash during the (slow) AI call leaves a `claimed` row that will simply expire and become reclaimable, never a half-open transaction holding a database lock across a network call to an external AI gateway (which `generate_questionnaire_response`'s own existing design already correctly avoids internally — this amendment does not change that).
 
-- **Readiness is now rechecked at every entry point named in §3.3**, including per-question inside a batch, not only once at batch start.
-- **No lease/claim precedent exists anywhere in this codebase (§2.4) — this amendment proposes the concurrency boundary fresh**, reusing the exact mechanism the superseded WO's own §6 already derived independently (eligibility is re-checked inside the same transaction that persists the attempt record, so two racing requests for the same question resolve to exactly one success, never two) — restated here because the new readiness recheck must happen inside that same boundary, not as a separate, racy pre-check.
+**Finalisation** (a second, separate, short transaction, after the AI work completes or fails):
+
+```python
+with transaction.atomic():
+    attempt.refresh_from_db()
+    if attempt.outcome != "claimed":
+        # Our own claim already expired (CLAIM_TTL was set too low
+        # relative to real AI latency) and may have been reclaimed by
+        # someone else. Do NOT overwrite it - whatever is there now is
+        # authoritative. Discard this result; log for operator
+        # visibility that CLAIM_TTL needs revisiting. This is the one
+        # scenario this design cannot make silently correct - it makes
+        # it silently SAFE (never two responses for one question) at
+        # the cost of a discarded AI call, which is the right trade.
+    else:
+        attempt.outcome = "succeeded" or "failed"
+        attempt.resulting_response = response  # or failure_category/detail
+        attempt.save(update_fields=["outcome", "resulting_response", ...])
+```
+
+### 6.2 Why this satisfies each named requirement
+
+- **Uniqueness:** the Postgres partial unique constraint, not an application check — genuinely race-safe under real concurrent transactions, not merely "unlikely to collide."
+- **Claim expiry:** `CLAIM_TTL`, a frozen constant set comfortably above the same worst-case-AI-latency arithmetic §6.3 (carried over from the superseded WO's §6) already requires to be grounded in a real measured number, not guessed.
+- **Restart behaviour:** every claim attempt opportunistically expires stale claims first, in the same transaction — a fresh process/request picking up after a crash needs no special "recovery mode," it is the same code path as every other call.
+- **Crash recovery:** a worker that dies mid-AI-call leaves a `claimed` row that expires on its own; a worker that dies between the AI call succeeding and finalisation committing leaves the real `QuestionnaireResponse` already correctly persisted by `generate_questionnaire_response`'s own existing atomic step, but the claim row stuck at `claimed` until it expires — at which point §5's eligibility query (unchanged) already excludes the question anyway, because it now has an `accepted`/`draft` response; the expired claim row is simply inert, harmless history, never reprocessed.
+- **No new queue/worker infrastructure:** every piece above is a Django model field, a Postgres constraint, and two short ORM transactions — nothing beyond what the project's existing synchronous-request-cycle architecture already uses.
+
+### 6.3 Readiness recheck, unchanged in placement
+
+Readiness (§3.3) is still rechecked inside the claim step, before the claim is created — if readiness has been lost, `claim_next_eligible_question` returns `None` immediately, exactly as if nothing were eligible, and the batch ends cleanly rather than claiming work it should not start.
 
 Call A (interpret) continues to receive the full 29-key catalogue (§2.2) — no new fact-access design is needed beyond what M005 already has; this amendment's "narrow, typed, bounded" requirement is satisfied by the catalogue's existing size and the existing schema-constrained response contract, not by inventing a new retrieval layer.
 
@@ -160,19 +277,22 @@ Call A (interpret) continues to receive the full 29-key catalogue (§2.2) — no
 | Concern | Owning module | Status |
 |---|---|---|
 | Readiness computation | `entitlements/metrics.py` (`get_security_foundations_completion`) | Existing, reused unmodified |
-| Readiness gate/threshold/blocker contract | `security_baseline/readiness.py` (new, thin) | New — §3 |
+| Readiness gate/threshold/blocker contract | `security_baseline/readiness.py` (new, thin) | New — §3.1–3.2 |
+| Readiness pipeline-level enforcement | extends `questionnaire.upload_handler.QuestionnaireUploadSizeGuardMiddleware`'s `process_view` hook | New — §3.3, per C3 |
+| Question-level answerability | `questionnaire/bulk_orchestration.py` (new) | New — §3.5, per C1 |
 | CSV secure ingestion | `questionnaire/csv_import.py` (new, mirrors `xlsx_extraction.py`'s shape) | New — §4.1 |
-| CSV export | `questionnaire/csv_export.py` (new) | New — §4.2, M009D |
+| CSV export + formula-injection defense | `questionnaire/csv_export.py` (new) | New — §4.2, M009D, per C4 |
 | Security gate / scanning / storage | `questionnaire/security_gate.py`, `scanner.py`, `import_storage.py` | Existing, reused unmodified |
 | Fact catalogue / grounding | `questionnaire/catalogue.py`, `grounding.py` | Existing, reused unmodified |
 | Deterministic outcome | `questionnaire/outcome.py` | Existing, unmodified, untouchable without separate M005 review |
 | AI interpretation/drafting | `ai_platform.questionnaire_interpretation_orchestration`, `.questionnaire_drafting_orchestration` | Existing, reused unmodified |
-| Answer-text composition | `questionnaire/services.py::_initial_current_answer_text` | Existing; §5 proposes a separate evolution, not yet approved |
-| Bulk orchestration/attempt ledger | `questionnaire/bulk_orchestration.py` (new) | New — §6 |
+| Default answer-text composition | `questionnaire/services.py::_initial_current_answer_text` | Existing, unmodified — this amendment's §5 does not touch it |
+| Enriched answer-text composition (SUPPORTED/CONFIRM) | `questionnaire/bulk_orchestration.py::compose_detailed_safe_answer_text` (new), applied via the existing, unmodified `questionnaire.services.edit_questionnaire_response_text` | New — §5, per C5, requires zero M005 change |
+| Bulk orchestration/attempt ledger/claim mechanism | `questionnaire/bulk_orchestration.py` (new) | New — §6, per C2 |
 | Review (exception handling) | out of this amendment's scope | M009C |
 | Export send-ready predicate | `questionnaire/csv_export.py` | New — §4.2, M009D |
 
-No concern appears in two places on this list. No existing module's responsibility is widened beyond what it already does.
+No concern appears in two places on this list. No existing module's responsibility is widened beyond what it already does. `questionnaire/bulk_orchestration.py` is deliberately one module owning three related-but-distinct concerns (answerability, answer-text enrichment, the claim ledger) rather than three separate files, because all three operate on the same `QuestionnaireBulkResponseAttempt` row's lifecycle and splitting them would scatter one object's state machine across files for no benefit — this is a Work Order-stage file-layout detail, not an architectural claim.
 
 ## 8. Milestone decomposition and Product Authority decision points
 
@@ -183,24 +303,31 @@ No concern appears in two places on this list. No existing module's responsibili
 - **M009D** — CSV export, formula-injection hardening, send-ready predicate, deterministic ordering. XLSX write-back is a separately-scoped increment *within* M009D, gated on its own re-confirmation, not assumed to ride along automatically.
 - **M009E** — full product acceptance: real customer-style flow, regression, independent audit, Customer Zero walk-through, recovery/backup, security/performance.
 
-**Product Authority decisions requiring adjudication before a Work Order can be written** (everything else in this amendment is Gunnar's to resolve at Work Order stage):
+**Decisions resolved by this correction round** (incorporated directly into the sections cited, no longer open):
 
-1. The exact readiness threshold (§3.2) — 100% completion, or a lower frozen percentage with the added blocker-while-ready complexity that implies.
-2. Whether §5's parametrised SUPPORTED/CONFIRM answer-text proposal is approved, deferred, or rejected outright.
-3. The exact `review_status`/`outcome` export-column semantics (§4.2) — raw M005 vocabulary exposed to the customer, or a separate simpler external label mapping.
-4. Whether a pre-send-ready "DRAFT — not yet reviewed" watermarked export is authorised at all, or whether export is strictly blocked until `send_ready` (§4.2).
-5. The exact semantics of an optional `answer` column present in an imported CSV (§4.1) — read-only provenance only (this amendment's default assumption), or something M009B/C must actively reconcile against a freshly generated answer.
-6. The daily per-organisation AI-invocation ceiling and `DEFAULT_BULK_BATCH_SIZE` numeric values (carried forward unchanged from the superseded WO's own §6, still unset pending the real request-timeout figure an Implementer must confirm).
+- Readiness threshold: **fixed at 100%** (§3.2).
+- Export draft path: **removed — no export before `send_ready`, no exception** (§4.2).
+- Imported `answer` column semantics: **read-only provenance, never overwritten or reprocessed** (§4.1).
+- Export outcome/review_status mapping: **moot — these fields are not exported by default at all** (§4.2).
+
+**Product Authority decisions still requiring adjudication before a Work Order can be written** (everything else in this amendment is Gunnar's to resolve at Work Order stage):
+
+1. Whether §5's revised, grounding-fact-based SUPPORTED/CONFIRM answer-composition proposal is approved, deferred, or needs further revision — distinct from the original (now-superseded) single-control-sentence version this corrects.
+2. The daily per-organisation AI-invocation ceiling, `DEFAULT_BULK_BATCH_SIZE`, and `CLAIM_TTL` numeric values (§6) — explicitly NOT set by this document; must be derived from a real, measured request-timeout and AI-latency figure at Work Order/implementation stage, never guessed (restated as a standing instruction, not only a one-time decision).
 
 ## 9. Security controls and STOP conditions carried forward unchanged
 
 Every security control already specified in the superseded M009B draft Work Order (tenant scoping via `get_member_organisation_or_404`, prompt-injection inheritance from M005's existing, verified defenses, per-question failure isolation, no batch-spanning transactions, immutability of accepted/superseded responses) applies identically here and is not restated in full — this amendment changes *what gates entry* and *what format flows through*, not the underlying M005/M009A safety mechanisms, which remain exactly as already verified.
 
 **New STOP conditions this amendment adds:**
-- Any need to compute readiness from anything other than `get_security_foundations_completion`'s existing, unmodified logic.
-- Any CSV formula-injection defense that has not been verified by actually opening the exported file in a real spreadsheet application (Excel or Google Sheets), not only asserted against the raw string.
-- Any export reachable before `send_ready` is `True`, unless Product Authority decision 4 (§8) explicitly authorises a watermarked draft path.
-- Any attempt to implement §5's proposed answer-text evolution before it receives its own separate, explicit acceptance.
+- Any need to compute readiness from anything other than `get_security_foundations_completion`'s existing, unmodified logic, or any new completion/scoring metric of any kind.
+- Any readiness enforcement that relies solely on a view-level check without the pipeline-level `process_view` hook described in §3.3.
+- Any concurrency design for the claim mechanism (§6) that is not a database-enforced constraint — an application-level "check then act" sequence, however it is worded, does not satisfy C2.
+- Any CSV formula-injection defense that has not been verified by actually opening the exported file in a real spreadsheet application (LibreOffice Calc or equivalent), not only asserted against the raw string.
+- Any export reachable before `send_ready` is `True` — there is no authorised exception, decided (§8).
+- Any attempt to implement §5's revised answer-text composition before it receives its own separate, explicit acceptance, or any version of it that reads `draft.answer_text` for `SUPPORTED`/`CONFIRM`.
+- Any attempt to overwrite, regenerate, or reprocess a CSV row's customer-supplied `answer` value (§4.1), decided.
+- Any `DEFAULT_BULK_BATCH_SIZE`/daily-ceiling/`CLAIM_TTL` value chosen without a real, measured runtime figure to ground it (§8, decision 2).
 
 ## 10. Return gate
 
