@@ -70,8 +70,13 @@ fi
 
 DUMP_FILE="$BACKUP_DIR/$(grep -o '"db_dump_file": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
 EVIDENCE_FILE="$BACKUP_DIR/$(grep -o '"evidence_archive_file": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
+# M009A: may be absent from an OLDER manifest predating this Work Order -
+# handled as an empty string below, never a hard failure on an old backup
+# set that simply never had questionnaire storage to restore.
+QUESTIONNAIRE_FILE_NAME="$(grep -o '"questionnaire_archive_file": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
 DB_DUMP_SHA256_EXPECTED="$(grep -o '"db_dump_sha256": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
 EVIDENCE_SHA256_EXPECTED="$(grep -o '"evidence_archive_sha256": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
+QUESTIONNAIRE_SHA256_EXPECTED="$(grep -o '"questionnaire_archive_sha256": *"[^"]*"' "$MANIFEST_FILE" | cut -d'"' -f4)"
 
 for f in "$DUMP_FILE" "$EVIDENCE_FILE"; do
   if [ ! -f "$f" ]; then
@@ -79,6 +84,14 @@ for f in "$DUMP_FILE" "$EVIDENCE_FILE"; do
     exit 1
   fi
 done
+
+if [ -n "$QUESTIONNAIRE_FILE_NAME" ]; then
+  QUESTIONNAIRE_FILE="$BACKUP_DIR/$QUESTIONNAIRE_FILE_NAME"
+  if [ ! -f "$QUESTIONNAIRE_FILE" ]; then
+    echo "error: manifest references missing file: $QUESTIONNAIRE_FILE" >&2
+    exit 1
+  fi
+fi
 
 echo "Verifying archive checksums against manifest before restoring..."
 DB_DUMP_SHA256_ACTUAL="$(sha256sum "$DUMP_FILE" | awk '{print $1}')"
@@ -90,6 +103,13 @@ fi
 if [ "$EVIDENCE_SHA256_ACTUAL" != "$EVIDENCE_SHA256_EXPECTED" ]; then
   echo "error: evidence archive checksum mismatch - archive may be corrupt/tampered" >&2
   exit 1
+fi
+if [ -n "$QUESTIONNAIRE_FILE_NAME" ]; then
+  QUESTIONNAIRE_SHA256_ACTUAL="$(sha256sum "$QUESTIONNAIRE_FILE" | awk '{print $1}')"
+  if [ "$QUESTIONNAIRE_SHA256_ACTUAL" != "$QUESTIONNAIRE_SHA256_EXPECTED" ]; then
+    echo "error: questionnaire archive checksum mismatch - archive may be corrupt/tampered" >&2
+    exit 1
+  fi
 fi
 echo "Checksums verified OK."
 
@@ -162,6 +182,14 @@ compose run --rm --no-deps \
   -v "$BACKUP_DIR":/backup:ro \
   --entrypoint sh \
   web -c "mkdir -p /data/evidence && tar xzf /backup/$(basename "$EVIDENCE_FILE") -C /data/evidence"
+
+if [ -n "$QUESTIONNAIRE_FILE_NAME" ]; then
+  echo "Un-tarring questionnaire-storage archive into fresh questionnaire volume (M009A)..."
+  compose run --rm --no-deps \
+    -v "$BACKUP_DIR":/backup:ro \
+    --entrypoint sh \
+    web -c "mkdir -p /data/questionnaire && tar xzf /backup/$QUESTIONNAIRE_FILE_NAME -C /data/questionnaire"
+fi
 
 echo "Bringing up web and applying migrations (proves schema compatibility)..."
 compose up -d web

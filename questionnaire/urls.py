@@ -15,4 +15,15 @@ urlpatterns = [
         views.questionnaire_response_regenerate,
         name="response_regenerate",
     ),
+    # M009A (WO-M009A-SECURE-INGESTION-XLSX.md) - secure questionnaire
+    # artifact ingestion. Deliberately under its own "imports/" prefix,
+    # never colliding with the "responses/<uuid>/" routes above - a
+    # distinct conceptual domain (Correction 1).
+    path("imports/upload/", views.questionnaire_import_upload, name="import_upload"),
+    path("imports/<uuid:import_id>/", views.questionnaire_import_detail, name="import_detail"),
+    path(
+        "imports/<uuid:import_id>/retry/",
+        views.questionnaire_import_retry,
+        name="import_retry",
+    ),
 ]

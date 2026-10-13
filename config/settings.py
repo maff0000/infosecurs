@@ -103,6 +103,19 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    # M009A (WO-M009A-SECURE-INGESTION-XLSX.md Final Correction G) - MUST
+    # sit before CsrfViewMiddleware. CsrfViewMiddleware's own process_view
+    # hook reads request.POST to find the CSRF token, which triggers
+    # Django's lazy multipart-body parse using whatever upload_handlers
+    # the request already has at that moment - installing a custom
+    # handler any later (e.g. inside the view itself) has no effect,
+    # because the body was already parsed once with the default handlers
+    # by then. Reproduced live via a real-Chromium acceptance test before
+    # this middleware was added - see questionnaire.upload_handler's own
+    # module docstring for the full account. Narrowly scoped to exactly
+    # one upload endpoint; a no-op for every other request in this
+    # codebase.
+    "questionnaire.upload_handler.QuestionnaireUploadSizeGuardMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

@@ -1,0 +1,131 @@
+{% extends "application_shell.html" %}
+
+{% block title %}{{ import_record.original_filename }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .badge--gate-passed { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--gate-rejected { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--gate-failed { background: #fdf1d6; color: #8a5a00; }
+  .badge--gate-pending { background: var(--color-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .import-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .provenance-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-2) var(--space-4); margin: 0; }
+  @media (min-width: 560px) { .provenance-grid { grid-template-columns: 1fr 1fr; } }
+  .hash-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; word-break: break-all; overflow-wrap: anywhere; }
+  .import-question-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .import-question-list li {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: var(--space-2) var(--space-3);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .import-question__text { margin: 0 0 var(--space-1) 0; }
+  .import-question__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; overflow-wrap: anywhere; word-break: break-word; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ import_record.original_filename }}</h1>
+        <p class="page-header__subtitle">
+            <a href="{% url 'questionnaire:import_upload' organisation.id %}">&larr; Back to uploads</a>
+            &middot; {{ organisation.name }}
+        </p>
+    </div>
+</div>
+
+<div class="import-detail__status-row">
+    {% if import_record.security_gate_status == "passed" %}
+        <span class="badge badge--gate-passed">Security gate: passed</span>
+    {% elif import_record.security_gate_status == "rejected" %}
+        <span class="badge badge--gate-rejected">Security gate: rejected</span>
+    {% elif import_record.security_gate_status == "failed" %}
+        <span class="badge badge--gate-failed">Security gate: failed (retryable)</span>
+    {% else %}
+        <span class="badge badge--gate-pending">Security gate: pending</span>
+    {% endif %}
+    <span class="badge badge--kind">{{ import_record.get_status_display }}</span>
+</div>
+
+{% if import_record.security_gate_status == "rejected" %}
+    <div class="empty-state empty-state--left">
+        <p style="margin: 0;">
+            This file was rejected by the security gate and cannot be processed.
+            Reason: {{ import_record.security_gate_result.reason|default:"not available" }}
+        </p>
+    </div>
+{% elif import_record.security_gate_status == "failed" %}
+    <div class="empty-state empty-state--left">
+        <p style="margin: 0 0 var(--space-2) 0;">
+            The security scan could not be completed safely right now
+            ({{ import_record.security_gate_result.reason|default:"scanner unavailable" }}).
+            Your file has been kept and you can retry without re-uploading.
+        </p>
+        <form method="post" action="{% url 'questionnaire:import_retry' organisation.id import_record.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--primary">Retry security scan</button>
+        </form>
+    </div>
+{% elif import_record.status == "extraction_failed" %}
+    <div class="empty-state empty-state--left">
+        <p style="margin: 0;">
+            Infosecurs could not extract any questions from this workbook.
+            Reason: {{ import_record.extraction_summary.failure_reason|default:"not available" }}
+        </p>
+    </div>
+{% endif %}
+
+<div class="summary-card">
+    <h2>Details</h2>
+    <dl class="provenance-grid">
+        <div>
+            <dt>Uploaded by</dt>
+            <dd>{{ import_record.uploaded_by|default:"Unknown" }}</dd>
+        </div>
+        <div>
+            <dt>Uploaded at</dt>
+            <dd>{{ import_record.uploaded_at|date:"Y-m-d H:i" }} UTC</dd>
+        </div>
+        <div>
+            <dt>File size</dt>
+            <dd>{{ import_record.size_bytes|filesizeformat }}</dd>
+        </div>
+        <div>
+            <dt>SHA-256</dt>
+            <dd class="hash-value">{{ import_record.sha256_hash }}</dd>
+        </div>
+    </dl>
+</div>
+
+{% if import_record.extraction_summary %}
+    <div class="summary-card">
+        <h2>Extraction summary</h2>
+        <dl class="provenance-grid">
+            <div><dt>Sheets discovered</dt><dd>{{ import_record.extraction_summary.sheets_discovered|default:0 }}</dd></div>
+            <div><dt>Sheets processed</dt><dd>{{ import_record.extraction_summary.sheets_processed|length }}</dd></div>
+            <div><dt>Sheets skipped</dt><dd>{{ import_record.extraction_summary.sheets_skipped|length }}</dd></div>
+            <div><dt>Questions</dt><dd>{{ import_record.extraction_summary.question_count|default:0 }}</dd></div>
+            <div><dt>Failed</dt><dd>{{ import_record.extraction_summary.failed_count|default:0 }}</dd></div>
+            <div><dt>Answer destination found</dt><dd>{{ import_record.extraction_summary.answer_destination_found|yesno:"Yes,No" }}</dd></div>
+        </dl>
+    </div>
+{% endif %}
+
+{% if questions %}
+    <section class="form-section">
+        <h2 class="form-section__heading">Extracted rows</h2>
+        <ul class="import-question-list">
+            {% for q in questions %}
+                <li>
+                    <p class="import-question__text">{{ q.raw_extracted_text }}</p>
+                    <p class="import-question__meta">
+                        {{ q.get_disposition_display }}
+                        &middot; {{ q.source_location.sheet_name }} {{ q.source_location.question_cell }}
+                        {% if q.extraction_error %}&middot; {{ q.extraction_error }}{% endif %}
+                    </p>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+{% endblock %}

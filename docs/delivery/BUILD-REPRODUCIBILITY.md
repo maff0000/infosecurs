@@ -173,6 +173,72 @@ container. **Exactly two package version lines changed in each of
 (`65.19.4`→`65.19.6`) and `oauthlib` (`3.3.1`→`4.0.0`, its hashes
 included). `pyjwt` and every other dependency were unaffected.
 
+### New dependencies: `openpyxl` / `defusedxml` (M009A, WO-M009A-SECURE-INGESTION-XLSX.md)
+
+WO-M009A's own Final Correction C withdrew the earlier draft's claim that
+`openpyxl` was the only dependency it introduced — both `openpyxl` and
+`defusedxml` are explicitly authorised, direct, pinned, hash-locked
+runtime dependencies (`requirements.in`), not dev-only.
+
+| Package | Version | Licence | Purpose |
+|---|---|---|---|
+| `openpyxl` | `3.1.5` | MIT | XLSX parser — `questionnaire.xlsx_extraction`, loaded `read_only=True, data_only=False` per the WO's binding formula-handling rule. |
+| `defusedxml` | `0.7.1` | PSF-2.0 | XML hardening in front of OOXML XML parts — `questionnaire.security_gate`, before any content reaches a semantic parser. |
+| `et-xmlfile` | `2.0.0` | MIT | Transitive — `openpyxl`'s own XML-writing dependency (not otherwise used by this codebase). |
+
+Both direct entries were added to `requirements.in`, then `pip-compile
+--generate-hashes` was re-run inside the same pinned-digest container
+convention this file already establishes, against BOTH `requirements.in`
+and `requirements-dev.in` (the dev lock also transitively includes the
+production graph via `-r requirements.in`). The resulting diffs added
+exactly these three new locked entries (with full `--hash=sha256:...`
+integrity hashes) to each `.txt` file — no other package version moved.
+
+No bespoke malware-scanner Python client was added as a fourth dependency
+— `questionnaire.scanner.ClamdScanner` talks to `clamd`'s documented
+`INSTREAM` protocol directly over a plain, bounded, timed-out TCP socket
+(see that module's own docstring for the full "small protocol vs. small
+dependency" reasoning, explicitly permitted either way by WO-M009A).
+
+**Vulnerability scan:** `pip-audit -r requirements.txt` (same tool/version
+this repository's `security/dependencies` CI job already uses) found zero
+known vulnerabilities for `openpyxl==3.1.5`, `defusedxml==0.7.1`, or
+`et-xmlfile==2.0.0` at the time of this change.
+
+### ClamAV container image (M009A)
+
+| Component | Explicit version | Immutable digest | Used in |
+|---|---|---|---|
+| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469` | `docker-compose.yml`, `docker-compose.release.yml` |
+
+The final accepted image was re-resolved from the official upstream
+`1.4.6` tag during the PR #102 security-correction cycle and pinned by
+immutable digest. The accepted image contains `pcre2 10.49-r0` from its
+own stable Alpine repository. Final governed Trivy scan: **0 CRITICAL /
+0 HIGH**. The repository's `security/container` GitHub check now scans
+this exact ClamAV runtime image in addition to the INFOSECURS
+application image, using the same governed CRITICAL/HIGH,
+`ignore-unfixed`, fail-the-job policy. The signature database
+(FreshClam-managed, its own named volume) is operational/cache data, not
+a pinned build input and not part of either Docker Compose stack's
+backup set — see `docs/runbooks/BACKUP-RESTORE.md`.
+
+### M009A scanner-image hardening history
+
+The initial M009A candidate used ClamAV 1.4.4 and disclosed 15 HIGH
+findings. Central Architecture rejected that state for merge. An initial
+re-resolution of ClamAV 1.4.6 reduced this to one fixable HIGH (`pcre2`),
+so merge remained blocked. Before a derived security overlay was built,
+the official upstream `1.4.6` tag was re-resolved again and had been
+republished with `pcre2 10.49-r0`. That exact clean image was pinned by
+immutable digest and independently verified at 0 CRITICAL / 0 HIGH. No
+local package overlay was therefore required. Do not erase the
+historical evidence documents describing the earlier 1.4.4 / intermediate
+1.4.6 findings — they remain correct historical evidence, preserved in
+`docs/evidence/M009A-SECURE-INGESTION-XLSX.md`'s "Central Architecture
+independent-review corrections" section. This change reconciles only the
+authoritative current-state build ledger.
+
 ### Pip-audit suppression discipline
 
 **Current state (WI0.1, 2026-10-01): no suppression is active.**

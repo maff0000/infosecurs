@@ -77,6 +77,13 @@ GIT_SHA="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
 
 DUMP_FILE="$OUTPUT_DIR/db-${POSTGRES_DB_NAME}-${TIMESTAMP_UTC}.sql"
 EVIDENCE_FILE="$OUTPUT_DIR/evidence-${TIMESTAMP_UTC}.tar.gz"
+# M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Questionnaire storage -
+# persistent and recoverable") - a SEPARATE archive, same discipline as
+# the evidence archive below, for the infosecurs_questionnaire_data
+# volume. Never omitted from the backup set - "a system that persists
+# questionnaire metadata in PostgreSQL while silently losing the source
+# workbook on container replacement is not acceptable" (WO-M009A).
+QUESTIONNAIRE_FILE="$OUTPUT_DIR/questionnaire-${TIMESTAMP_UTC}.tar.gz"
 MANIFEST_FILE="$OUTPUT_DIR/manifest-${TIMESTAMP_UTC}.json"
 
 echo "Infosecurs backup starting: $TIMESTAMP_UTC"
@@ -131,6 +138,20 @@ if [ ! -s "$EVIDENCE_FILE" ]; then
   exit 1
 fi
 
+# --- 3b. Questionnaire-storage archive: the REAL infosecurs_questionnaire_
+#         data volume, resolved the same way as the evidence volume above
+#         (M009A). -----------------------------------------------------
+echo "Archiving questionnaire-storage volume..."
+docker compose run --rm --no-deps \
+  -v "$OUTPUT_DIR":/backup \
+  --entrypoint sh \
+  web -c "mkdir -p /data/questionnaire && tar czf /backup/$(basename "$QUESTIONNAIRE_FILE") -C /data/questionnaire ."
+
+if [ ! -s "$QUESTIONNAIRE_FILE" ]; then
+  echo "error: questionnaire-storage archive is empty - aborting" >&2
+  exit 1
+fi
+
 # --- 4. Restart web now (rather than waiting for the EXIT trap), so the
 #        manifest step below doesn't leave the app down longer than needed.
 restart_web
@@ -139,6 +160,7 @@ restart_web
 #        credential value of any kind. -------------------------------------
 DB_DUMP_SHA256="$(sha256sum "$DUMP_FILE" | awk '{print $1}')"
 EVIDENCE_SHA256="$(sha256sum "$EVIDENCE_FILE" | awk '{print $1}')"
+QUESTIONNAIRE_SHA256="$(sha256sum "$QUESTIONNAIRE_FILE" | awk '{print $1}')"
 
 cat > "$MANIFEST_FILE" <<EOF
 {
@@ -148,11 +170,14 @@ cat > "$MANIFEST_FILE" <<EOF
   "db_dump_file": "$(basename "$DUMP_FILE")",
   "db_dump_sha256": "$DB_DUMP_SHA256",
   "evidence_archive_file": "$(basename "$EVIDENCE_FILE")",
-  "evidence_archive_sha256": "$EVIDENCE_SHA256"
+  "evidence_archive_sha256": "$EVIDENCE_SHA256",
+  "questionnaire_archive_file": "$(basename "$QUESTIONNAIRE_FILE")",
+  "questionnaire_archive_sha256": "$QUESTIONNAIRE_SHA256"
 }
 EOF
 
 echo "Backup complete."
-echo "  DB dump:  $DUMP_FILE"
-echo "  Evidence: $EVIDENCE_FILE"
-echo "  Manifest: $MANIFEST_FILE"
+echo "  DB dump:       $DUMP_FILE"
+echo "  Evidence:      $EVIDENCE_FILE"
+echo "  Questionnaire: $QUESTIONNAIRE_FILE"
+echo "  Manifest:      $MANIFEST_FILE"

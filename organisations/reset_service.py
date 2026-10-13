@@ -55,7 +55,8 @@ from governance.services import ensure_account_holder_person
 from key_assets.models import KeyAsset
 from organisations.models import AuditEvent, CustomerZeroFixture, Organisation, OrganisationProfile
 from policy.models import PolicyDocument, PolicyVersion
-from questionnaire.models import QuestionnaireQuestion, QuestionnaireResponse
+from questionnaire.import_storage import delete_organisation_questionnaire_directory
+from questionnaire.models import QuestionnaireImport, QuestionnaireQuestion, QuestionnaireResponse
 from remediation.models import ActionEvidenceLink, RemediationAction
 from risk_register.models import Risk
 from security_baseline.models import BaselineAssessment
@@ -105,6 +106,14 @@ EXPECTED_DELETE_DIRECT_FK_MODELS = frozenset(
         "policy.PolicyVersion",
         "questionnaire.QuestionnaireQuestion",
         "questionnaire.QuestionnaireResponse",
+        # M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Customer Zero reset
+        # reconciliation") - `QuestionnaireImportQuestion` is NOT listed
+        # here: it has no direct FK to Organisation at all (only to
+        # QuestionnaireImport), so it cascades automatically when its
+        # parent QuestionnaireImport row is deleted below - same "no
+        # separate delete call needed" pattern already noted for
+        # BaselineAnswer/AnswerSelectionDetail elsewhere in this file.
+        "questionnaire.QuestionnaireImport",
         "activity.ActivityEvent",
         "ai_platform.AIInvocationRecord",
     }
@@ -155,6 +164,11 @@ class ResetResult:
 
     deleted_counts: dict
     evidence_directory_removed: bool
+    # M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Customer Zero reset
+    # reconciliation") - the questionnaire-storage directory cleanup is
+    # its OWN, separate filesystem resource (same discipline as evidence
+    # above), with its own independent outcome reported here.
+    questionnaire_directory_removed: bool
 
 
 def _model_label(model) -> str:
@@ -360,6 +374,14 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
         deleted_counts["policy.PolicyDocument"] = PolicyDocument.objects.filter(
             organisation=organisation
         ).delete()[0]
+        # M009A: QuestionnaireImport deleted BEFORE QuestionnaireQuestion
+        # below (WO-M009A "Customer Zero reset reconciliation" - explicit
+        # ordering instruction). QuestionnaireImportQuestion rows cascade
+        # automatically via their own CASCADE FK to QuestionnaireImport -
+        # no separate delete call for that model.
+        deleted_counts["questionnaire.QuestionnaireImport"] = (
+            QuestionnaireImport.objects.filter(organisation=organisation).delete()[0]
+        )
         deleted_counts["questionnaire.QuestionnaireResponse"] = (
             QuestionnaireResponse.objects.filter(organisation=organisation).delete()[0]
         )
@@ -388,17 +410,42 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
             organisation=organisation
         ).delete()[0]
 
-    # 4. Filesystem cleanup - a SEPARATE resource, only ever touched after
-    # the DB transaction above has already committed successfully (PID
-    # §A4). Never wrapped in the same transaction.atomic() block.
+    # 4. Filesystem cleanup - TWO separate resources, only ever touched
+    # after the DB transaction above has already committed successfully
+    # (PID §A4). Never wrapped in the same transaction.atomic() block.
+    # Both are attempted independently - a failure cleaning ONE must never
+    # silently skip (or hide) the other, and must never be reported as a
+    # completely successful reset (WO-M009A "Customer Zero reset
+    # reconciliation": "A failure to clean questionnaire bytes must not be
+    # silently reported as a completely successful reset").
+    evidence_error = None
+    questionnaire_error = None
+
     try:
-        removed = delete_organisation_evidence_directory(organisation.id)
+        evidence_removed = delete_organisation_evidence_directory(organisation.id)
     except Exception as exc:
+        evidence_removed = False
+        evidence_error = exc
+
+    try:
+        questionnaire_removed = delete_organisation_questionnaire_directory(organisation.id)
+    except Exception as exc:
+        questionnaire_removed = False
+        questionnaire_error = exc
+
+    if evidence_error is not None or questionnaire_error is not None:
         raise ResetFilesystemError(
             f"Database reset for organisation {organisation.id} committed "
-            "successfully, but evidence-directory cleanup failed. The database "
-            "state is already consistent; re-run the reset to retry filesystem "
-            f"cleanup. Underlying error: {exc}"
-        ) from exc
+            "successfully, but filesystem cleanup failed for: "
+            f"{'evidence ' if evidence_error is not None else ''}"
+            f"{'questionnaire-storage' if questionnaire_error is not None else ''}. "
+            "The database state is already consistent; re-run the reset to retry "
+            f"filesystem cleanup. Evidence error: {evidence_error!r}. "
+            f"Questionnaire error: {questionnaire_error!r}."
+        )
 
-    return ResetResult(deleted_counts=deleted_counts, evidence_directory_removed=removed)
+    return ResetResult(
+        deleted_counts=deleted_counts,
+        evidence_directory_removed=evidence_removed,
+        questionnaire_directory_removed=questionnaire_removed,
+    )

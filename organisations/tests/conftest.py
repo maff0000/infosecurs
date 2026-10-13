@@ -95,6 +95,20 @@ def evidence_storage_root(tmp_path, monkeypatch):
     return root
 
 
+@pytest.fixture(autouse=True)
+def questionnaire_storage_root(tmp_path, monkeypatch):
+    """
+    M009A: every organisations test gets its own throwaway
+    QUESTIONNAIRE_STORAGE_ROOT, mirroring `evidence_storage_root` above
+    1:1 - needed here because the M009A Customer Zero reset reconciliation
+    tests in this package create real questionnaire-import files on disk.
+    """
+    root = tmp_path / "questionnaire-storage"
+    root.mkdir()
+    monkeypatch.setenv("QUESTIONNAIRE_STORAGE_ROOT", str(root))
+    return root
+
+
 @pytest.fixture
 def customer_zero_bootstrap(db, monkeypatch):
     """

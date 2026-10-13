@@ -48,8 +48,21 @@ directory:
 ```text
 db-<POSTGRES_DB>-<timestamp>.sql     logical pg_dump of the database
 evidence-<timestamp>.tar.gz          full contents of the infosecurs_evidence_data volume
+questionnaire-<timestamp>.tar.gz     full contents of the infosecurs_questionnaire_data volume (M009A)
 manifest-<timestamp>.json            source SHA / timestamp / filenames / checksums
 ```
+
+**M009A addition (WO-M009A-SECURE-INGESTION-XLSX.md "Questionnaire storage
+- persistent and recoverable"):** the questionnaire-storage archive
+follows exactly the same discipline as the evidence archive above - same
+script, same manifest, same checksum-before-restore verification. An
+OLDER backup set taken before M009A has no `questionnaire_archive_*`
+manifest keys at all; `scripts/restore.sh` treats that as "nothing to
+restore for this volume" rather than a hard failure, so pre-M009A backups
+remain restorable. The ClamAV signature database (its own
+`infosecurs_clamav_data`/`infosecurs_release_clamav_data` volume) is
+deliberately NOT included in this backup set - it is operational/cache
+data (re-downloadable via FreshClam), never customer business data.
 
 What it does, in order:
 
@@ -149,6 +162,7 @@ one of these is checked against the *restored* stack:
 | Evidence bytes/checksum identical | `sha256sum` the evidence file's bytes on the **source** stack before backup, and the same file's bytes on the **restored** stack after restore, and compare the two values directly — not merely re-hashing the restored copy alone |
 | Policy history intact | An approved `PolicyVersion` and the earlier version it superseded both exist post-restore with unchanged content |
 | Accepted questionnaire history intact | An accepted `QuestionnaireResponse` and the earlier response it superseded both exist post-restore with unchanged content |
+| Questionnaire import bytes/checksum identical (M009A) | `sha256sum` a `QuestionnaireImport`'s stored XLSX bytes on the **source** stack before backup and the same file's bytes on the **restored** stack after restore, and compare directly — not merely re-hashing the restored copy alone; also compare against the `QuestionnaireImport.sha256_hash` DB column itself on the restored stack |
 | Health 200 | `curl http://localhost:<WEB_HOST_PORT>/healthz/` returns `200` on the restored stack |
 
 `core/management/commands/seed_backup_restore_fixture.py` builds a
