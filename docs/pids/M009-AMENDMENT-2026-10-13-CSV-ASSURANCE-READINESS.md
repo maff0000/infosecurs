@@ -7,7 +7,9 @@
 **Disposition of M009A:** CLOSED GREEN, unaffected. Nothing in this amendment reopens, deletes, or reduces the M009A ingestion implementation or `docs/evidence/M009A-CLOSURE.md`.
 **Disposition of the draft M009B Work Order (PR #104):** superseded by this amendment once accepted; PR #104 itself is untouched by this document and must be reconciled or replaced under normal governance only after this amendment merges.
 **Written by:** Gunnar (Delivery Controller), per Central Architecture's architecture-reconciliation assignment of 2026-10-13. No application code, model, migration, runtime configuration, or dependency was touched to produce this document.
-**Revision note (2026-10-13, correction round):** Central Architecture reviewed the first draft (head `1d86df95f8075be4413d0efa6df402a7638e0862`) and required five corrections (C1–C5) plus several additional decisions, all incorporated below: C1 separates organisation-level readiness from question-level answerability (§3.5, new); C2 replaces an insufficient transactional-recheck argument with a genuine database-enforced claim mechanism (§6, rewritten); C3 analyses the real Django upload-middleware pipeline and moves readiness enforcement to a `process_view` hook ahead of CSRF's own body-parsing trigger (§3.3, rewritten); C4 hardens the CSV export contract (default columns reduced to `reference,question,answer`, provenance/export-encoding separated, formula-injection defense required to be proven against a real spreadsheet, no draft-export exception) (§4.2, rewritten); C5 replaces a single-control-sentence answer-composition proposal with one that uses the real, already-rich grounding-fact data `questionnaire.grounding` already returns, requiring zero M005 change (§5, rewritten). Nothing else in the document was altered beyond what these corrections required.
+**Revision note (2026-10-13, correction round 1):** Central Architecture reviewed the first draft (head `1d86df95f8075be4413d0efa6df402a7638e0862`) and required five corrections (C1–C5) plus several additional decisions, all incorporated below: C1 separates organisation-level readiness from question-level answerability (§3.5, new); C2 replaces an insufficient transactional-recheck argument with a genuine database-enforced claim mechanism (§6, rewritten); C3 analyses the real Django upload-middleware pipeline and moves readiness enforcement to a `process_view` hook ahead of CSRF's own body-parsing trigger (§3.3, rewritten); C4 hardens the CSV export contract (default columns reduced to `reference,question,answer`, provenance/export-encoding separated, formula-injection defense required to be proven against a real spreadsheet, no draft-export exception) (§4.2, rewritten); C5 replaces a single-control-sentence answer-composition proposal with one that uses the real, already-rich grounding-fact data `questionnaire.grounding` already returns, requiring zero M005 change (§5, rewritten).
+
+**Revision note (2026-10-13, correction round 2):** Central Architecture reviewed the round-1 correction (head `f31e5c55edbbbeb573d6ed7081b2adb9e15cfd74`) and found two further genuine design gaps, both corrected below, not merely re-documented: **(A)** round 1's claim-expiry mechanism (§6) only governed who could currently *attempt* work — it did not prevent two genuinely concurrent `generate_questionnaire_response` calls (one from a reclaim after expiry, while the original caller's AI call was still actually running) from each independently persisting a real `QuestionnaireResponse`, since M005's own persist step has no awareness of M009B's claim ledger at all. §6 now adds a second, permanent (never-expiring) database constraint — "commit-time fencing" — checked immediately after each caller's AI call returns, which deletes the losing caller's own orphaned response rather than leaving two standing (§6.1a, §6.1b, new). **(B)** round 1's proposal to apply composed answer text via the existing `edit_questionnaire_response_text` human-edit API was withdrawn as a genuine audit-provenance mismatch, not merely a labelling nitpick — M009B now owns its own write path, its own permanent `answer_composition_method` provenance field, and its own distinctly-named, non-human-attributed activity event, plus a new, independent adversarial evaluation corpus for the composition function itself (§5, corrected). §11 (new) commits this delivery to a durable, structured GitHub engineering note per Central Architecture's standing governance requirement.
 
 ## 0. Decision sought
 
@@ -167,7 +169,27 @@ The original proposal (one fixed-shape sentence naming a single control) was cor
 
 Every interpolated value is read directly from the already-resolved fact dict — the control's own fixed catalogue question text, the literal `answer`/`assurance_label`, the literal `answer_updated_at` date, the literal evidence counts, the literal `relevant_remediation` entries (omitted entirely, not replaced with an invented placeholder, when the list is empty) — **zero characters of `draft.answer_text` are read, exactly as the existing safeguard already guarantees.** A fixed, shorter fallback sentence (closer to the original generic text) is used whenever a selected key's fact is sparse enough that the richer composition would read as empty or redundant (e.g. an `org:*` fact, which is a bare typed flag with no date/evidence/remediation structure to enumerate) — this is a presentation decision, not a safety one, and is left to Work Order-stage UX review.
 
-**Boundary with M005, resolved cleanly:** this function does **not** modify `questionnaire.services._initial_current_answer_text` or any other M005 file — `_initial_current_answer_text`'s existing fixed-text behaviour remains the untouched default for every caller that does not opt in. M009B's orchestration layer instead calls this new function *after* `generate_questionnaire_response` returns its (generic-text) `QuestionnaireResponse`, and — only if the composed text differs from the generic default — calls the **existing, unmodified** `questionnaire.services.edit_questionnaire_response_text(response, new_text=composed_text, actor=actor)` to apply it, exactly the same public API a human reviewer already uses to edit wording today. This produces one `EVENT_QUESTIONNAIRE_RESPONSE_EDITED` audit event per enrichment (actor = the bulk run's own actor identity) — an accurate, honest record of what happened, not a side effect to suppress. **Because this reuses M005's existing read-only grounding data and existing public edit API without altering either, this proposal requires zero M005 behavioural change and therefore needs no separate M005 regression/adversarial review beyond the standard testing this amendment's own Work Order will require for the new composition function itself** (adversarial cases: a fact with maximal remediation-list length, a fact with every optional field absent, a mixed batch of several selected keys per question). If Work-Order-stage implementation discovers a genuine need to expose a grounding field that does not yet exist (none was found in this research), *that* specific addition would be the separately-reviewed M005 change the original instruction anticipated — not this proposal as written.
+**Boundary with M005, resolved cleanly:** this function does **not** modify `questionnaire.services._initial_current_answer_text` or any other M005 file — `_initial_current_answer_text`'s existing fixed-text behaviour remains the untouched default for every caller that does not opt in. M009B's orchestration layer calls this new function *after* `generate_questionnaire_response` returns its (generic-text) `QuestionnaireResponse`.
+
+**Audit provenance — withdrawn and corrected.** The previous draft proposed applying the composed text via `questionnaire.services.edit_questionnaire_response_text`, reasoning that reuse of an existing public API was itself sufficient. **That reasoning is wrong and is withdrawn**, per the Architect's own correct objection: `edit_questionnaire_response_text` exists specifically to represent *a human Account Holder's own wording edit* (its own docstring, read directly, frames it exactly this way), and its audit event, `EVENT_QUESTIONNAIRE_RESPONSE_EDITED`, carries no structural marker distinguishing "a person typed this" from "the system deterministically assembled this from recorded facts" — passing a bulk-run's technical actor identity into `actor=` does not fix this, because the event *type* itself, not just its actor field, is what a reader of the activity log relies on to understand what happened.
+
+**Corrected design — M009B owns its own write path and its own, explicitly-labelled event, never routed through the human-edit API:**
+
+- M009B sets `response.current_answer_text` directly, via its own short atomic update (`response.current_answer_text = composed_text; response.save(update_fields=["current_answer_text", "updated_at"])`) — this is not a safety regression: `QuestionnaireResponse`'s own model-level protection (`PROTECTED_WHILE_DRAFT_FIELDS`, enforced in `.save()` itself, not inside any particular calling function) already governs every write to this field regardless of caller, and only takes effect once `status` is `accepted`/`superseded` — a still-`draft` response is mutable by design, which is exactly how `edit_questionnaire_response_text` itself already works today, as a thin wrapper, not a safety boundary of its own.
+- M009B records the composition method **permanently and explicitly on its own ledger row**, never only in a generic activity event: `QuestionnaireBulkResponseAttempt` gains an `answer_composition_method` field (choices: `ai_draft_passthrough` — GAP/NOT_APPLICABLE, unchanged from today; `application_fixed_text` — SUPPORTED/CONFIRM using M005's existing, untouched default, if this enrichment is not applied/not yet approved; `application_composed_from_grounding` — this proposal's enrichment, when applied). This is queryable, permanent, and independent of any activity-log naming convention — any future audit of "how was this answer actually produced" has a direct, structured answer without relying on event-type archaeology.
+- M009B additionally emits its own, distinctly-named activity event — proposed as a new `ActivityEvent.event_type` choice, e.g. `questionnaire_response_machine_composed` — fired directly by M009B's own module, **never** via `edit_questionnaire_response_text`, with `actor` set to a dedicated, clearly-non-human system identity (never attributed to whichever human happened to trigger the batch) and structured metadata referencing the `QuestionnaireBulkResponseAttempt` id and the selected grounding keys used. `ActivityEvent.event_type`'s choices have already been extended additively multiple times in this repository's own history (migrations `0002` through `0006` each added a new choice) — this is a precedented, low-risk, additive pattern, not a redesign of the `activity` app, and remains a Work Order/implementation-stage migration, not something this architecture document itself performs.
+
+**Bounded, question-specific, anti-fabrication:** unchanged from the prior draft — every interpolated value is read from the already-persisted `grounding_snapshot`, zero characters of `draft.answer_text` are read, nothing is invented. This remains true regardless of which write path applies the text; the correction above is about *how the action is recorded*, not about what text is produced or where its data comes from.
+
+**Independent answer-quality/adversarial evaluation corpus — new, required, per B.** A dedicated corpus (`questionnaire/eval/m009b_answer_composition_corpus.py`), separate from both the existing M005 14-case golden corpus and M009B's own orchestration test suite, specifically targeting the composition function's own correctness and safety, at minimum:
+1. **Differential fact-containment test:** every fact token that appears in a composed answer must trace back to a literal value present in that response's own `grounding_snapshot` — mechanically checked (e.g. by parsing the composed sentence's interpolated values back against the snapshot dict), not merely eyeballed, for a representative set of fixture snapshots.
+2. **Non-omission of adverse facts:** a fixture where `stale_evidence_count > 0` or `active_contradicting_evidence_count > 0` is present must result in a composed answer that discloses it — a composer that quietly drops an unfavourable fact while keeping favourable ones would itself be a fabrication-adjacent failure mode, distinct from inventing a fact outright, and this is the specific adversarial case that catches it.
+3. Maximal `relevant_remediation` list length (bounded truncation behaviour, never an unbounded sentence).
+4. Every optional field absent (sparse-fact fallback sentence, §5's existing fallback rule).
+5. A mixed question selecting several keys of different richness (control + policy_section + org in one question).
+6. The composed text is re-verified never to contain any substring of the corresponding `draft.answer_text` for that response (a mechanical, not just logical, proof that the AI draft contributed zero characters).
+
+This corpus is additive to, and does not alter, the existing M005 14-case golden corpus, which remains byte-identical and unchanged.
 
 ## 6. M009B orchestration — revised, with a genuine race-safe claim mechanism per C2
 
@@ -236,35 +258,81 @@ def claim_next_eligible_question(import_record, *, actor) -> Optional[Questionna
             return None
 ```
 
-**AI work happens entirely outside this transaction** — `generate_questionnaire_response` is called only after the claim row is durably committed, so a crash during the (slow) AI call leaves a `claimed` row that will simply expire and become reclaimable, never a half-open transaction holding a database lock across a network call to an external AI gateway (which `generate_questionnaire_response`'s own existing design already correctly avoids internally — this amendment does not change that).
+**AI work happens entirely outside this transaction** — `generate_questionnaire_response` is called only after the claim row is durably committed, never inside a transaction holding a database lock across a network call to an external AI gateway.
 
-**Finalisation** (a second, separate, short transaction, after the AI work completes or fails):
+### 6.1a The gap in the first draft of this section, and why claim expiry alone does not prevent a duplicate response
+
+**This correction withdraws the previous "Finalisation" step above as insufficient, per the Architect's own finding, confirmed correct on re-analysis.** The `claimed`-row uniqueness constraint only ever guarantees *at most one active claim at a time* — it says nothing about what happens once a claim **expires while its AI call is still genuinely in flight**. Concretely: Caller 1 claims question Q, starts its (unusually slow) call to `generate_questionnaire_response`. Before Caller 1 returns, `claim_expires_at` passes. Caller 2's next `claim_next_eligible_question` call runs the opportunistic-expiry sweep, marks Caller 1's row `failed`/`claim_expired`, and — because the unique constraint on `outcome="claimed"` no longer has anything to conflict with — successfully claims the *same* question Q and starts its *own* call to `generate_questionnaire_response`. **Both callers are now genuinely, concurrently running the full M005 pipeline for the same question.** `generate_questionnaire_response`'s own persist step has zero awareness of M009B's claim ledger — it does not consult it, was never designed to, and this amendment does not propose changing it to. Whichever caller's AI call finishes, M005 persists a brand-new `QuestionnaireResponse` for Q, unconditionally. **If both finish, two `QuestionnaireResponse` rows now exist for one question** — exactly the duplicate the claim mechanism exists to prevent, and the previous draft's finalisation step only detected this *after the fact*, in a comment ("Discard this result") that was never actually backed by code that discards anything. This is the precise flaw named: "since M005 creates its response before M009B finalises ownership, a stale caller can still persist a response."
+
+### 6.1b Commit-time fencing — a second, permanent constraint, checked after the AI call returns
+
+The claim constraint (§6.1, `outcome="claimed"`) is necessarily *time-bounded*, because a claim must eventually expire to enable crash recovery. Correctness therefore cannot rest on that constraint alone — it needs a **second, permanent constraint that is never time-bounded and never expires**, checked at the one moment that actually matters: immediately after an AI call returns, before its result is allowed to count as "the" answer for that question.
 
 ```python
-with transaction.atomic():
-    attempt.refresh_from_db()
-    if attempt.outcome != "claimed":
-        # Our own claim already expired (CLAIM_TTL was set too low
-        # relative to real AI latency) and may have been reclaimed by
-        # someone else. Do NOT overwrite it - whatever is there now is
-        # authoritative. Discard this result; log for operator
-        # visibility that CLAIM_TTL needs revisiting. This is the one
-        # scenario this design cannot make silently correct - it makes
-        # it silently SAFE (never two responses for one question) at
-        # the cost of a discarded AI call, which is the right trade.
-    else:
-        attempt.outcome = "succeeded" or "failed"
-        attempt.resulting_response = response  # or failure_category/detail
-        attempt.save(update_fields=["outcome", "resulting_response", ...])
+class Meta:
+    constraints = [
+        models.UniqueConstraint(fields=["import_question"], condition=models.Q(outcome="claimed"), name="one_active_claim_per_import_question"),
+        # The actual fence. Permanent - never expires, never superseded.
+        # At most one attempt row, EVER, for a given import_question, may
+        # reach outcome="succeeded". This is what "owns" the right for a
+        # QuestionnaireResponse to exist for that question, not the
+        # claimed-row constraint above, which only ever governs who may
+        # currently be TRYING.
+        models.UniqueConstraint(fields=["import_question"], condition=models.Q(outcome="succeeded"), name="one_successful_response_per_import_question"),
+    ]
 ```
+
+**Finalisation, corrected:**
+
+```python
+def finalize_claim(attempt, *, response=None, failure_category=None, failure_detail=None):
+    with transaction.atomic():
+        attempt.refresh_from_db()
+        if attempt.outcome != "claimed":
+            # Our own claim already expired and the question may have
+            # been reclaimed by someone else. Falling through to the
+            # fencing insert below still protects correctness even in
+            # this branch (it is not actually reachable to cause harm -
+            # see the race walked through below), but there is nothing
+            # of ours left to finalise onto; discard our own result
+            # immediately rather than attempt a write against a row we
+            # no longer own.
+            if response is not None:
+                response.delete()  # our own orphaned, never-shown draft
+            return
+        try:
+            attempt.outcome = "succeeded" if response else "failed"
+            attempt.resulting_response = response
+            attempt.failure_category = failure_category
+            attempt.failure_detail = failure_detail
+            attempt.save(update_fields=["outcome", "resulting_response", "failure_category", "failure_detail"])
+            # The UniqueConstraint above is checked HERE, at save() time,
+            # by Postgres itself.
+        except IntegrityError:
+            # A DIFFERENT attempt (a concurrent reclaim after our own
+            # claim's expiry, per §6.1a) already won the permanent
+            # fence for this question first. We lost the race. Our own
+            # response - if we have one - is an orphan nobody should
+            # ever see or reference. Delete it, and record our own
+            # attempt honestly as superseded, never as succeeded.
+            if response is not None:
+                response.delete()
+            attempt.outcome = "failed"
+            attempt.failure_category = "superseded_by_concurrent_success"
+            attempt.save(update_fields=["outcome", "failure_category"])
+```
+
+**Why this closes the gap completely:** in the §6.1a scenario, both Caller 1 and Caller 2 eventually call `finalize_claim` with their own (distinct) `QuestionnaireResponse`. Exactly one of their two `attempt.save()` calls can satisfy `one_successful_response_per_import_question` — Postgres enforces this as a genuine constraint check at write time, not an application-level race. The other's `save()` raises `IntegrityError`, and that caller's branch **deletes its own orphaned response** before it is ever shown to a user, ever accepted, or ever exported — never two responses left standing, regardless of which caller's claim was "valid" at any particular moment or how the expiry/reclaim timing actually played out. This fencing check happens in a single short transaction, immediately after each caller's own AI call returns — no transaction is held open across any AI call, satisfying the explicit constraint.
+
+**A residual, named edge case — crash between AI success and `finalize_claim`:** if a process dies after `generate_questionnaire_response` successfully persists a `QuestionnaireResponse` but before `finalize_claim` ever runs, that response is a genuine orphan: not attached to any `succeeded` attempt, and (because it exists) it makes the question look "already answered" to §5's eligibility query, permanently, with no attempt record explaining why. This is addressed by extending the *same* opportunistic sweep `claim_next_eligible_question` already runs: alongside expiring stale `claimed` rows, it also finds `draft` `QuestionnaireResponse` rows, for questions this import owns, with `created_at` older than `CLAIM_TTL` and no corresponding `succeeded` attempt, and deletes them as abandoned orphans from an incomplete prior attempt — restoring the question to eligibility. This must be its own named test at Work Order stage (not merely implied by the rest of the design), specifically simulating a crash in this exact window.
 
 ### 6.2 Why this satisfies each named requirement
 
-- **Uniqueness:** the Postgres partial unique constraint, not an application check — genuinely race-safe under real concurrent transactions, not merely "unlikely to collide."
-- **Claim expiry:** `CLAIM_TTL`, a frozen constant set comfortably above the same worst-case-AI-latency arithmetic §6.3 (carried over from the superseded WO's §6) already requires to be grounded in a real measured number, not guessed.
-- **Restart behaviour:** every claim attempt opportunistically expires stale claims first, in the same transaction — a fresh process/request picking up after a crash needs no special "recovery mode," it is the same code path as every other call.
-- **Crash recovery:** a worker that dies mid-AI-call leaves a `claimed` row that expires on its own; a worker that dies between the AI call succeeding and finalisation committing leaves the real `QuestionnaireResponse` already correctly persisted by `generate_questionnaire_response`'s own existing atomic step, but the claim row stuck at `claimed` until it expires — at which point §5's eligibility query (unchanged) already excludes the question anyway, because it now has an `accepted`/`draft` response; the expired claim row is simply inert, harmless history, never reprocessed.
-- **No new queue/worker infrastructure:** every piece above is a Django model field, a Postgres constraint, and two short ORM transactions — nothing beyond what the project's existing synchronous-request-cycle architecture already uses.
+- **Uniqueness:** two Postgres constraints, not an application check — a time-bounded one governing who may currently attempt, and a permanent one governing who actually won. Genuinely race-safe under real concurrent transactions, including the expiry-during-active-call scenario (§6.1a), not merely "unlikely to collide."
+- **Claim expiry:** `CLAIM_TTL`, a frozen constant set comfortably above the same worst-case-AI-latency arithmetic (carried over from the superseded WO's own §6) already required to be grounded in a real measured number, not guessed — restated as a standing instruction in §8.
+- **Restart behaviour:** every claim attempt opportunistically expires stale claims (and now, orphaned draft responses — §6.1b) first, in the same transaction — a fresh process/request picking up after a crash needs no special "recovery mode," it is the same code path as every other call.
+- **Crash recovery:** named explicitly for all three failure windows — mid-AI-call (claim expires, reclaimable), post-AI-success-pre-finalise (orphan response swept on the next claim attempt), and the ordinary case (claim finalises cleanly). Acceptance testing (§9, extended) must exercise all three, plus the genuine double-claim race from §6.1a with two concurrent real (or realistically simulated) calls, not only a single-caller happy path.
+- **No new queue/worker infrastructure:** every piece above is a Django model field, two Postgres constraints, and two short ORM transactions around an unmodified `generate_questionnaire_response` call — nothing beyond what the project's existing synchronous-request-cycle architecture already uses.
 
 ### 6.3 Readiness recheck, unchanged in placement
 
@@ -287,7 +355,7 @@ Call A (interpret) continues to receive the full 29-key catalogue (§2.2) — no
 | Deterministic outcome | `questionnaire/outcome.py` | Existing, unmodified, untouchable without separate M005 review |
 | AI interpretation/drafting | `ai_platform.questionnaire_interpretation_orchestration`, `.questionnaire_drafting_orchestration` | Existing, reused unmodified |
 | Default answer-text composition | `questionnaire/services.py::_initial_current_answer_text` | Existing, unmodified — this amendment's §5 does not touch it |
-| Enriched answer-text composition (SUPPORTED/CONFIRM) | `questionnaire/bulk_orchestration.py::compose_detailed_safe_answer_text` (new), applied via the existing, unmodified `questionnaire.services.edit_questionnaire_response_text` | New — §5, per C5, requires zero M005 change |
+| Enriched answer-text composition (SUPPORTED/CONFIRM) | `questionnaire/bulk_orchestration.py::compose_detailed_safe_answer_text`, its own direct write path, its own `answer_composition_method` provenance field, and a new, distinctly-named `ActivityEvent` type (additive migration) | New — §5, per C5 and B, requires zero M005 change |
 | Bulk orchestration/attempt ledger/claim mechanism | `questionnaire/bulk_orchestration.py` (new) | New — §6, per C2 |
 | Review (exception handling) | out of this amendment's scope | M009C |
 | Export send-ready predicate | `questionnaire/csv_export.py` | New — §4.2, M009D |
@@ -328,6 +396,9 @@ Every security control already specified in the superseded M009B draft Work Orde
 - Any attempt to implement §5's revised answer-text composition before it receives its own separate, explicit acceptance, or any version of it that reads `draft.answer_text` for `SUPPORTED`/`CONFIRM`.
 - Any attempt to overwrite, regenerate, or reprocess a CSV row's customer-supplied `answer` value (§4.1), decided.
 - Any `DEFAULT_BULK_BATCH_SIZE`/daily-ceiling/`CLAIM_TTL` value chosen without a real, measured runtime figure to ground it (§8, decision 2).
+- Any claim/concurrency design that relies only on the time-bounded `claimed` constraint without the second, permanent `succeeded`-only fencing constraint (§6.1b) — the two are not interchangeable, and the first alone was already shown insufficient.
+- Any composed answer text applied via `questionnaire.services.edit_questionnaire_response_text`, or via any write path that does not also record `answer_composition_method` and fire the dedicated, non-human-attributed activity event (§5).
+- Any claim to have tested the composition function's safety without the specific differential fact-containment and non-omission-of-adverse-facts tests named in §5's adversarial corpus.
 
 ## 10. Return gate
 
@@ -338,3 +409,9 @@ This document is submitted in DRAFT for Central Architecture and Product Authori
 - No DARWIN, production, or Customer Zero changes.
 
 Once accepted and merged, the next action is a revised M009B Work Order (superseding PR #104's draft) incorporating the readiness gate, CSV ingestion, and whichever of §8's decisions the Product Authority has by then resolved — itself requiring its own separate Architect Acceptance before any implementation dispatch.
+
+## 11. Durable engineering-note governance — adopted as standing practice
+
+Per Central Architecture's standing requirement, every PID amendment, Work Order, and implementation PR from this point forward carries a durable GitHub engineering note (a structured PR comment, in addition to this committed document) covering: architecture/PID and baseline SHA; scope, exclusions, and ownership; exact implementation modules and interfaces; engineering decisions and trade-offs; acceptance tests and evidence; independent audit findings; STOP conditions and their resolutions; CI/security conclusions; Architect Acceptance and closure evidence.
+
+For this PR (#105), that note is posted as a PR comment on `https://github.com/maff0000/infosecurs/pull/105`, cross-referencing this document's section numbers for each item, with "acceptance tests and evidence," "independent audit findings," and "CI/security conclusions" explicitly marked not-yet-applicable (this PR is architecture only — no implementation exists to test or audit yet) rather than omitted, so the template's shape is established now and filled in as this milestone actually proceeds through a Work Order and implementation.
