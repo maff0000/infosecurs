@@ -13,6 +13,8 @@
 
 **Revision note (2026-10-13, correction round 3 — C6):** Central Architecture accepted B but found round 2's fencing design (§6.1b, as it then was) still insufficient: it detected a losing claim only *after* `generate_questionnaire_response` had already durably committed a real `QuestionnaireResponse`, relying on deleting that commit afterwards — detection-with-cleanup, not an atomic guarantee, and a crash in that exact window left an untracked orphan. Corrected (§6.1a–§6.1c, rewritten) by investigating, as the Architect's own instruction explicitly authorised, a narrowly scoped M005 extract-method refactor: reading `questionnaire/services.py` directly confirms `_persist_response` is *already* M005's own sole atomic unit, taking a fully-prepared bundle as plain arguments — exposing it (renamed, identical body) as `persist_prepared_response`, alongside a new `prepare_questionnaire_response` wrapping the pre-existing AI-call sequence, lets M009B's own transaction perform the claim-ownership check and the response INSERT as one indivisible unit. A losing claim's response is now never committed at all, so there is nothing to delete and no orphan-sweep logic is needed — that logic is removed by this correction, not merely retained as a backstop. `generate_questionnaire_response`'s external behaviour is unchanged (a two-line composition of the two extracted functions), proof required via the unchanged M005 golden corpus and its own existing test suite passing byte-identically.
 
+**Revision note (2026-10-13, correction round 4 — bounded documentation correction, architecture not reopened):** Central Architecture accepted C6 in principle and required one final, bounded correction before merge: (1) §6.1's own claim-acquisition pseudocode caught `IntegrityError` inside the same `atomic()` block that raised it — the exact bug pattern this document elsewhere names as a STOP condition, present in the one place it had not yet been fixed; corrected via a nested `atomic()` savepoint around only the risky `create()` call, consistent with §6.1c. (2) `PreparedQuestionnaireResponse`'s exact field-by-field contract, and `prepare_questionnaire_response`/`persist_prepared_response`'s exact signatures, added to §6.1b so an Implementer can perform the extraction mechanically rather than re-deriving intent from prose. (3) §6.2a (new) consolidates the full regression-gate list — golden corpus, existing M005 tests, claim expiry/concurrency, tenant isolation, and accepted-response immutability — as explicit, named, required tests in one place. (4) This revision note and the accompanying PR comment record the correction and the SHA at which it was made.
+
 ## 0. Decision sought
 
 Ratify a change to the previously accepted M009 delivery sequence: the first *complete end-to-end* Customer Assurance workflow becomes **CSV in, CSV out**, gated by a new deterministic **Security Foundations Assurance Readiness** predicate, before any bulk-answer export capability exists. M009A's XLSX secure-ingestion capability is preserved exactly as closed — not replaced, not silently exposed as a finished answer/export path, not deleted.
@@ -241,22 +243,43 @@ def claim_next_eligible_question(import_record, *, actor) -> Optional[Questionna
         candidate = _next_eligible_import_question(import_record)  # §5's eligibility query, unchanged
         if candidate is None:
             return None
+
+        # The create is isolated in its own NESTED atomic() block - a
+        # genuine Postgres SAVEPOINT, since we are already inside the
+        # outer atomic() above. This is the correction this round
+        # requires, consistent with §6.1c: catching IntegrityError
+        # directly inside the SAME atomic() block that raised it (the
+        # outer block above, in the previous revision of this
+        # pseudocode) leaves that transaction in Postgres's "aborted"
+        # state for any later statement - exactly the bug named as a
+        # STOP condition elsewhere in this document, which this
+        # correction now also fixes here, in the block where it first
+        # appeared. Isolating the risky create() in its own nested
+        # atomic() means ONLY this savepoint rolls back on conflict;
+        # the sweep's UPDATE above, already applied earlier in this
+        # same outer transaction, is unaffected and commits normally
+        # when the outer block exits - Django's own documented pattern
+        # for handling an expected IntegrityError without corrupting
+        # the surrounding transaction.
         try:
-            return QuestionnaireBulkResponseAttempt.objects.create(
-                organisation=import_record.organisation,
-                import_question=candidate,
-                attempted_by=actor,
-                outcome="claimed",
-                claimed_at=timezone.now(),
-                claim_expires_at=timezone.now() + CLAIM_TTL,
-            )
+            with transaction.atomic():
+                return QuestionnaireBulkResponseAttempt.objects.create(
+                    organisation=import_record.organisation,
+                    import_question=candidate,
+                    attempted_by=actor,
+                    outcome="claimed",
+                    claimed_at=timezone.now(),
+                    claim_expires_at=timezone.now() + CLAIM_TTL,
+                )
         except IntegrityError:
             # Another request's transaction won the unique-constraint
             # race for this exact question between our SELECT and our
             # INSERT - the database caught it, not application logic.
-            # Return None for this candidate; the caller tries the next
-            # eligible question or ends the batch early. Never retried
-            # against the same candidate within this call.
+            # Caught here, inside the nested savepoint, so the outer
+            # transaction (and the sweep's own work above) remains
+            # healthy. Return None for this candidate; the caller tries
+            # the next eligible question or ends the batch early. Never
+            # retried against the same candidate within this call.
             return None
 ```
 
@@ -282,6 +305,82 @@ def generate_questionnaire_response(organisation, question, *, actor, interpreta
 ```
 
 `_persist_response` is *already* the sole atomic unit, already receiving a fully-prepared, ready-to-persist bundle as plain keyword arguments, with zero dependency on anything that happens after it. **The proposed refactor is a pure extract-method — rename `_persist_response` to a public `persist_prepared_response` (identical body, identical `@transaction.atomic` decorator, identical behaviour), and wrap the existing "interpret → record event → ground → derive outcome → build drafting request → draft" sequence — already one contiguous, side-effect-bounded block inside `generate_questionnaire_response` today — into its own `prepare_questionnaire_response` function returning the same bundle of values `_persist_response` already takes as arguments.** `generate_questionnaire_response` itself becomes a two-line composition of the two, **with byte-identical external behaviour for every existing caller** — the single-question UI flow, `questionnaire_response_regenerate`, and the M005 golden corpus all call `generate_questionnaire_response` exactly as today and observe no difference whatsoever. This is the "narrowly scoped M005 preparation/persistence separation" the Architect's own instruction authorised investigating — confirmed here, directly, to be a rename-and-extraction of code that is already structured this way, not a new design imposed on M005. **Acceptance requires the unchanged M005 14-case golden corpus and `generate_questionnaire_response`'s own existing test suite to pass byte-identically against the refactored code** — this is the proof the Architect's instruction requires, and this document treats it as a hard gate, not a formality.
+
+**Exact contract, specified field-by-field so FORGE does not have to guess positional arguments or infer behaviour from the diagram alone:**
+
+```python
+@dataclass(frozen=True)
+class PreparedQuestionnaireResponse:
+    """The exact, complete set of values `_persist_response` already
+    takes as parameters today, carried as one bundle instead of nine
+    separate arguments - field names are identical to `_persist_
+    response`'s own existing parameter names (verified by direct
+    reading, not renamed for this proposal), so the mapping from this
+    dataclass onto `persist_prepared_response`'s body is 1:1 and
+    mechanical, not an interpretation."""
+    organisation: Organisation
+    question: QuestionnaireQuestion
+    interpretation: QuestionnaireInterpretation   # ai_platform.questionnaire_interpretation_contracts
+    interpretation_record: AIInvocationRecord
+    outcome: str                                  # OUTCOME_SUPPORTED/CONFIRM/GAP/NOT_APPLICABLE - unchanged vocabulary
+    outcome_warnings: list[str]
+    grounding_snapshot: dict
+    draft: QuestionnaireDraft                      # ai_platform.questionnaire_drafting_contracts
+    drafting_record: AIInvocationRecord
+    actor: object                                  # the exact `actor` generate_questionnaire_response's own caller already passes through unchanged
+
+
+def prepare_questionnaire_response(
+    organisation, question: QuestionnaireQuestion, *, actor,
+    interpretation_gateway: QuestionnaireInterpretationGateway = None,
+    drafting_gateway: QuestionnaireDraftingGateway = None,
+) -> PreparedQuestionnaireResponse:
+    """Performs exactly the module docstring's existing steps 1-4
+    (interpret, record EVENT_QUESTION_INTERPRETED, ground, derive
+    outcome) plus building the drafting request and calling step 4's
+    draft - i.e. everything generate_questionnaire_response's body
+    already does TODAY, up to but not including the final call to
+    _persist_response, extracted verbatim, not rewritten. Raises the
+    same QuestionnaireInterpretationFailed/QuestionnaireDraftingFailed
+    exceptions generate_questionnaire_response already raises, in the
+    same circumstances, with the same "nothing QuestionnaireResponse-
+    shaped persisted" guarantee - this function creates no
+    QuestionnaireResponse under any circumstance, only the pre-existing
+    EVENT_QUESTION_INTERPRETED side effect, exactly as today."""
+
+
+def persist_prepared_response(prepared: PreparedQuestionnaireResponse) -> QuestionnaireResponse:
+    """Renamed from `_persist_response`. Its single `prepared` argument
+    unpacks, field-by-name, onto exactly the parameter list
+    `_persist_response` already has - `persist_prepared_response(p)`
+    must behave identically to calling the original
+    `_persist_response(p.organisation, p.question, interpretation=
+    p.interpretation, interpretation_record=p.interpretation_record,
+    outcome=p.outcome, outcome_warnings=p.outcome_warnings,
+    grounding_snapshot=p.grounding_snapshot, draft=p.draft,
+    drafting_record=p.drafting_record, actor=p.actor)` - same
+    `@transaction.atomic` decorator, same body, same
+    EVENT_QUESTIONNAIRE_RESPONSE_GENERATED emission, same return
+    value. This explicit unpacking mapping is what makes the
+    extraction mechanical rather than a reinterpretation - an
+    Implementer should be able to generate this function's body by
+    literal substitution, not by re-deriving intent from this
+    document's prose."""
+
+
+def generate_questionnaire_response(
+    organisation, question, *, actor,
+    interpretation_gateway=None, drafting_gateway=None,
+) -> QuestionnaireResponse:
+    """UNCHANGED public signature, UNCHANGED docstring, UNCHANGED
+    external behaviour for every existing caller. New body only:"""
+    prepared = prepare_questionnaire_response(
+        organisation, question, actor=actor,
+        interpretation_gateway=interpretation_gateway,
+        drafting_gateway=drafting_gateway,
+    )
+    return persist_prepared_response(prepared)
+```
 
 **Honest note on one pre-existing side effect, unrelated to the race:** `EVENT_QUESTION_INTERPRETED` fires unconditionally inside `prepare_questionnaire_response`, exactly as it already does today, independent of what happens later — so under a genuine double-claim race (§6.1a's scenario), *both* callers' interpretation steps still each fire their own `EVENT_QUESTION_INTERPRETED` event, even though only one ever goes on to have a `QuestionnaireResponse` actually committed. This is pre-existing, unchanged M005 behaviour (its own docstring already states interpretation-succeeding is recorded independent of later failure) and has no bearing on the duplicate-*response* problem this section fixes — stated here for transparency, not left for a reviewer to discover unmentioned.
 
@@ -361,6 +460,16 @@ def claim_and_process_one_question(import_record, *, actor):
 5. **Never deletes unrelated or human-created drafts:** there is no delete-on-recovery code path left in this design *at all* — a losing attempt's response was never committed in the first place, so there is nothing to clean up, manually or otherwise, and therefore nothing that could ever be mistargeted at an unrelated row. Round 2's orphan-draft-sweep logic is removed entirely by this correction, not merely left in place as a backstop — it existed to solve exactly the detect-and-delete problem this redesign eliminates structurally, and retaining it would be both dead complexity and a residual risk of the exact kind requirement 5 warns against.
 6. **PostgreSQL uniqueness errors handled via correct transaction/savepoint behaviour:** the `IntegrityError` from the permanent constraint is caught *outside* the `with transaction.atomic()` block, exactly as Django's own documentation requires for continued use of the connection afterwards — the failure-recording `.update()` call that follows is a genuinely fresh statement against a clean transaction state, not a write attempted against an already-aborted one.
 7. **Correctness under claim expiry, concurrent execution, crashes and retry:** the only failure window remaining is a crash *before* `claim_and_process_one_question` ever reaches its `with transaction.atomic()` block (i.e., during the AI calls themselves) — in that case nothing is persisted at all, the claim row remains `claimed` until it expires, and the next call reclaims and retries cleanly; this is the ordinary, already-covered expiry/reclaim path, not a new case. §9's test matrix is revised accordingly: (a) two genuinely concurrent callers racing for the same question — assert exactly one `QuestionnaireResponse` ever exists afterward, at the database level, not merely at the end of one test's own view of it; (b) a claim artificially expired mid-AI-call via test instrumentation, followed by a reclaim and a second concurrent finaliser — same assertion; (c) a simulated crash between the claim and the AI calls completing — assert the claim expires and is cleanly reclaimed with zero `QuestionnaireResponse` created in the interim.
+
+### 6.2a Consolidated regression gates — all required, none optional
+
+This correction touches M005's own file for the first time in this amendment (§6.1b's extract-method refactor), so the full acceptance bar for the eventual Work Order/implementation PR is stated here explicitly, in one place, rather than left scattered across prior sections for a reviewer to assemble themselves:
+
+1. **The unchanged M005 14-case golden corpus** (`questionnaire/eval/golden_corpus.py`/`harness.py`) passes byte-identically against the refactored `questionnaire/services.py` — zero diff to the corpus itself, zero behavioural difference in its results.
+2. **Every existing M005 test** that exercises `generate_questionnaire_response`, `accept_questionnaire_response`, `edit_questionnaire_response_text`, or `_initial_current_answer_text`'s own existing test file(s) passes unmodified — proving the extract-method refactor changed nothing these tests can observe.
+3. **Claim expiry and concurrency** — §6.2 point 7's three named scenarios (genuine two-caller race, expiry-during-active-call followed by reclaim, crash before the atomic block is ever reached), each asserting at the database level that exactly one `QuestionnaireResponse` exists for the contested question afterward, never a transient second one visible to any reader at any point.
+4. **Tenant isolation** — a bulk-trigger request for one organisation's import can never claim, process, or read any `QuestionnaireImportQuestion`/`QuestionnaireQuestion`/`QuestionnaireResponse`/`QuestionnaireBulkResponseAttempt` row belonging to a different organisation; every query in `claim_next_eligible_question`/`claim_and_process_one_question` is scoped by an explicit `organisation=` filter or a traversal through an already-validated `import_record`, per §8's existing tenant-scoping requirement, now also asserted specifically against the new claim/fencing code path, not only the ingestion path M009A already proved this for.
+5. **Accepted-response immutability** — a `QuestionnaireResponse` already `accepted` (by a human, via the existing, unmodified `accept_questionnaire_response`) is never selected as eligible for a new claim (§5's eligibility query already excludes it structurally), and no code path introduced by this correction ever calls `persist_prepared_response` or any write against an `accepted`/`superseded` response — the model's own `PROTECTED_WHILE_DRAFT_FIELDS` guard remains the enforcement backstop, unchanged, but this must also be asserted as an explicit, named test (claim a question whose linked `QuestionnaireQuestion` already has an `accepted` response from a human; assert it is never selected, and that the accepted response's every field is byte-identical before and after the bulk run completes).
 
 ### 6.3 Readiness recheck, unchanged in placement
 
