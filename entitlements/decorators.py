@@ -125,6 +125,30 @@ trapping them behind a permanent, unrecoverable 403. See
 `entitlements/tests/test_decorators.py`'s fail-closed-invalid-context tests
 for the mechanical proof that this path never falls through to granting
 access.
+
+`enforce_capability_gate` (below) - the reusable core, extracted M009B
+Increment 1 (WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-ORCHESTRATION.md §2.6)
+---------------------------------------------------------------------------
+This module's own three gates below "tenant membership" - invalid-context
+redirect, active-organisation alignment, the capability/tier decision
+itself - are not unique to `require_capability`'s own `wrapped_view`: WO
+§2.6 requires `questionnaire.upload_handler.
+QuestionnaireUploadSizeGuardMiddleware.process_view` to make the EXACT same
+decision, for the same request, inside a pipeline-level `process_view`
+hook rather than a view decorator (a hook that must run its own membership
+check before the Assurance Readiness check, and - this increment's fix -
+its own entitlement check between the two, since `require_capability`
+itself never runs until Django calls the view function, which is always
+AFTER every middleware's `process_view` hook has already returned).
+`enforce_capability_gate` is that reusable core - called by `wrapped_view`
+below AND by that middleware hook - so this decision exists in exactly one
+place, never two copies that could silently drift apart. It deliberately
+does NOT perform the membership check itself: both call sites already have
+their own, earlier, independent proof of membership (this decorator's own
+`get_member_organisation_or_404` call below; the hook's own identical call)
+before this function ever runs - see "why a second, redundant
+membership-scoped query at this layer" above for why that is correct, not
+an oversight.
 """
 from __future__ import annotations
 
@@ -151,6 +175,90 @@ from entitlements.session import Invalid, get_validated_context, issue_context
 # their own module level without issue, because none of THEM are imported
 # back by `organisations.views` itself; `entitlements.decorators` is the
 # one module `organisations.views` also needs).
+
+
+def enforce_capability_gate(request, organisation_id, capability_code=None):
+    """
+    The reusable core of `require_capability`'s own entitlement decision -
+    see this module's docstring ("`enforce_capability_gate` - the reusable
+    core") for why this exists as its own function and who calls it.
+
+    PRECONDITION the caller must already have proven, independently, before
+    calling this: `request.user` is authenticated AND is a current member
+    of `organisation_id` (this function performs no membership check of its
+    own - see the module docstring). Calling this for a non-member or an
+    anonymous user is a caller bug, not something this function guards
+    against.
+
+    Returns `None` if the capability check passes - the caller proceeds.
+    Returns an `HttpResponse` (a redirect to the login page) if the
+    session context is missing/malformed/tampered (`Invalid`) - the caller
+    MUST return this response immediately, exactly as `wrapped_view` does
+    below, never fall through to anything readiness/capability-derived.
+    Raises `django.core.exceptions.PermissionDenied` - generic, reason-free
+    (see module docstring: this genericness is load-bearing) - if the
+    session is valid but the resolved capability's tier requirement is not
+    met. Raises `ImproperlyConfigured` if `capability_code` is `None` and
+    `request.resolver_match`'s namespace/url_name has no capability
+    mapping (a programming-time error, not a request-time deny).
+    """
+    # Fail-closed handling of a missing/malformed/tampered session context
+    # (PID §6.4) - see this module's docstring for why this is a
+    # redirect-to-login, never a silent fall-through to the ordinary
+    # capability-denied path, and never any access.
+    context = get_validated_context(request)
+    if isinstance(context, Invalid):
+        return redirect_to_login(request.get_full_path())
+
+    # Active organisation alignment (PID §6.5/§9's new gate this WI adds).
+    # `organisation_id` may be a `uuid.UUID` off the URL converter;
+    # `context.organisation_id` is either `None` (no active organisation
+    # yet - e.g. straight after a real login) or the string `issue_context`
+    # itself always stores. Re-issuing preserves the EXACT tier/code/
+    # auth_source the already-validated context carries - this step only
+    # ever changes which organisation the session is bound to, never what
+    # package tier it grants - and reuses `issue_context`'s own built-in
+    # session-key rotation (PID §6.5/§19.1) rather than rotating
+    # separately. Evaluating the capability check against THIS caller's
+    # own `organisation_id` (never whatever organisation happened to
+    # already be active in session) is exactly why this alignment step
+    # must run before `has_capability` is ever called, for every caller.
+    if context.organisation_id != str(organisation_id):
+        issue_context(
+            request,
+            request.user,
+            package_tier=context.package_tier,
+            package_code=context.package_code,
+            auth_source=context.auth_source,
+            organisation_id=organisation_id,
+        )
+
+    resolved_code = capability_code
+    if resolved_code is None:
+        resolver_match = request.resolver_match
+        resolved_code = capability_for_route(
+            resolver_match.namespace, resolver_match.url_name
+        )
+    if resolved_code is None:
+        resolver_match = request.resolver_match
+        raise ImproperlyConfigured(
+            "enforce_capability_gate could not resolve a capability code for "
+            f"namespace={getattr(resolver_match, 'namespace', None)!r}, "
+            f"url_name={getattr(resolver_match, 'url_name', None)!r} - "
+            "pass capability_code explicitly, or add a route mapping in "
+            "entitlements.capabilities."
+        )
+
+    # The one central entitlement decision (PID §9) - re-reads whatever
+    # context is now stored (the just-realigned one, if alignment ran
+    # above), never a re-derived/hard-coded tier comparison of its own.
+    # Generic, reason-free denial (`PermissionDenied` -> Django's existing
+    # branded 403.html, carrying no message) - see this module's docstring
+    # for why that genericness matters.
+    if not has_capability(request, resolved_code):
+        raise PermissionDenied
+
+    return None
 
 
 def require_capability(capability_code=None):
@@ -192,68 +300,24 @@ def require_capability(capability_code=None):
                     "organisation-scoped routes (PID §9)."
                 )
 
-            # Fail-closed handling of a missing/malformed/tampered session
-            # context (PID §6.4) - see this module's docstring for why this
-            # is a redirect-to-login, never a silent fall-through to the
-            # ordinary capability-denied path, and never any access.
-            context = get_validated_context(request)
-            if isinstance(context, Invalid):
-                return redirect_to_login(request.get_full_path())
-
-            # Tenant membership FIRST (PID §9.3) - before capability is even
-            # evaluated. See this module's docstring for exactly why this
-            # ordering, not just "membership matters", is the point: a
-            # non-member's response must never vary with their (possibly
-            # forged) tier. Raises Http404 (this codebase's existing
-            # non-member convention) exactly like the view's own subsequent,
-            # separate call to the same helper.
+            # Tenant membership FIRST (PID §9.3) - before the session
+            # context is even read and before capability is evaluated. See
+            # this module's docstring for exactly why this ordering, not
+            # just "membership matters", is the point: a non-member's
+            # response must never vary with their (possibly forged) tier.
+            # Raises Http404 (this codebase's existing non-member
+            # convention) exactly like the view's own subsequent, separate
+            # call to the same helper.
             get_member_organisation_or_404(request.user, organisation_id)
 
-            # Active organisation alignment (PID §6.5/§9's new gate this WI
-            # adds). `organisation_id` is a `uuid.UUID` off the URL
-            # converter; `context.organisation_id` is either `None` (no
-            # active organisation yet - e.g. straight after a real login)
-            # or the string `issue_context` itself always stores. Re-issuing
-            # preserves the EXACT tier/code/auth_source the already-
-            # validated context carries - this step only ever changes which
-            # organisation the session is bound to, never what package tier
-            # it grants - and reuses `issue_context`'s own built-in session-
-            # key rotation (PID §6.5/§19.1) rather than rotating separately.
-            if context.organisation_id != str(organisation_id):
-                issue_context(
-                    request,
-                    request.user,
-                    package_tier=context.package_tier,
-                    package_code=context.package_code,
-                    auth_source=context.auth_source,
-                    organisation_id=organisation_id,
-                )
-
-            resolved_code = capability_code
-            if resolved_code is None:
-                resolver_match = request.resolver_match
-                resolved_code = capability_for_route(
-                    resolver_match.namespace, resolver_match.url_name
-                )
-            if resolved_code is None:
-                raise ImproperlyConfigured(
-                    f"require_capability could not resolve a capability code for "
-                    f"{view_func.__module__}.{view_func.__qualname__} "
-                    f"(namespace={getattr(request.resolver_match, 'namespace', None)!r}, "
-                    f"url_name={getattr(request.resolver_match, 'url_name', None)!r}) - "
-                    "pass capability_code explicitly, or add a route mapping in "
-                    "entitlements.capabilities."
-                )
-
-            # The one central entitlement decision (PID §9) - re-reads
-            # whatever context is now stored (the just-realigned one, if
-            # alignment ran above), never a re-derived/hard-coded tier
-            # comparison of its own. Generic, reason-free denial
-            # (`PermissionDenied` -> Django's existing branded 403.html,
-            # carrying no message) - see this module's docstring for why
-            # that genericness matters.
-            if not has_capability(request, resolved_code):
-                raise PermissionDenied
+            # Invalid-context redirect, active-organisation alignment, and
+            # the capability/tier decision itself - the reusable core also
+            # used by `questionnaire.upload_handler.
+            # QuestionnaireUploadSizeGuardMiddleware.process_view` (M009B
+            # Increment 1). See `enforce_capability_gate`'s own docstring.
+            gate_response = enforce_capability_gate(request, organisation_id, capability_code)
+            if gate_response is not None:
+                return gate_response
 
             return view_func(request, *args, **kwargs)
 

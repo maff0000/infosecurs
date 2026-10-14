@@ -14,6 +14,8 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from entitlements.tests.conftest import set_session_tier
+from entitlements.tiers import TIER_FOUNDATION, TIER_MONTHLY, TIER_PAUSED
 from questionnaire import import_services
 from questionnaire.eval import m009b_csv_ingestion_corpus as corpus
 from questionnaire.models import QuestionnaireImport
@@ -261,6 +263,116 @@ class TestPipelineLevelReadinessGate:
         assert response.status_code == 200
         assert response.context["organisation"].id == org_a.id
         assert len(response.context["blockers"]) == 18
+
+
+# ---------------------------------------------------------------------------
+# Entitlement-tier check inside the hook (WO §2.6 repair: membership ->
+# entitlement -> readiness) - against the REAL, un-stubbed
+# `evaluate_assurance_readiness` (genuinely unready org_a, the package's
+# own default fixture shape - see `m009b_default_assurance_readiness`'s
+# docstring for why org_a is 0% ready unless explicitly made ready), with
+# the requesting member's session tier forced insufficient for
+# `customer_assurance` (min_package_tier=2 - TIER_PAUSED=0/TIER_FOUNDATION=1
+# both qualify). Proves the defect this increment fixes is closed: before
+# this fix, `QuestionnaireUploadSizeGuardMiddleware.process_view` never
+# checked entitlement at all, so an insufficiently-entitled member of an
+# unready org got the full readiness-blocker page (200, this
+# organisation's real Foundations completion percentage and specific
+# missing-control titles) instead of `require_capability`'s own generic,
+# reason-free `PermissionDenied` (403) - a genuine entitlement-tier
+# bypass / information-disclosure. This gap was previously untested: every
+# other test in this file relies on `m009b_default_assurance_readiness`'s
+# autouse stub (always-ready) and/or `client_a`'s default TIER_MONTHLY
+# session, so the real "not ready" branch was never exercised in
+# combination with an insufficient tier anywhere in the suite.
+# ---------------------------------------------------------------------------
+class TestEntitlementCheckedBetweenMembershipAndReadiness:
+    @pytest.mark.parametrize("insufficient_tier", [TIER_PAUSED, TIER_FOUNDATION])
+    def test_insufficient_tier_member_of_unready_org_gets_403_never_blocker_page(
+        self, client_a, user_a, org_a, insufficient_tier, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "questionnaire.upload_handler.evaluate_assurance_readiness", evaluate_assurance_readiness
+        )
+        set_session_tier(client_a, user_a, insufficient_tier, organisation_id=org_a.id)
+
+        response = client_a.get(reverse("questionnaire:import_upload", args=[org_a.id]))
+
+        assert response.status_code == 403
+        assert b"not available yet" not in response.content
+
+    def test_insufficient_tier_post_to_unready_org_gets_403_and_never_touches_storage(
+        self, client_a, user_a, org_a, monkeypatch
+    ):
+        """The same genuine-mechanism proof
+        `test_post_to_unready_org_never_populates_request_post_or_files`
+        above makes for the membership/readiness ordering, extended to
+        the entitlement dimension: an insufficiently-entitled member's
+        POST must never reach the point where any upload handler is
+        invoked or any `QuestionnaireImport` row is created, exactly like
+        an unready organisation's POST - proving this is a genuine
+        pipeline-level short-circuit, not merely a hidden form."""
+        monkeypatch.setattr(
+            "questionnaire.upload_handler.evaluate_assurance_readiness", evaluate_assurance_readiness
+        )
+        set_session_tier(client_a, user_a, TIER_FOUNDATION, organisation_id=org_a.id)
+        calls = []
+        original = QuestionnaireUploadSizeGuardHandler.receive_data_chunk
+
+        def _spy(self, raw_data, start):
+            calls.append(len(raw_data))
+            return original(self, raw_data, start)
+
+        monkeypatch.setattr(QuestionnaireUploadSizeGuardHandler, "receive_data_chunk", _spy)
+
+        response = client_a.post(
+            reverse("questionnaire:import_upload", args=[org_a.id]),
+            {"declared_format": "csv", "file": _upload(corpus.valid_csv_with_answer_and_reference())},
+        )
+
+        assert response.status_code == 403
+        assert b"not available yet" not in response.content
+        assert calls == []
+        assert QuestionnaireImport.objects.filter(organisation=org_a).count() == 0
+
+    def test_non_member_with_insufficient_tier_still_gets_404_not_403(
+        self, client_b, org_a, org_b, user_b, member_b, monkeypatch
+    ):
+        """Ordering regression guard (WO §2.6: 'Only once membership is
+        confirmed does the hook proceed to the entitlement-tier check') -
+        a non-member's response must still be the plain, existing 404
+        convention, never varying by (possibly forged/irrelevant) tier -
+        the entitlement check added by this fix must never run, let alone
+        be reachable, before membership is proven."""
+        monkeypatch.setattr(
+            "questionnaire.upload_handler.evaluate_assurance_readiness", evaluate_assurance_readiness
+        )
+        set_session_tier(client_b, user_b, TIER_PAUSED, organisation_id=org_b.id)
+        response = client_b.get(reverse("questionnaire:import_upload", args=[org_a.id]))
+        assert response.status_code == 404
+        assert b"not available yet" not in response.content
+
+    def test_sufficiently_entitled_member_of_unready_org_still_sees_blocker_page(
+        self, client_a, user_a, org_a, monkeypatch
+    ):
+        """Regression protection for what already worked (WO §2.6's
+        'entitlement-tier check ... unaffected'): a Monthly+ (sufficiently
+        entitled) member of a genuinely unready organisation must still
+        reach - and see - the real readiness-blocker page, exactly as
+        before this fix. Tier is forced explicitly here (rather than
+        relying on client_a's login default) so this test documents the
+        boundary it proves, not merely inherits it."""
+        monkeypatch.setattr(
+            "questionnaire.upload_handler.evaluate_assurance_readiness", evaluate_assurance_readiness
+        )
+        set_session_tier(client_a, user_a, TIER_MONTHLY, organisation_id=org_a.id)
+
+        response = client_a.get(reverse("questionnaire:import_upload", args=[org_a.id]))
+
+        assert response.status_code == 200
+        assert "form" not in response.context
+        assert b"not available yet" in response.content
+        assert response.context["organisation"].id == org_a.id
 
 
 # ---------------------------------------------------------------------------

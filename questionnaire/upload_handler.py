@@ -220,14 +220,23 @@ class QuestionnaireUploadSizeGuardMiddleware:
         unaffected.
 
         Ordering, load-bearing (WO §2.6/§2.9 - a binding STOP condition
-        if violated): tenant MEMBERSHIP is checked FIRST, before
-        readiness is ever evaluated or any readiness-derived information
-        is returned. A non-member must never be able to distinguish
+        if violated): tenant MEMBERSHIP is checked FIRST, then the
+        ENTITLEMENT-TIER check, and only once both are satisfied is
+        readiness ever evaluated or any readiness-derived information
+        returned. A non-member must never be able to distinguish
         "exists, not ready" from "I'm not a member" from "doesn't exist"
         by response shape - exactly the enumeration this codebase's
         existing 404-never-403 convention
         (`organisations.views.get_member_organisation_or_404`) exists to
-        prevent.
+        prevent. Likewise, a member whose package tier is insufficient
+        for this route's capability must never see anything
+        readiness-derived (this organisation's real Foundations
+        completion percentage and specific missing-control titles) -
+        that is real information disclosure through a tier-gated route,
+        exactly what the entitlement check below (re-added this
+        increment) exists to prevent. See `entitlements.decorators.
+        enforce_capability_gate`'s own docstring for the full "why" of
+        each of its three steps.
 
         Unauthenticated requests are deliberately passed through
         untouched (`return None`) - this hook adds nothing for them.
@@ -281,6 +290,38 @@ class QuestionnaireUploadSizeGuardMiddleware:
         from organisations.views import get_member_organisation_or_404
 
         organisation = get_member_organisation_or_404(request.user, organisation_id)
+
+        # Entitlement tier SECOND (WO §2.6, M009B Increment 1 repair) -
+        # between membership and readiness, exactly as required. Must
+        # produce EXACTLY the decision `entitlements.decorators.
+        # require_capability()` would for this same request - never a
+        # shortcut reimplementation - because `require_capability`'s own
+        # `wrapped_view` never actually runs for this view before this
+        # point: Django only calls a view (and therefore any decorator
+        # wrapping it) once every middleware `process_view` hook has
+        # already returned, so without this call the real runtime order
+        # was membership -> readiness -> entitlement, the reverse of
+        # what this view's own insufficient-tier caller should see.
+        # `enforce_capability_gate` is the exact same function
+        # `require_capability`'s `wrapped_view` itself calls
+        # (entitlements/decorators.py) - this reproduces, byte for byte,
+        # its invalid-session-context-redirects-to-login handling, its
+        # active-organisation-alignment step (evaluated against THIS
+        # organisation_id - the one this hook is already handling - never
+        # whatever organisation happened to already be active in
+        # session), and its generic, reason-free `PermissionDenied` (->
+        # Django's ordinary 403, carrying no message: see that module's
+        # own docstring for why that genericness is load-bearing - two
+        # independent gates, membership/capability and now
+        # capability/readiness, must never produce a response shape an
+        # attacker probing either dimension can use to tell which one
+        # denied them). Deferred import for the same reason as the
+        # `organisations.views` import immediately above.
+        from entitlements.decorators import enforce_capability_gate
+
+        gate_response = enforce_capability_gate(request, organisation_id)
+        if gate_response is not None:
+            return gate_response
 
         readiness = evaluate_assurance_readiness(organisation)
         if readiness.is_ready:
