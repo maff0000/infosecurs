@@ -1,0 +1,44 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Questionnaire upload not yet available — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .readiness-blocker-list { list-style: none; margin: var(--space-3) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .readiness-blocker-list li {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+  }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Questionnaire upload is not available yet</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p>
+    Before you can upload a customer security questionnaire, Security Foundations must be
+    100% complete ({{ completion.completed_count }} of {{ completion.total_count }} complete today).
+    This keeps the answers this feature generates grounded in facts you have already confirmed
+    about your own organisation.
+</p>
+
+<section class="form-section">
+    <h2 class="form-section__heading">What still needs completing</h2>
+    <ul class="readiness-blocker-list">
+        {% for blocker in blockers %}
+            <li>{{ blocker.title }}</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<div class="form-actions">
+    <a class="button button--primary" href="{% url 'organisations:foundations' organisation.id %}">
+        Go to Security Foundations
+    </a>
+</div>
+{% endblock %}

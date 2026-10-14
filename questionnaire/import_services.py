@@ -25,7 +25,7 @@ from django.db import transaction
 
 from activity.models import ActivityEvent
 from activity.services import record_event
-from questionnaire import import_storage, security_gate, xlsx_extraction
+from questionnaire import csv_import, import_storage, security_gate, xlsx_extraction
 from questionnaire.models import (
     QuestionnaireImport,
     QuestionnaireImportQuestion,
@@ -89,7 +89,13 @@ def _validate_supersedes_target(supersedes, organisation):
 
 
 def ingest_questionnaire_import(
-    *, organisation, actor, uploaded_file, original_filename, supersedes=None
+    *,
+    organisation,
+    actor,
+    uploaded_file,
+    original_filename,
+    supersedes=None,
+    declared_format=QuestionnaireImport.FILE_FORMAT_XLSX,
 ):
     """
     Step 1 of the pipeline: stream, hash and store the uploaded bytes
@@ -98,6 +104,14 @@ def ingest_questionnaire_import(
     security gate + scanner synchronously (Correction 16 - no async
     infrastructure). Returns the final `QuestionnaireImport` (whatever
     state the pipeline above ended at).
+
+    `declared_format` (M009B Increment 1, WO-M009B-FOUNDATIONS-READINESS-
+    CSV-BULK-ORCHESTRATION.md §2.2a) is the caller's (the view's) own
+    declaration of which upload action the customer used - `FILE_FORMAT_
+    XLSX` (the default, preserving every existing caller's byte-identical
+    behaviour) or `FILE_FORMAT_CSV`. This is NEVER trusted blindly against
+    the real bytes - see the `is_zip_shaped` cross-check below, §2.2a step
+    2's binding requirement.
 
     If `supersedes` is supplied, it is validated FIRST - before any bytes
     are streamed/stored and before any new `QuestionnaireImport` row is
@@ -112,13 +126,23 @@ def ingest_questionnaire_import(
     its questions are never touched - only the NEW row's own `supersedes`
     FK is set.
 
-    If the uploaded bytes are not even ZIP-shaped (the cheapest possible
-    deterministic rejection - WO-M009A evaluation corpus: "a non-XLSX file
-    renamed with a .xlsx extension"), the row is still created (so the
-    rejection itself is durably auditable) but is created ALREADY
-    `security_gate_rejected` and the bytes are deleted immediately - the
-    heavier container gate below never runs against content that could
-    not possibly be a ZIP/OOXML container in the first place.
+    The early, cheapest-possible deterministic rejection is now format-
+    conditional (§2.2a step 2), never merely removed - the row is still
+    created either way (so the rejection itself is durably auditable), but
+    is created ALREADY `security_gate_rejected` and the bytes are deleted
+    immediately, and the heavier gate below never runs:
+
+      - `declared_format == FILE_FORMAT_XLSX` and the bytes are NOT
+        ZIP-shaped - rejected exactly as today, byte-for-byte unchanged
+        (reason `"not_a_zip_or_ooxml_container"` - WO-M009A evaluation
+        corpus: "a non-XLSX file renamed with a .xlsx extension").
+      - `declared_format == FILE_FORMAT_CSV` and the bytes ARE ZIP-shaped
+        - a declared-format mismatch is itself hostile/malformed input and
+        fails closed too (reason `"declared_csv_but_zip_shaped"`) - never
+        silently reinterpreted as an XLSX upload.
+
+    Every other combination (XLSX+zip-shaped, the existing case; CSV+not-
+    zip-shaped, the new, normal CSV case) proceeds to the structural gate.
     """
     if supersedes is not None:
         _validate_supersedes_target(supersedes, organisation)
@@ -128,14 +152,30 @@ def ingest_questionnaire_import(
     )
     safe_name = import_storage.safe_display_filename(original_filename)
 
+    is_declared_xlsx = declared_format == QuestionnaireImport.FILE_FORMAT_XLSX
+    is_declared_csv = declared_format == QuestionnaireImport.FILE_FORMAT_CSV
+
+    if is_zip_shaped:
+        detected_content_type = "application/zip"
+    elif is_declared_csv:
+        detected_content_type = "text/csv"
+    else:
+        detected_content_type = "application/octet-stream"
+
+    format_mismatch_reason = None
+    if is_declared_xlsx and not is_zip_shaped:
+        format_mismatch_reason = "not_a_zip_or_ooxml_container"
+    elif is_declared_csv and is_zip_shaped:
+        format_mismatch_reason = "declared_csv_but_zip_shaped"
+
     with transaction.atomic():
         import_record = QuestionnaireImport.objects.create(
             organisation=organisation,
             uploaded_by=actor,
             original_filename=safe_name,
             stored_filename=stored_filename,
-            detected_content_type="application/zip" if is_zip_shaped else "application/octet-stream",
-            file_format=QuestionnaireImport.FILE_FORMAT_XLSX,
+            detected_content_type=detected_content_type,
+            file_format=declared_format,
             sha256_hash=sha256_hex,
             size_bytes=size_bytes,
             security_gate_status=QuestionnaireImport.SECURITY_GATE_PENDING,
@@ -152,10 +192,15 @@ def ingest_questionnaire_import(
             metadata={"original_filename": safe_name, "size_bytes": size_bytes},
         )
 
-        if not is_zip_shaped:
+        if format_mismatch_reason is not None:
             import_record.security_gate_result = {
-                "reason": "not_a_zip_or_ooxml_container",
-                "detail": "The uploaded bytes do not begin with a ZIP/OOXML signature.",
+                "reason": format_mismatch_reason,
+                "detail": (
+                    "The uploaded bytes do not begin with a ZIP/OOXML signature."
+                    if format_mismatch_reason == "not_a_zip_or_ooxml_container"
+                    else "The upload was declared as CSV, but the bytes are ZIP-shaped - "
+                    "a declared-format mismatch is treated as hostile/malformed input."
+                ),
             }
             import_record.security_gate_status = QuestionnaireImport.SECURITY_GATE_REJECTED
             import_record.status = QuestionnaireImport.STATUS_SECURITY_GATE_REJECTED
@@ -168,10 +213,10 @@ def ingest_questionnaire_import(
                 actor=actor,
                 related_object_type="questionnaire_import",
                 related_object_id=str(import_record.id),
-                metadata={"reason": "not_a_zip_or_ooxml_container"},
+                metadata={"reason": format_mismatch_reason},
             )
 
-    if not is_zip_shaped:
+    if format_mismatch_reason is not None:
         import_storage.delete_stored_file(organisation.id, stored_filename)
         return import_record
 
@@ -203,8 +248,19 @@ def _run_gate_and_scanner(import_record, *, actor):
         organisation.id, import_record.stored_filename
     )
 
+    # M009B Increment 1 (§2.2a step 3) - dispatches on the already-
+    # persisted `file_format`, never re-derived from the bytes. XLSX
+    # calls `security_gate.run_container_gate` exactly as today (never
+    # touched for CSV - binding global STOP condition: CSV must never
+    # reach the OOXML/ZIP-only container gate). CSV calls the new,
+    # separate `csv_import.validate_csv_structure`, returning the
+    # identically-shaped `GateResult` - every line of code below this
+    # call needs zero change regardless of which one ran.
     try:
-        gate_result = security_gate.run_container_gate(file_path)
+        if import_record.file_format == QuestionnaireImport.FILE_FORMAT_CSV:
+            gate_result = csv_import.validate_csv_structure(file_path)
+        else:
+            gate_result = security_gate.run_container_gate(file_path)
     except Exception as exc:
         # An unexpected exception from the container gate is treated as an
         # infrastructure failure, never a silent pass and never a false
@@ -329,8 +385,15 @@ def _run_extraction(import_record, *, actor):
         organisation.id, import_record.stored_filename
     )
 
+    # M009B Increment 1 (§2.2a step 5) - same dispatch discipline as the
+    # gate call above. CSV's `extract_candidates` returns the identically
+    # -shaped `ExtractionOutcome` (reused directly from `xlsx_extraction`
+    # - see `questionnaire.csv_import`'s own module docstring).
     try:
-        outcome = xlsx_extraction.extract_candidates(file_path)
+        if import_record.file_format == QuestionnaireImport.FILE_FORMAT_CSV:
+            outcome = csv_import.extract_candidates(file_path)
+        else:
+            outcome = xlsx_extraction.extract_candidates(file_path)
     except Exception as exc:
         outcome = xlsx_extraction.ExtractionOutcome(
             status="extraction_failed",
@@ -344,14 +407,26 @@ def _run_extraction(import_record, *, actor):
             for candidate in outcome.candidates:
                 linked_question = None
                 if candidate.disposition == QuestionnaireImportQuestion.DISPOSITION_QUESTION:
-                    linked_question = QuestionnaireQuestion.objects.create(
-                        organisation=organisation,
-                        question_text=candidate.raw_extracted_text,
-                        source_label=(
+                    if import_record.file_format == QuestionnaireImport.FILE_FORMAT_CSV:
+                        # CSV source_location has no sheet_name/question_cell
+                        # keys (questionnaire.csv_import's own, separate
+                        # schema - see that module's extract_candidates) -
+                        # build a CSV-shaped label rather than reusing the
+                        # XLSX-only .get(..., "") keys below unmodified.
+                        source_label = (
+                            f"{import_record.original_filename} - "
+                            f"row {candidate.source_location.get('row', '')}"
+                        )[:255]
+                    else:
+                        source_label = (
                             f"{import_record.original_filename} - "
                             f"{candidate.source_location.get('sheet_name', '')} "
                             f"{candidate.source_location.get('question_cell', '')}"
-                        )[:255],
+                        )[:255]
+                    linked_question = QuestionnaireQuestion.objects.create(
+                        organisation=organisation,
+                        question_text=candidate.raw_extracted_text,
+                        source_label=source_label,
                         created_by=actor,
                     )
                 QuestionnaireImportQuestion.objects.create(
@@ -363,6 +438,13 @@ def _run_extraction(import_record, *, actor):
                     extraction_status=candidate.extraction_status,
                     extraction_error=candidate.extraction_error,
                     disposition=candidate.disposition,
+                    # M009B Increment 1 (§2.4) - always None/NULL for an
+                    # XLSX candidate (that dataclass has no such
+                    # attribute at all), so this is byte-identical to the
+                    # XLSX path's pre-existing behaviour.
+                    customer_provided_answer_text=getattr(
+                        candidate, "customer_provided_answer_text", None
+                    ),
                 )
             import_record.extraction_summary = outcome.summary
             import_record.status = QuestionnaireImport.STATUS_EXTRACTED

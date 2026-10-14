@@ -44,12 +44,19 @@
 <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     <fieldset class="form-section">
-        <legend>Questionnaire workbook</legend>
+        <legend>Questionnaire file</legend>
         <p class="form-section__help">
-            XLSX only, up to 10 MiB. The file's actual content is checked by the security gate
-            — not its filename or browser-reported type. Formulas, macros, external links and
-            encrypted/oversized archives are rejected.
+            XLSX or CSV, up to 10 MiB. The file's actual content is checked by the security
+            gate — not its filename or browser-reported type. Formulas, macros, external links
+            and encrypted/oversized archives are rejected for XLSX; the CSV file must have a
+            recognisable Question column.
         </p>
+
+        <div class="field {% if form.declared_format.errors %}field--error{% endif %}">
+            <label for="{{ form.declared_format.id_for_label }}">File format</label>
+            {{ form.declared_format }}
+            {% for error in form.declared_format.errors %}<p class="field__error" role="alert">{{ error }}</p>{% endfor %}
+        </div>
 
         <div class="field {% if form.file.errors %}field--error{% endif %}">
             <label for="{{ form.file.id_for_label }}">File <span class="required-marker" aria-hidden="true">*</span></label>
