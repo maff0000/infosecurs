@@ -516,6 +516,16 @@ IMPORT_QUESTION_DISPOSITION_INSTRUCTIONAL_TEXT = "instructional_text"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE = "excluded_duplicate"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS = "excluded_ambiguous"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER = "excluded_other"
+# M009B Increment 1 repair (defect B3) - CSV V1-specific. A blank
+# question cell in a CSV row is never silently dropped (unlike XLSX's
+# own blank-row rule) - it gets its own disposition so the row's
+# provenance/source_location and any non-blank answer/reference it
+# carries survive, while never being eligible for AI generation (that
+# requires disposition == DISPOSITION_QUESTION elsewhere in the
+# pipeline, which this value is not). Additive choice only - `disposition`
+# is a plain `CharField(choices=...)` with no database-level CHECK
+# constraint, so this does not require a schema migration.
+IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION = "excluded_blank_question"
 IMPORT_QUESTION_DISPOSITION_CHOICES = [
     (IMPORT_QUESTION_DISPOSITION_QUESTION, "Question"),
     (IMPORT_QUESTION_DISPOSITION_HEADING, "Heading"),
@@ -523,6 +533,7 @@ IMPORT_QUESTION_DISPOSITION_CHOICES = [
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE, "Excluded - duplicate"),
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS, "Excluded - ambiguous"),
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER, "Excluded - other"),
+    (IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION, "Excluded - blank question"),
 ]
 
 IMPORT_QUESTION_EXTRACTION_STATUS_PENDING = "pending"
@@ -561,6 +572,7 @@ class QuestionnaireImportQuestion(models.Model):
     DISPOSITION_EXCLUDED_DUPLICATE = IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE
     DISPOSITION_EXCLUDED_AMBIGUOUS = IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS
     DISPOSITION_EXCLUDED_OTHER = IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER
+    DISPOSITION_EXCLUDED_BLANK_QUESTION = IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION
 
     EXTRACTION_STATUS_PENDING = IMPORT_QUESTION_EXTRACTION_STATUS_PENDING
     EXTRACTION_STATUS_EXTRACTED = IMPORT_QUESTION_EXTRACTION_STATUS_EXTRACTED

@@ -109,13 +109,23 @@ class TestExtractCandidates:
         unanswered = by_text["Do you have an incident response plan?"]
         assert unanswered.customer_provided_answer_text is None
 
-    def test_blank_question_row_produces_no_candidate(self, tmp_path):
+    def test_blank_question_row_produces_excluded_blank_question_candidate(self, tmp_path):
+        """M009B Increment 1 repair (defect B3) - this test previously
+        asserted the OPPOSITE (`len(outcome.candidates) == 2`, i.e. the
+        blank row produced no candidate at all), which was the defect
+        itself. Central Architecture has now determined CSV needs
+        different handling than XLSX's own blank-row-drops-silently
+        rule, so this is a deliberate, acknowledged behaviour change, not
+        a regression."""
         path = tmp_path / "f.csv"
         path.write_bytes(corpus.csv_with_blank_question_rows())
         outcome = csv_import.extract_candidates(str(path))
         assert outcome.status == "extracted"
-        assert len(outcome.candidates) == 2
+        assert len(outcome.candidates) == 3
         assert outcome.summary["question_count"] == 2
+        dispositions = [c.disposition for c in outcome.candidates]
+        assert dispositions == ["question", "excluded_blank_question", "question"]
+        assert outcome.summary["excluded_counts_by_disposition"]["excluded_blank_question"] == 1
 
     def test_duplicate_question_text_excluded(self, tmp_path):
         path = tmp_path / "f.csv"
@@ -134,6 +144,205 @@ class TestExtractCandidates:
         assert "secret" in text
         assert "," in text
         assert "\n" in text
+
+
+# ---------------------------------------------------------------------------
+# M009B Increment 1 repair - defects B1-B4
+# (WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-ORCHESTRATION.md §2,
+# M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md §4.1's "Resource
+# limits, frozen"). Each test below was first run against the real,
+# unpatched head (`8365fdf5754b2f22f597e3e09749061418d55ac8`) and
+# confirmed to FAIL there - see the Implementer's report for the exact
+# captured failing-before output for each one.
+# ---------------------------------------------------------------------------
+class TestB1AmbiguousOptionalColumns:
+    """Defect B1 - two-or-more columns matching the answer/reference
+    header vocabulary were previously silently treated as "column
+    absent" (`answer_cols[0] if len(answer_cols) == 1 else None`) rather
+    than rejected as ambiguous, discarding a real customer-supplied
+    answer/reference with no named rejection at all."""
+
+    def test_duplicate_answer_header_rejected_with_named_reason(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_duplicate_answer_header())
+        result = csv_import.validate_csv_structure(str(path))
+        assert result.accepted is False
+        assert result.structural_summary["reason"] == "ambiguous_answer_column"
+
+    def test_duplicate_reference_header_rejected_with_named_reason(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_duplicate_reference_header())
+        result = csv_import.validate_csv_structure(str(path))
+        assert result.accepted is False
+        assert result.structural_summary["reason"] == "ambiguous_reference_column"
+
+    def test_duplicate_answer_header_rejected_by_extract_candidates_too(self, tmp_path):
+        """Both `validate_csv_structure` and `extract_candidates` call
+        `_resolve_header` fresh - proving the fix lands in both, not
+        only the structural gate."""
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_duplicate_answer_header())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extraction_failed"
+        assert "answer-header vocabulary" in outcome.failure_reason
+        assert outcome.candidates == []
+
+    def test_duplicate_reference_header_rejected_by_extract_candidates_too(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_duplicate_reference_header())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extraction_failed"
+        assert "reference-header vocabulary" in outcome.failure_reason
+        assert outcome.candidates == []
+
+    def test_single_answer_and_reference_column_still_accepted(self, tmp_path):
+        """Regression guard - exactly one answer/reference column (the
+        ordinary case) must remain accepted; B1's fix must not turn the
+        genuinely-optional, non-ambiguous case into a rejection too."""
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.valid_csv_with_answer_and_reference())
+        result = csv_import.validate_csv_structure(str(path))
+        assert result.accepted is True
+
+
+class TestB2ZeroDataRows:
+    """Defect B2 - a CSV with a valid header but zero data rows was
+    previously silently accepted (`accepted=True`,
+    `structural_summary={"row_count": 0, ...}`) - no named rejection
+    existed for "header present, but no data rows at all"."""
+
+    def test_valid_header_zero_data_rows_rejected(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_valid_header_zero_data_rows())
+        result = csv_import.validate_csv_structure(str(path))
+        assert result.accepted is False
+        assert result.structural_summary["reason"] == "no_data_rows"
+
+    def test_valid_header_zero_data_rows_rejected_by_extract_candidates_too(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_valid_header_zero_data_rows())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extraction_failed"
+        assert "zero data rows" in outcome.failure_reason
+        assert outcome.candidates == []
+
+
+class TestB3BlankQuestionRowProvenance:
+    """Defect B3 - a blank-question row previously vanished from import
+    provenance entirely (bare `continue`, no `Candidate` ever created),
+    taking any answer/reference data that row carried with it."""
+
+    def test_blank_question_row_carrying_reference_produces_candidate(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_blank_question_row_carrying_reference())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
+        assert len(outcome.candidates) == 3
+        dispositions = [c.disposition for c in outcome.candidates]
+        assert dispositions == ["question", "excluded_blank_question", "question"]
+
+        blank_row_candidate = outcome.candidates[1]
+        # Provenance survives: the original row number and its
+        # non-blank reference value are both retained.
+        assert blank_row_candidate.source_location["row"] == 3
+        assert blank_row_candidate.source_location["reference_value"] == "REF-BLANK-ROW"
+
+    def test_blank_question_row_never_eligible_for_ai_generation(self, tmp_path):
+        """Explicit proof, not just absence of a counter-example: a
+        blank-question row's disposition is NEVER
+        `QuestionnaireImportQuestion.DISPOSITION_QUESTION` - the one
+        value the real pipeline treats as eligible for AI generation."""
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_blank_question_row_carrying_reference())
+        outcome = csv_import.extract_candidates(str(path))
+        blank_row_candidate = outcome.candidates[1]
+        assert blank_row_candidate.disposition == "excluded_blank_question"
+        assert blank_row_candidate.disposition != QuestionnaireImportQuestion.DISPOSITION_QUESTION
+        assert blank_row_candidate.disposition == QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_BLANK_QUESTION
+        question_dispositions = [c.disposition for c in outcome.candidates if c is not blank_row_candidate]
+        assert all(d == "question" for d in question_dispositions)
+
+    def test_blank_question_row_reaches_db_via_dispatch(self, org_a, user_a, monkeypatch):
+        """End-to-end proof through the real `import_services` pipeline,
+        not just the unit-level `extract_candidates` call - a
+        `QuestionnaireImportQuestion` row genuinely exists in the
+        database for the blank-question row, with no linked
+        `QuestionnaireQuestion` (never eligible for drafting)."""
+        _patch_scanner(monkeypatch, _FixedScanner(STATE_CLEAN))
+        import_record = import_services.ingest_questionnaire_import(
+            organisation=org_a,
+            actor=user_a,
+            uploaded_file=_upload(corpus.csv_blank_question_row_carrying_reference()),
+            original_filename="q.csv",
+            declared_format=QuestionnaireImport.FILE_FORMAT_CSV,
+        )
+        assert import_record.status == QuestionnaireImport.STATUS_EXTRACTED
+        links = QuestionnaireImportQuestion.objects.filter(import_record=import_record)
+        assert links.count() == 3
+        blank_link = links.get(disposition=QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_BLANK_QUESTION)
+        assert blank_link.question is None
+        assert blank_link.source_location["reference_value"] == "REF-BLANK-ROW"
+
+
+class TestB4BoundedTextLength:
+    """Defect B4 - no bounded-length protection existed for
+    answer/reference text (only the question-text column had one), and
+    no aggregate total-text bound existed anywhere in this module."""
+
+    def test_oversized_answer_cell_rejected_with_named_reason(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_oversized_answer_cell(csv_import.MAX_CSV_CELL_TEXT_LENGTH))
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
+        assert len(outcome.candidates) == 1
+        candidate = outcome.candidates[0]
+        assert candidate.disposition == "excluded_other"
+        assert candidate.extraction_status == "failed"
+        assert candidate.extraction_error == "answer_text_exceeds_max_length"
+        # Never eligible for AI generation, and never silently carrying
+        # the oversized answer as "provenance" either.
+        assert candidate.customer_provided_answer_text is None
+
+    def test_oversized_reference_cell_rejected_with_named_reason(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.csv_oversized_reference_cell(csv_import.MAX_CSV_CELL_TEXT_LENGTH))
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
+        assert len(outcome.candidates) == 1
+        candidate = outcome.candidates[0]
+        assert candidate.disposition == "excluded_other"
+        assert candidate.extraction_status == "failed"
+        assert candidate.extraction_error == "reference_text_exceeds_max_length"
+
+    def test_within_limit_answer_and_reference_still_accepted(self, tmp_path):
+        """Regression guard - an ordinary, within-bound answer/reference
+        cell must remain unaffected by the new per-field checks."""
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.valid_csv_with_answer_and_reference())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
+        assert all(c.extraction_status != "failed" for c in outcome.candidates)
+
+    def test_aggregate_text_length_exceeded_rejected(self, tmp_path):
+        path = tmp_path / "f.csv"
+        path.write_bytes(
+            corpus.csv_exceeding_aggregate_text_length(
+                csv_import.MAX_CSV_AGGREGATE_TEXT_LENGTH, csv_import.MAX_CSV_CELL_TEXT_LENGTH
+            )
+        )
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extraction_failed"
+        assert "aggregate" in outcome.failure_reason
+        assert outcome.candidates == []
+
+    def test_moderate_import_well_under_aggregate_bound_still_accepted(self, tmp_path):
+        """Regression guard - the ordinary, legitimate
+        `valid_csv_with_answer_and_reference` fixture (tiny, nowhere
+        near the aggregate bound) must remain accepted."""
+        path = tmp_path / "f.csv"
+        path.write_bytes(corpus.valid_csv_with_answer_and_reference())
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,35 @@ MAX_CSV_COLUMNS = MAX_USED_COLUMNS_PER_WORKSHEET
 MAX_CSV_CANDIDATES_PER_IMPORT = MAX_CANDIDATES_PER_IMPORT
 MAX_CSV_CELL_TEXT_LENGTH = MAX_CELL_TEXT_LENGTH
 
+# M009-AMENDMENT-2026-10-13 §4.1's "Resource limits, frozen" section
+# requires a bounded TOTAL text length across an entire import, in
+# addition to the bounded per-field length above - no silent truncation,
+# a named rejection instead. There is no existing XLSX numeral for this
+# dimension to reuse (checked `xlsx_extraction.py` directly - none
+# exists), so this is a genuinely new, CSV V1-owned bound, derived as
+# follows:
+#
+# A naive "MAX_CSV_CANDIDATES_PER_IMPORT x MAX_CSV_CELL_TEXT_LENGTH"
+# (5,000 x 32,767 = 163,835,000 characters) was considered and REJECTED
+# - it is larger than the already-frozen 10 MiB (10,485,760-byte)
+# upload-size ceiling could ever let the decoded file contain in the
+# first place (every extracted character is, by construction, a literal
+# substring of the decoded file text, which can never exceed the file's
+# own byte count). A bound set above the upload ceiling is permanently
+# unreachable - dead code, giving this check no real teeth.
+#
+# Instead, this bound is deliberately set BELOW the upload-byte ceiling,
+# at roughly half of it (10,485,760 // 2 = 5,242,880, rounded to a clean
+# 5,000,000), reserving the remaining headroom for CSV syntax overhead
+# this check does not itself count (delimiters, RFC 4180 quoting, line
+# endings, the header row, and any of the other non-extracted columns a
+# real file may carry, up to `MAX_CSV_COLUMNS`) while still being a
+# genuinely reachable, independently-enforced ceiling on the
+# question+answer+reference text actually extracted/stored/forwarded
+# downstream - not merely a restatement of the upload-bytes check that
+# could never itself trigger.
+MAX_CSV_AGGREGATE_TEXT_LENGTH = 5_000_000
+
 SCHEMA_VERSION = 1
 
 
@@ -173,6 +202,21 @@ def _resolve_header(header_row: list[str]):
     simplified for CSV's own single, always-row-1 header convention (no
     bounded multi-row scan is needed - a CSV file's header is,
     unambiguously, its first row).
+
+    `answer_col`/`reference_col` get the SAME ambiguity discipline as
+    `question_col` (defect B1, fixed here): two or more columns matching
+    `ANSWER_HEADER_VOCABULARY` raises
+    `_CsvStructuralError("ambiguous_answer_column", ...)`, and two or
+    more matching `REFERENCE_HEADER_VOCABULARY` raises
+    `_CsvStructuralError("ambiguous_reference_column", ...)` - never a
+    silent fallback to "column absent", which would discard a genuine,
+    already-supplied customer answer/reference without any named
+    rejection at all. Zero matches for either remains a normal, silent
+    "this optional column is absent" (`None`) - only ambiguity (more than
+    one match) is an error, exactly mirroring the question column's own
+    "absent is impossible, ambiguous is an error" shape, minus the
+    "absent is impossible" half (these two columns are genuinely
+    optional).
     """
     if len(header_row) > MAX_CSV_COLUMNS:
         raise _CsvStructuralError(
@@ -208,9 +252,40 @@ def _resolve_header(header_row: list[str]):
             "vocabulary.",
         )
 
-    answer_col = answer_cols[0] if len(answer_cols) == 1 else None
-    reference_col = reference_cols[0] if len(reference_cols) == 1 else None
+    if len(answer_cols) > 1:
+        raise _CsvStructuralError(
+            "ambiguous_answer_column",
+            f"header row has {len(answer_cols)} columns matching the governed "
+            "answer-header vocabulary - at most one is allowed.",
+        )
+    if len(reference_cols) > 1:
+        raise _CsvStructuralError(
+            "ambiguous_reference_column",
+            f"header row has {len(reference_cols)} columns matching the governed "
+            "reference-header vocabulary - at most one is allowed.",
+        )
+
+    answer_col = answer_cols[0] if answer_cols else None
+    reference_col = reference_cols[0] if reference_cols else None
     return question_cols[0], answer_col, reference_col
+
+
+def _require_data_rows(data_rows: list) -> None:
+    """
+    Defect B2, fixed here: a CSV with a valid header but zero data rows
+    must be a deterministic, named rejection
+    (`_CsvStructuralError("no_data_rows", ...)`), never a silent
+    `accepted=True`/`status="extracted"` with an empty candidate list.
+    Shared by both `validate_csv_structure` and `extract_candidates` (both
+    call this immediately after `_resolve_header`), so neither function
+    can independently drift out of sync with the other on this rule.
+    """
+    if not data_rows:
+        raise _CsvStructuralError(
+            "no_data_rows",
+            "CSV has a valid header row but zero data rows - at least one "
+            "data row is required.",
+        )
 
 
 def _column_label(header_row: list[str], index: int | None) -> str | None:
@@ -247,6 +322,7 @@ def validate_csv_structure(file_path: str) -> GateResult:
 
     try:
         question_col, answer_col, reference_col = _resolve_header(header_row)
+        _require_data_rows(data_rows)
     except _CsvStructuralError as exc:
         return GateResult(
             accepted=False,
@@ -299,7 +375,11 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
     "excluded_duplicate" on a later occurrence of the same normalised
     text - CSV has no structural signal equivalent to XLSX's merged-cell
     heading rule, so no "heading" disposition is ever produced here (never
-    an invented NLP "looks instructional" heuristic).
+    an invented NLP "looks instructional" heuristic). A BLANK question
+    cell is its own disposition, "excluded_blank_question" - a deliberate
+    CSV-specific divergence from XLSX's own silent-drop blank-row rule,
+    because a CSV row can carry independent customer-answer/reference
+    data that must never be lost along with a blank question cell.
     """
     try:
         rows = _read_rows(file_path)
@@ -312,6 +392,7 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
 
     try:
         question_col, answer_col, reference_col = _resolve_header(header_row)
+        _require_data_rows(data_rows)
     except _CsvStructuralError as exc:
         return ExtractionOutcome(
             status="extraction_failed", failure_reason=exc.detail, summary={}, candidates=[]
@@ -333,25 +414,37 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
     seen_normalised_question_text: set[str] = set()
     extraction_order = 0
     question_candidate_count = 0
+    aggregate_text_length = 0
 
     for offset, data_row in enumerate(data_rows):
         row_number = offset + 2  # 1-based, header is row 1.
 
         question_value = data_row[question_col] if question_col < len(data_row) else ""
-        if question_value is None or question_value.strip() == "":
-            # Blank question cell - no QuestionnaireImportQuestion row
-            # needed (identical to xlsx_extraction's own blank-row rule).
-            continue
-
-        raw_text = str(question_value)
-        truncated_for_storage = raw_text[:MAX_CSV_CELL_TEXT_LENGTH]
+        raw_question_text = "" if question_value is None else str(question_value)
+        is_blank_question = raw_question_text.strip() == ""
 
         answer_value = None
         if answer_col is not None and answer_col < len(data_row):
             answer_value = data_row[answer_col]
+        raw_answer_text = "" if answer_value is None else str(answer_value)
+
         reference_value = None
         if reference_col is not None and reference_col < len(data_row):
             reference_value = data_row[reference_col]
+        raw_reference_text = "" if reference_value is None else str(reference_value)
+
+        # Bounded, defense-in-depth storage copy of every text field,
+        # computed regardless of disposition - a row already flagged
+        # "failed" for exceeding a per-field limit below must never
+        # persist an unbounded string to `source_location`/`Candidate`
+        # storage either. This is NOT the "no silent truncation" rule
+        # being violated: the row's own `extraction_error` already names
+        # the specific rejection reason, so nothing about the rejection
+        # itself is silent - only the stored copy of an already-rejected
+        # field is capped.
+        question_text_for_storage = raw_question_text[:MAX_CSV_CELL_TEXT_LENGTH]
+        answer_text_for_storage = raw_answer_text[:MAX_CSV_CELL_TEXT_LENGTH]
+        reference_text_for_storage = raw_reference_text[:MAX_CSV_CELL_TEXT_LENGTH]
 
         source_location = {
             "schema_version": SCHEMA_VERSION,
@@ -360,15 +453,46 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
             "question_column": question_label,
             "answer_column": answer_label,
             "reference_column": reference_label,
-            "reference_value": reference_value or None,
+            "reference_value": reference_text_for_storage or None,
         }
 
-        if len(raw_text) > MAX_CSV_CELL_TEXT_LENGTH:
+        # Deterministic disposition/rejection rules, in priority order.
+        # Per-field oversized checks (B4.1) take priority over
+        # blank-question/duplicate/question determination below,
+        # mirroring the pre-existing oversized-question-text check's own
+        # priority (already checked ahead of duplicate detection, never
+        # after it).
+        if len(raw_answer_text) > MAX_CSV_CELL_TEXT_LENGTH:
+            disposition = "excluded_other"
+            extraction_status = "failed"
+            extraction_error = "answer_text_exceeds_max_length"
+        elif len(raw_reference_text) > MAX_CSV_CELL_TEXT_LENGTH:
+            disposition = "excluded_other"
+            extraction_status = "failed"
+            extraction_error = "reference_text_exceeds_max_length"
+        elif len(raw_question_text) > MAX_CSV_CELL_TEXT_LENGTH:
             disposition = "excluded_other"
             extraction_status = "failed"
             extraction_error = "cell_text_exceeds_max_length"
+        elif is_blank_question:
+            # Defect B3, fixed here: a blank-question row still produces
+            # a Candidate (row identification/provenance survives, row
+            # count reconciles against `rows_discovered`), with its own,
+            # specifically-named disposition - never "question" (so this
+            # row can never become eligible for later AI generation,
+            # which requires disposition == "question" elsewhere in the
+            # pipeline - this falls out naturally simply by never setting
+            # that value here), and distinct from "excluded_duplicate"/
+            # "excluded_other" so an operator/export can tell the three
+            # apart. Central Architecture determined CSV needs different
+            # handling here than XLSX's own blank-row-drops-silently rule
+            # (XLSX rows cannot carry independent per-row customer-
+            # answer/reference data the way a CSV row can).
+            disposition = "excluded_blank_question"
+            extraction_status = "extracted"
+            extraction_error = ""
         else:
-            normalised = truncated_for_storage.strip().casefold()
+            normalised = question_text_for_storage.strip().casefold()
             if normalised in seen_normalised_question_text:
                 disposition = "excluded_duplicate"
                 extraction_status = "extracted"
@@ -382,15 +506,26 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
 
         extraction_order += 1
         customer_provided_answer_text = None
-        if disposition == "question" and answer_value is not None and answer_value.strip() != "":
+        if (
+            disposition in ("question", "excluded_blank_question")
+            and answer_value is not None
+            and raw_answer_text.strip() != ""
+        ):
             # Verbatim, byte-for-byte - the durable provenance field (WO
             # §2.4). Never truncated/normalised - this is the customer's
             # own already-supplied answer, not extracted/derived text.
+            # An OVERSIZED answer never reaches this branch at all - it
+            # is forced to disposition "excluded_other" above, before
+            # this check ever runs - so this verbatim-provenance promise
+            # and the B4.1 per-field bound never conflict. Included for
+            # "excluded_blank_question" too (B3's own requirement to
+            # retain any non-blank answer/reference a blank-question row
+            # carries), not only "question".
             customer_provided_answer_text = answer_value
 
         candidates.append(
             Candidate(
-                raw_extracted_text=truncated_for_storage,
+                raw_extracted_text=question_text_for_storage,
                 source_location=source_location,
                 extraction_order=extraction_order,
                 extraction_status=extraction_status,
@@ -399,6 +534,35 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
                 customer_provided_answer_text=customer_provided_answer_text,
             )
         )
+
+        # Defect B4.2, fixed here: bounded TOTAL extracted text across
+        # the whole import. Counted from the same bounded-for-storage
+        # copies above, so an already-rejected oversized single field's
+        # contribution here is itself already capped by the per-field
+        # check above - this check exists purely for the OTHER failure
+        # mode a per-field/per-row bound cannot catch: many individually
+        # -fine cells that cumulatively balloon. Checked after every row
+        # (never only at the end), mirroring the existing
+        # MAX_CSV_CANDIDATES_PER_IMPORT check's own fail-fast-mid-loop
+        # placement immediately below - never a silent truncation, a
+        # named rejection instead.
+        aggregate_text_length += (
+            len(question_text_for_storage)
+            + len(answer_text_for_storage)
+            + len(reference_text_for_storage)
+        )
+        if aggregate_text_length > MAX_CSV_AGGREGATE_TEXT_LENGTH:
+            return ExtractionOutcome(
+                status="extraction_failed",
+                failure_reason=(
+                    f"exceeded the frozen {MAX_CSV_AGGREGATE_TEXT_LENGTH:,} "
+                    "character aggregate extracted-text-length limit (question "
+                    "+ answer + reference text combined, across the whole "
+                    "import)."
+                ),
+                summary=summary,
+                candidates=[],
+            )
 
         if question_candidate_count > MAX_CSV_CANDIDATES_PER_IMPORT:
             return ExtractionOutcome(
@@ -431,6 +595,7 @@ __all__ = [
     "MAX_CSV_COLUMNS",
     "MAX_CSV_CANDIDATES_PER_IMPORT",
     "MAX_CSV_CELL_TEXT_LENGTH",
+    "MAX_CSV_AGGREGATE_TEXT_LENGTH",
     "Candidate",
     "validate_csv_structure",
     "extract_candidates",
