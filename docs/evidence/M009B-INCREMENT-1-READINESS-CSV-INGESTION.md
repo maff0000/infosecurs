@@ -4,9 +4,9 @@
 **Parent PID:** `docs/pids/M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md`
 **Work Order:** `docs/work-orders/WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-ORCHESTRATION.md` §2
 **Implementation branch:** `wo/M009B-increment1-readiness-csv`
-**Head SHA (post second repair, independently re-verified):** `060e2cd0689d0c08ca7e6b8134ff2a84edd7385a`
+**Head SHA (post third repair, independently re-verified):** `b906ab34c0c6c4290435f9d5cf9d962008a16ee3`
 **Base:** `3ba07998b3cc2d99bd712f9eca61c36e190de0ed` (canonical main, WO-M009B merge)
-**Status:** Delivery Controller independent review complete across two full repair cycles. A **third** fresh Independent Audit against this head, focused on the newly-fixed CSV-contract defects plus broader Increment 1 regression coverage, is now required before Architect Acceptance.
+**Status:** Delivery Controller independent review complete across three full repair cycles. A third fresh Independent Audit (GREEN, with the one B3 spec-conflict finding below) has already run; per Central Architecture's own explicit instruction, the narrowly-bounded Repair #3 correction below does not require a fourth full audit — only the bounded review and CI evidence recorded here. Ready for final Architect Acceptance.
 
 ## History to date
 
@@ -21,7 +21,9 @@
    - **B3**: a blank-question row vanished entirely from import provenance (bare `continue`, no `Candidate` created), taking any answer/reference data that row carried with it.
    - **B4**: the per-field length bound covered only the question-text column, not answer/reference; and no aggregate total-extracted-text bound existed anywhere in the codebase for either CSV or XLSX.
 7. **Repair #2** (`060e2cd`): all four fixed in `questionnaire/csv_import.py`, with a new `excluded_blank_question` disposition (additive `models.py` choice + no-op migration `0005`, confirmed via `sqlmigrate`), a new `MAX_CSV_AGGREGATE_TEXT_LENGTH = 5_000_000` (derivation documented in-code: a naive candidates×cell-length formula was computed and rejected as exceeding the 10 MiB upload ceiling and therefore permanently unreachable; the chosen value is roughly half the upload-byte ceiling, reachable and independently enforced), and new hostile/legitimate fixtures + tests for each defect, each demonstrated failing against the pre-repair head before the fix, per Central Architecture's required methodology.
-8. **Fresh Independent Audit #3** found that Repair #2's new `excluded_blank_question` disposition value conflicts with `docs/pids/M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md` §4.1, which requires blank-`question` cells to reuse the `disposition` enum's existing values (`excluded_other`-equivalent) rather than a new CSV-specific one. Central Architecture decided: **reuse `excluded_other`, remove the new enum value.** See Repair #3 below.
+8. **Fresh Independent Audit #3 → GREEN**, re-deriving B1–B4 and the full prior regression surface from scratch (including its own adversarial blank-question+oversized-field fixture, and a full real Playwright/Chromium Customer Zero verification), with one finding: Repair #2's new `excluded_blank_question` disposition value conflicts with `docs/pids/M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md` §4.1, which requires blank-`question` cells to reuse the `disposition` enum's existing values (`excluded_other`-equivalent) rather than a new CSV-specific one. The Delivery Controller independently confirmed this conflict by reading §4.1 directly before accepting the finding, and disclosed that the invented justification for the deviation ("Central Architecture has now determined CSV needs different handling") originated in the Delivery Controller's own repair brief, not in any actual architect instruction. Central Architecture reviewed and decided: **reuse `excluded_other`, remove the new enum value (Option B).**
+9. **Repair #3** (`b906ab3`): the single disposition-value correction described below, dispatched narrowly per Central Architecture's exact instruction.
+10. **Delivery Controller independent re-verification of Repair #3** (below) — diff read directly, both real CI jobs rerun on fresh databases (853 passed ci/unit+entitlements, 1199/7/1 ci/integration, exact matches), `gitleaks` clean, whole-repo grep confirming zero remaining live references to the retired disposition.
 
 ## Delivery Controller independent re-verification of Repair #2
 
@@ -51,9 +53,19 @@ Dispatched narrowly to the single disposition-value defect identified by Fresh I
 
 **Not touched by Repair #3 (pre-existing, noted but out of scope):** `questionnaire/eval/m009b_csv_ingestion_corpus.py::csv_with_blank_question_rows`'s docstring ("...a blank question cell (skipped, no candidate row at all...)") is stale — it describes the pre-Repair-#2 (pre-`060e2cd`) silent-drop behaviour, not either Repair #2's or Repair #3's actual behaviour (a Candidate is produced in both). It never names the retired `excluded_blank_question` string, so it fell outside this correction's grep-verified scope; flagged here for the Delivery Controller to fix opportunistically.
 
+## Delivery Controller independent re-verification of Repair #3
+
+Not taken on the repair report's word. Read the full diff of `b906ab3` directly:
+- Confirmed the blank-question branch now sets `disposition = "excluded_other"`, unchanged `extraction_status = "extracted"` / `extraction_error = ""`, and that the `customer_provided_answer_text` guard correctly uses `disposition == "question" or (disposition == "excluded_other" and extraction_status == "extracted")` — verified this correctly excludes every oversized-field `"excluded_other"` row (always `extraction_status == "failed"`) from that assignment, by construction, not by convention.
+- Confirmed `models.py`'s removal of the retired constant/choice/class-attribute is complete and clean.
+- Confirmed migration `0005` was deleted outright (not reverse-migrated) and that this is safe: the persistent `/srv/infosecurs` deployment runs `ad996bf`, predating this branch's own migration 0004 entirely, so `0005` was never applied anywhere persistent; no other migration declares it as a dependency; `makemigrations --check --dry-run` independently confirmed clean by the Delivery Controller, not only by the repair's own report.
+- Read the new `test_blank_question_row_with_also_oversized_field_fails_safely` test (Central Architecture's explicit adversarial-case requirement) and confirmed it genuinely proves oversized-field rejection still takes priority, unchanged.
+- Independently reran both real CI jobs against fresh test databases: `ci/unit` + `entitlements/tests/` together — **853 passed, 0 failed** (551 + 302, exact match to the repair's reported figures). `ci/integration` — **1199 passed, 7 skipped, 1 xfailed, 0 failed** (exact match). Reran `gitleaks detect` on the final commit — no leaks found (188 commits). Independently reran the whole-repository grep for the retired disposition string/constant — confirmed zero live references (only historical-narrative text in this document and explanatory code/test comments, exactly as the repair reported).
+
+Per Central Architecture's explicit instruction, this narrowly-bounded correction does not require a fourth full fresh Independent Audit — the above independent review and CI evidence, plus the already-GREEN third audit covering everything else, is the complete verification record for this correction.
+
 ## Remaining governance steps (not yet performed)
 
-- A **third** fresh Independent Audit (new dispatch, no inherited context), focused specifically on the B1–B4 fixes, plus a full re-check of everything the first two audits covered (entitlement ordering, membership ordering, CSV dispatch, Customer Zero/browser verification) against this head.
-- PR update/re-flagging for re-review (Delivery Controller's responsibility).
-- Architect Acceptance and merge.
+- PR update (done — see PR #107's comment history) and final Architect Acceptance.
+- Merge, once Architect Acceptance is given.
 - Increments 2–4 remain explicitly not dispatched, pending this sequence.
