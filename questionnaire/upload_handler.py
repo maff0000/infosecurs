@@ -78,7 +78,12 @@ from __future__ import annotations
 
 import hashlib
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadhandler import FileUploadHandler, StopUpload
+from django.shortcuts import render
+
+from questionnaire.decorators import REQUIRES_ASSURANCE_READINESS_ATTR
+from security_baseline.readiness import evaluate_assurance_readiness
 
 # WO-M009A Correction 8 - frozen for M009A-v1, not an implementation choice.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
@@ -195,3 +200,139 @@ class QuestionnaireUploadSizeGuardMiddleware:
         if request.method == "POST" and request.path.endswith(GUARDED_UPLOAD_PATH_SUFFIX):
             install_upload_size_guard(request)
         return self.get_response(request)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        """
+        M009B Increment 1 (WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-
+        ORCHESTRATION.md §2.2/§2.6) - the Assurance Readiness Gate's
+        pipeline-level enforcement point. Added onto this SAME middleware
+        (rather than a new one) specifically because this class already
+        sits BEFORE `CsrfViewMiddleware` in `MIDDLEWARE` (see this
+        module's own docstring above) - `process_view` hooks fire in
+        `MIDDLEWARE` list order, so this hook is guaranteed to run before
+        `CsrfViewMiddleware.process_view` for exactly the same reason the
+        upload-size guard already is.
+
+        A no-op for any view not marked with `questionnaire.decorators.
+        requires_assurance_readiness` - returns `None` immediately, so
+        every other route in this codebase (including every XLSX-era
+        M009A route this Work Order does not touch) is completely
+        unaffected.
+
+        Ordering, load-bearing (WO §2.6/§2.9 - a binding STOP condition
+        if violated): tenant MEMBERSHIP is checked FIRST, then the
+        ENTITLEMENT-TIER check, and only once both are satisfied is
+        readiness ever evaluated or any readiness-derived information
+        returned. A non-member must never be able to distinguish
+        "exists, not ready" from "I'm not a member" from "doesn't exist"
+        by response shape - exactly the enumeration this codebase's
+        existing 404-never-403 convention
+        (`organisations.views.get_member_organisation_or_404`) exists to
+        prevent. Likewise, a member whose package tier is insufficient
+        for this route's capability must never see anything
+        readiness-derived (this organisation's real Foundations
+        completion percentage and specific missing-control titles) -
+        that is real information disclosure through a tier-gated route,
+        exactly what the entitlement check below (re-added this
+        increment) exists to prevent. See `entitlements.decorators.
+        enforce_capability_gate`'s own docstring for the full "why" of
+        each of its three steps.
+
+        Unauthenticated requests are deliberately passed through
+        untouched (`return None`) - this hook adds nothing for them.
+        Every marked view in this codebase is also `@login_required`
+        (an ordinary view decorator, so it only runs once the view is
+        finally called, AFTER this hook returns). If this hook instead
+        evaluated membership for an anonymous caller,
+        `get_member_organisation_or_404` would legitimately find no
+        membership row for `AnonymousUser` and return a 404 - REGRESSING
+        the existing, correct behaviour of redirecting an unauthenticated
+        visitor to the login page instead. Returning `None` here defers
+        entirely to the existing, unmodified `@login_required`/CSRF
+        pipeline for every caller this hook does not yet recognise as
+        authenticated.
+
+        The guarantee this hook actually provides, stated precisely (WO
+        §2.6's own required documentation correction - also a binding
+        global STOP condition if overclaimed): it prevents Django's own
+        lazy multipart parsing from ever running (so `request.POST`/
+        `request.FILES` are never populated) and prevents any
+        application-level write, storage, or scanning from ever happening
+        for an unready organisation's request, by returning a complete
+        response BEFORE `CsrfViewMiddleware.process_view` (and therefore
+        before anything else in the pipeline) ever has a chance to read
+        `request.POST`. It does NOT, and cannot, guarantee that the
+        underlying WSGI server has not already read/buffered raw request
+        bytes off the socket before Django's own middleware chain runs at
+        all - that boundary is owned by the web server, never by Django
+        middleware, and this hook makes no claim about it.
+        """
+        if not getattr(view_func, REQUIRES_ASSURANCE_READINESS_ATTR, False):
+            return None
+
+        if not request.user.is_authenticated:
+            return None
+
+        organisation_id = view_kwargs.get("organisation_id")
+        if organisation_id is None:
+            raise ImproperlyConfigured(
+                f"requires_assurance_readiness was applied to {view_func.__module__}."
+                f"{getattr(view_func, '__qualname__', view_func)!r}, whose URL does not "
+                "carry an organisation_id - this hook only guards organisation-scoped "
+                "routes."
+            )
+
+        # Tenant membership FIRST (WO §2.6) - deferred import, the same
+        # circular-import avoidance `entitlements.decorators.
+        # require_capability` already uses (see that module's own
+        # docstring: `organisations.views` imports `entitlements.
+        # decorators`, so a top-level import back here would cycle).
+        from organisations.views import get_member_organisation_or_404
+
+        organisation = get_member_organisation_or_404(request.user, organisation_id)
+
+        # Entitlement tier SECOND (WO §2.6, M009B Increment 1 repair) -
+        # between membership and readiness, exactly as required. Must
+        # produce EXACTLY the decision `entitlements.decorators.
+        # require_capability()` would for this same request - never a
+        # shortcut reimplementation - because `require_capability`'s own
+        # `wrapped_view` never actually runs for this view before this
+        # point: Django only calls a view (and therefore any decorator
+        # wrapping it) once every middleware `process_view` hook has
+        # already returned, so without this call the real runtime order
+        # was membership -> readiness -> entitlement, the reverse of
+        # what this view's own insufficient-tier caller should see.
+        # `enforce_capability_gate` is the exact same function
+        # `require_capability`'s `wrapped_view` itself calls
+        # (entitlements/decorators.py) - this reproduces, byte for byte,
+        # its invalid-session-context-redirects-to-login handling, its
+        # active-organisation-alignment step (evaluated against THIS
+        # organisation_id - the one this hook is already handling - never
+        # whatever organisation happened to already be active in
+        # session), and its generic, reason-free `PermissionDenied` (->
+        # Django's ordinary 403, carrying no message: see that module's
+        # own docstring for why that genericness is load-bearing - two
+        # independent gates, membership/capability and now
+        # capability/readiness, must never produce a response shape an
+        # attacker probing either dimension can use to tell which one
+        # denied them). Deferred import for the same reason as the
+        # `organisations.views` import immediately above.
+        from entitlements.decorators import enforce_capability_gate
+
+        gate_response = enforce_capability_gate(request, organisation_id)
+        if gate_response is not None:
+            return gate_response
+
+        readiness = evaluate_assurance_readiness(organisation)
+        if readiness.is_ready:
+            return None
+
+        return render(
+            request,
+            "questionnaire/import_assurance_not_ready.html",
+            {
+                "organisation": organisation,
+                "completion": readiness.completion,
+                "blockers": readiness.blockers,
+            },
+        )

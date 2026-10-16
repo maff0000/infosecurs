@@ -271,8 +271,16 @@ class QuestionnaireResponse(models.Model):
 # ===========================================================================
 
 IMPORT_FILE_FORMAT_XLSX = "xlsx"
+# M009B Increment 1 (WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-
+# ORCHESTRATION.md §2.2/§2.4) - additive only, alongside the existing
+# "xlsx" choice. `file_format` is in IMPORT_IMMUTABLE_FIELDS below (set
+# once at creation from the caller's own `declared_format`, never
+# hardcoded, never changed afterwards - see questionnaire.import_services
+# .ingest_questionnaire_import).
+IMPORT_FILE_FORMAT_CSV = "csv"
 IMPORT_FILE_FORMAT_CHOICES = [
     (IMPORT_FILE_FORMAT_XLSX, "XLSX"),
+    (IMPORT_FILE_FORMAT_CSV, "CSV"),
 ]
 
 IMPORT_SECURITY_GATE_PENDING = "pending"
@@ -374,6 +382,7 @@ class QuestionnaireImport(models.Model):
     `questionnaire.import_storage`, mirroring `evidence.storage`."""
 
     FILE_FORMAT_XLSX = IMPORT_FILE_FORMAT_XLSX
+    FILE_FORMAT_CSV = IMPORT_FILE_FORMAT_CSV
 
     SECURITY_GATE_PENDING = IMPORT_SECURITY_GATE_PENDING
     SECURITY_GATE_PASSED = IMPORT_SECURITY_GATE_PASSED
@@ -507,6 +516,26 @@ IMPORT_QUESTION_DISPOSITION_INSTRUCTIONAL_TEXT = "instructional_text"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE = "excluded_duplicate"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS = "excluded_ambiguous"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER = "excluded_other"
+# M009B Increment 1 repair (defect B3) - a blank question cell in a CSV
+# row is never silently dropped (unlike XLSX's own blank-row rule) - it
+# still produces a Candidate/QuestionnaireImportQuestion so the row's
+# provenance/source_location and any non-blank answer/reference it
+# carries survive, while never being eligible for AI generation (that
+# requires disposition == DISPOSITION_QUESTION elsewhere in the
+# pipeline, which "excluded_other" is not). This REUSES the pre-existing
+# DISPOSITION_EXCLUDED_OTHER value above rather than a dedicated
+# CSV-specific one, per M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-
+# READINESS.md §4.1 ("Blank `question` cells are recorded... excluded
+# from processing, same disposition shape M009A already uses
+# (`excluded_other`-equivalent) - reusing the `disposition` enum's
+# existing values rather than inventing CSV-specific ones"). An earlier
+# repair (`060e2cd`) added a dedicated `excluded_blank_question` choice
+# here; a subsequent Independent Audit found that conflicted with §4.1,
+# and Central Architecture directed its removal - see
+# `questionnaire/csv_import.py::extract_candidates` for how a
+# blank-question `excluded_other` row is distinguished from an
+# oversized-field `excluded_other` row (via `extraction_status`/
+# `extraction_error`), since both now share this one disposition value.
 IMPORT_QUESTION_DISPOSITION_CHOICES = [
     (IMPORT_QUESTION_DISPOSITION_QUESTION, "Question"),
     (IMPORT_QUESTION_DISPOSITION_HEADING, "Heading"),
@@ -586,6 +615,38 @@ class QuestionnaireImportQuestion(models.Model):
     )
     extraction_error = models.TextField(blank=True, default="")
     disposition = models.CharField(max_length=24, choices=IMPORT_QUESTION_DISPOSITION_CHOICES)
+
+    # M009B Increment 1 (WO-M009B-FOUNDATIONS-READINESS-CSV-BULK-
+    # ORCHESTRATION.md §2.4) - the durable provenance field for a
+    # customer-supplied CSV `answer` column. Populated verbatim, byte-for
+    # -byte, from the CSV's own `answer` cell for this row when non-blank
+    # (questionnaire.csv_import.extract_candidates); ALWAYS NULL for an
+    # XLSX-sourced row (that format has no such column -
+    # questionnaire.xlsx_extraction never sets it).
+    #
+    # DURABLE INVARIANT, binding on every future increment of this Work
+    # Order (not merely a convention - a global STOP condition, WO §8):
+    # any bulk-orchestration eligibility query (Increment 3/4,
+    # questionnaire.bulk_orchestration - does not exist yet in this
+    # increment) MUST exclude every row where this field is non-null, so
+    # a customer-provided answer can never be silently regenerated or
+    # overwritten by machine composition. This field being non-null is
+    # itself the permanent, auditable record that a row arrived
+    # pre-answered - independent of whatever orchestration code does or
+    # does not do with it. See questionnaire/tests/test_m009b_csv_import.py
+    # ::test_customer_provided_answer_text_excluded_from_bulk_eligibility
+    # for the structural (not merely documentary) proof.
+    customer_provided_answer_text = models.TextField(
+        max_length=RAW_EXTRACTED_TEXT_MAX_LENGTH,
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Verbatim CSV 'answer' column value for this row, if any. Always NULL for "
+            "an XLSX-sourced row. Non-null means this row arrived pre-answered by the "
+            "customer and must never be selected for bulk AI answer generation."
+        ),
+    )
 
     class Meta:
         ordering = ["extraction_order"]

@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from django import forms
 
+from questionnaire.models import QuestionnaireImport
+
 
 class QuestionnaireResponseEditForm(forms.Form):
     """Exactly one field - the editable answer wording (PID §17: "The
@@ -49,19 +51,48 @@ class QuestionnaireResponseEditForm(forms.Form):
 class QuestionnaireImportUploadForm(forms.Form):
     """
     M009A (WO-M009A-SECURE-INGESTION-XLSX.md "Minimal real customer entry
-    surface", Correction 15) - deliberately a plain `forms.Form` with
-    exactly one field. `questionnaire.views.questionnaire_import_upload`
-    reads ONLY `form.cleaned_data["file"]` and passes it straight to
-    `questionnaire.import_services.ingest_questionnaire_import`, which
-    performs its OWN content-sniffing/size-streaming/security-gate
-    validation (this form never pre-judges file type by extension or
-    client-supplied Content-Type - WO-M009A: "No parser/extractor of any
-    kind may run before the pre-parse security gate accepts the file",
-    and this form is not a parser, just a required-field presence check).
+    surface", Correction 15) - deliberately a plain `forms.Form`.
+    `questionnaire.views.questionnaire_import_upload` reads ONLY
+    `form.cleaned_data["file"]`/`form.cleaned_data["declared_format"]` and
+    passes them straight to `questionnaire.import_services.
+    ingest_questionnaire_import`, which performs its OWN content-
+    sniffing/size-streaming/security-gate validation (this form never
+    pre-judges file type by extension or client-supplied Content-Type -
+    WO-M009A: "No parser/extractor of any kind may run before the pre-
+    parse security gate accepts the file", and this form is not a parser,
+    just a required-field presence check).
+
+    `declared_format` (M009B Increment 1, WO-M009B-FOUNDATIONS-READINESS-
+    CSV-BULK-ORCHESTRATION.md §2.2a point 1) is the one small, additive
+    UX detail that Work Order explicitly leaves to implementation time:
+    "a Work-Order-stage UX detail, not an architectural one." This form
+    uses a single explicit format selector (a `<select>`, defaulting to
+    XLSX) rather than two separate upload forms - the customer's own
+    declaration, independently cross-checked against the real bytes by
+    `ingest_questionnaire_import` itself (never trusted blindly - §2.2a
+    step 2).
     """
 
+    DECLARED_FORMAT_CHOICES = [
+        (QuestionnaireImport.FILE_FORMAT_XLSX, "XLSX workbook"),
+        (QuestionnaireImport.FILE_FORMAT_CSV, "CSV file"),
+    ]
+
+    # `required=False`, defaulting to XLSX in the VIEW (not here) when
+    # absent - deliberately preserves every pre-existing M009A test/caller
+    # that posts `{"file": ...}` alone with no `declared_format` field at
+    # all (WO-M009B §2.12: "the existing M009A XLSX test suite reruns
+    # unmodified and green" - a `required=True` field here would make
+    # exactly those pre-existing POSTs fail validation and break that
+    # requirement).
+    declared_format = forms.ChoiceField(
+        choices=DECLARED_FORMAT_CHOICES,
+        initial=QuestionnaireImport.FILE_FORMAT_XLSX,
+        required=False,
+        help_text="Choose the format of the file you are uploading.",
+    )
     file = forms.FileField(
-        help_text="XLSX only, up to 10 MiB. The file's actual content is checked by the "
+        help_text="XLSX or CSV, up to 10 MiB. The file's actual content is checked by the "
         "security gate - not its filename or browser-reported type.",
     )
 

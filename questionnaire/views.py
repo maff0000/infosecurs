@@ -28,6 +28,7 @@ from ai_platform.questionnaire_interpretation_orchestration import (
 )
 
 from questionnaire import import_services
+from questionnaire.decorators import requires_assurance_readiness
 from questionnaire.forms import QuestionnaireImportUploadForm, QuestionnaireResponseEditForm
 from questionnaire.models import (
     QuestionnaireImport,
@@ -294,11 +295,24 @@ def _get_member_import_or_404(user, organisation_id, import_id):
 
 @login_required
 @require_capability()
+@requires_assurance_readiness
 def questionnaire_import_upload(request, organisation_id):
-    """XLSX upload control (Correction 15) - Monthly+ entitlement-gated
-    via the existing `customer_assurance` ProductArea (the `questionnaire`
-    URL namespace already maps there - see `entitlements.capabilities.
-    ROUTE_NAMESPACE_TO_CAPABILITY`, unchanged by M009A)."""
+    """XLSX/CSV upload control (Correction 15; M009B Increment 1 adds
+    CSV) - Monthly+ entitlement-gated via the existing `customer_
+    assurance` ProductArea (the `questionnaire` URL namespace already
+    maps there - see `entitlements.capabilities.
+    ROUTE_NAMESPACE_TO_CAPABILITY`, unchanged by M009A/M009B).
+
+    `@requires_assurance_readiness` (M009B Increment 1) marks this view
+    for `questionnaire.upload_handler.QuestionnaireUploadSizeGuardMiddleware`'s
+    own `process_view` hook - membership, then Assurance Readiness, are
+    both already fully enforced BEFORE this view function's body ever
+    runs (an unready organisation never reaches here at all; see that
+    hook's own docstring for the full ordering/guarantee). This view adds
+    no readiness check of its own - doing so here too would be exactly
+    the "view-level only, without the pipeline-level hook" shape the
+    Work Order's own STOP condition forbids.
+    """
     # The REAL enforcement point is `questionnaire.upload_handler.
     # QuestionnaireUploadSizeGuardMiddleware` (config/settings.py's
     # MIDDLEWARE, placed before CsrfViewMiddleware) - installing the
@@ -316,12 +330,22 @@ def questionnaire_import_upload(request, organisation_id):
     if request.method == "POST":
         form = QuestionnaireImportUploadForm(request.POST, request.FILES)
         if form.is_valid():
+            # M009B Increment 1 - defaults to XLSX when the field is
+            # absent/blank, so every pre-existing caller that posts only
+            # `{"file": ...}` (M009A's own, unmodified test suite) is
+            # unaffected (see questionnaire.forms.
+            # QuestionnaireImportUploadForm's own docstring for why this
+            # field is `required=False`, not `required=True`).
+            declared_format = (
+                form.cleaned_data.get("declared_format") or QuestionnaireImport.FILE_FORMAT_XLSX
+            )
             try:
                 import_record = import_services.ingest_questionnaire_import(
                     organisation=organisation,
                     actor=request.user,
                     uploaded_file=form.cleaned_data["file"],
                     original_filename=getattr(form.cleaned_data["file"], "name", ""),
+                    declared_format=declared_format,
                 )
             except QuestionnaireImportValidationError as exc:
                 form.add_error("file", str(exc))

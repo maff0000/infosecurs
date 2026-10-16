@@ -89,6 +89,7 @@ jobs:
           questionnaire/tests/test_m009a_security_gate.py
           questionnaire/tests/test_m009a_scanner.py
           questionnaire/tests/test_m009a_clamav_image_pin.py
+          questionnaire/tests/test_m009b_csv_import.py
           organisations/tests/test_m009a_reset_reconciliation.py
 
   integration:
@@ -202,3 +203,4 @@ jobs:
           questionnaire/tests/test_m009a_views.py
           questionnaire/tests/test_m009a_entitlement.py
           questionnaire/tests/test_m009a_browser_acceptance.py
+          questionnaire/tests/test_m009b_readiness_gate.py
