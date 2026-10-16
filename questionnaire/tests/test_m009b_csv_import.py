@@ -109,14 +109,20 @@ class TestExtractCandidates:
         unanswered = by_text["Do you have an incident response plan?"]
         assert unanswered.customer_provided_answer_text is None
 
-    def test_blank_question_row_produces_excluded_blank_question_candidate(self, tmp_path):
+    def test_blank_question_row_produces_excluded_other_candidate(self, tmp_path):
         """M009B Increment 1 repair (defect B3) - this test previously
         asserted the OPPOSITE (`len(outcome.candidates) == 2`, i.e. the
         blank row produced no candidate at all), which was the defect
         itself. Central Architecture has now determined CSV needs
         different handling than XLSX's own blank-row-drops-silently
         rule, so this is a deliberate, acknowledged behaviour change, not
-        a regression."""
+        a regression.
+
+        The disposition value itself is "excluded_other", reused per
+        M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md §4.1,
+        rather than a dedicated CSV-specific value (a since-corrected
+        earlier repair, `060e2cd`, had invented
+        "excluded_blank_question" here)."""
         path = tmp_path / "f.csv"
         path.write_bytes(corpus.csv_with_blank_question_rows())
         outcome = csv_import.extract_candidates(str(path))
@@ -124,8 +130,11 @@ class TestExtractCandidates:
         assert len(outcome.candidates) == 3
         assert outcome.summary["question_count"] == 2
         dispositions = [c.disposition for c in outcome.candidates]
-        assert dispositions == ["question", "excluded_blank_question", "question"]
-        assert outcome.summary["excluded_counts_by_disposition"]["excluded_blank_question"] == 1
+        assert dispositions == ["question", "excluded_other", "question"]
+        assert outcome.summary["excluded_counts_by_disposition"]["excluded_other"] == 1
+        blank_row_candidate = outcome.candidates[1]
+        assert blank_row_candidate.extraction_status == "extracted"
+        assert blank_row_candidate.extraction_error == ""
 
     def test_duplicate_question_text_excluded(self, tmp_path):
         path = tmp_path / "f.csv"
@@ -230,7 +239,28 @@ class TestB2ZeroDataRows:
 class TestB3BlankQuestionRowProvenance:
     """Defect B3 - a blank-question row previously vanished from import
     provenance entirely (bare `continue`, no `Candidate` ever created),
-    taking any answer/reference data that row carried with it."""
+    taking any answer/reference data that row carried with it.
+
+    Corrected design (Independent Audit + Central Architecture decision,
+    2026-10-16): the fixed-up row reuses the PRE-EXISTING
+    "excluded_other" disposition value, per
+    M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md §4.1 ("Blank
+    `question` cells are recorded... excluded from processing, same
+    disposition shape M009A already uses (`excluded_other`-equivalent) -
+    reusing the `disposition` enum's existing values rather than
+    inventing CSV-specific ones"), rather than the dedicated
+    "excluded_blank_question" value an earlier repair (`060e2cd`) had
+    invented. The underlying guarantees this class proves are unchanged:
+    the row is never silently dropped, its provenance (row number, any
+    non-blank answer/reference) survives, and it is never eligible for
+    AI generation (never `disposition == "question"`). Because
+    "excluded_other" is now also produced by the oversized-field
+    rejections (B4.1) elsewhere in this same function, this class also
+    proves the two cases remain genuinely distinguishable via
+    `extraction_status`/`extraction_error`, and that oversized-field
+    rejection takes priority when a row is both blank AND oversized
+    (see `test_blank_question_row_with_also_oversized_field_fails_safely`
+    below)."""
 
     def test_blank_question_row_carrying_reference_produces_candidate(self, tmp_path):
         path = tmp_path / "f.csv"
@@ -239,13 +269,18 @@ class TestB3BlankQuestionRowProvenance:
         assert outcome.status == "extracted"
         assert len(outcome.candidates) == 3
         dispositions = [c.disposition for c in outcome.candidates]
-        assert dispositions == ["question", "excluded_blank_question", "question"]
+        assert dispositions == ["question", "excluded_other", "question"]
 
         blank_row_candidate = outcome.candidates[1]
         # Provenance survives: the original row number and its
         # non-blank reference value are both retained.
         assert blank_row_candidate.source_location["row"] == 3
         assert blank_row_candidate.source_location["reference_value"] == "REF-BLANK-ROW"
+        # Distinguishable from an oversized-field "excluded_other" row
+        # via extraction_status/extraction_error: this row is excluded,
+        # not failed.
+        assert blank_row_candidate.extraction_status == "extracted"
+        assert blank_row_candidate.extraction_error == ""
 
     def test_blank_question_row_never_eligible_for_ai_generation(self, tmp_path):
         """Explicit proof, not just absence of a counter-example: a
@@ -256,11 +291,63 @@ class TestB3BlankQuestionRowProvenance:
         path.write_bytes(corpus.csv_blank_question_row_carrying_reference())
         outcome = csv_import.extract_candidates(str(path))
         blank_row_candidate = outcome.candidates[1]
-        assert blank_row_candidate.disposition == "excluded_blank_question"
+        assert blank_row_candidate.disposition == "excluded_other"
         assert blank_row_candidate.disposition != QuestionnaireImportQuestion.DISPOSITION_QUESTION
-        assert blank_row_candidate.disposition == QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_BLANK_QUESTION
+        assert blank_row_candidate.disposition == QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_OTHER
         question_dispositions = [c.disposition for c in outcome.candidates if c is not blank_row_candidate]
         assert all(d == "question" for d in question_dispositions)
+
+    def test_blank_question_row_distinguishable_from_oversized_field_excluded_other(self, tmp_path):
+        """Both a pure blank-question row and an oversized-field
+        rejection now share `disposition == "excluded_other"` - this
+        proves they remain distinguishable from each other via
+        `extraction_status`/`extraction_error`, exactly as the
+        corrected design requires."""
+        blank_path = tmp_path / "blank.csv"
+        blank_path.write_bytes(corpus.csv_blank_question_row_carrying_reference())
+        blank_outcome = csv_import.extract_candidates(str(blank_path))
+        blank_row_candidate = blank_outcome.candidates[1]
+        assert blank_row_candidate.disposition == "excluded_other"
+        assert blank_row_candidate.extraction_status == "extracted"
+        assert blank_row_candidate.extraction_error == ""
+
+        oversized_path = tmp_path / "oversized.csv"
+        oversized_path.write_bytes(
+            corpus.csv_oversized_answer_cell(csv_import.MAX_CSV_CELL_TEXT_LENGTH)
+        )
+        oversized_outcome = csv_import.extract_candidates(str(oversized_path))
+        oversized_candidate = oversized_outcome.candidates[0]
+        assert oversized_candidate.disposition == "excluded_other"
+        assert oversized_candidate.extraction_status == "failed"
+        assert oversized_candidate.extraction_error == "answer_text_exceeds_max_length"
+
+        # Same disposition string, genuinely different extraction_status
+        # - the two cases are NOT conflated.
+        assert blank_row_candidate.disposition == oversized_candidate.disposition
+        assert blank_row_candidate.extraction_status != oversized_candidate.extraction_status
+
+    def test_blank_question_row_with_also_oversized_field_fails_safely(self, tmp_path):
+        """Central Architecture's explicit adversarial-case requirement:
+        a row that is BOTH blank-question AND carries an oversized
+        answer/reference cell must still fail safely - the oversized-
+        field rejection takes priority over the blank-question check
+        (the pre-existing B4 priority ordering in `extract_candidates`'s
+        if/elif chain is unchanged by this correction), never silently
+        treated as merely "blank-question excluded"."""
+        path = tmp_path / "f.csv"
+        oversized = "A" * (csv_import.MAX_CSV_CELL_TEXT_LENGTH + 1)
+        path.write_bytes(
+            f"Question,Answer\r\n,{oversized}\r\n".encode("utf-8")
+        )
+        outcome = csv_import.extract_candidates(str(path))
+        assert outcome.status == "extracted"
+        assert len(outcome.candidates) == 1
+        candidate = outcome.candidates[0]
+        assert candidate.disposition == "excluded_other"
+        assert candidate.extraction_status == "failed"
+        assert candidate.extraction_error == "answer_text_exceeds_max_length"
+        # Never carries the oversized answer as "provenance".
+        assert candidate.customer_provided_answer_text is None
 
     def test_blank_question_row_reaches_db_via_dispatch(self, org_a, user_a, monkeypatch):
         """End-to-end proof through the real `import_services` pipeline,
@@ -279,7 +366,10 @@ class TestB3BlankQuestionRowProvenance:
         assert import_record.status == QuestionnaireImport.STATUS_EXTRACTED
         links = QuestionnaireImportQuestion.objects.filter(import_record=import_record)
         assert links.count() == 3
-        blank_link = links.get(disposition=QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_BLANK_QUESTION)
+        blank_link = links.get(
+            disposition=QuestionnaireImportQuestion.DISPOSITION_EXCLUDED_OTHER,
+            extraction_status=QuestionnaireImportQuestion.EXTRACTION_STATUS_EXTRACTED,
+        )
         assert blank_link.question is None
         assert blank_link.source_location["reference_value"] == "REF-BLANK-ROW"
 

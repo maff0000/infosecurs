@@ -516,16 +516,26 @@ IMPORT_QUESTION_DISPOSITION_INSTRUCTIONAL_TEXT = "instructional_text"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE = "excluded_duplicate"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS = "excluded_ambiguous"
 IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER = "excluded_other"
-# M009B Increment 1 repair (defect B3) - CSV V1-specific. A blank
-# question cell in a CSV row is never silently dropped (unlike XLSX's
-# own blank-row rule) - it gets its own disposition so the row's
+# M009B Increment 1 repair (defect B3) - a blank question cell in a CSV
+# row is never silently dropped (unlike XLSX's own blank-row rule) - it
+# still produces a Candidate/QuestionnaireImportQuestion so the row's
 # provenance/source_location and any non-blank answer/reference it
 # carries survive, while never being eligible for AI generation (that
 # requires disposition == DISPOSITION_QUESTION elsewhere in the
-# pipeline, which this value is not). Additive choice only - `disposition`
-# is a plain `CharField(choices=...)` with no database-level CHECK
-# constraint, so this does not require a schema migration.
-IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION = "excluded_blank_question"
+# pipeline, which "excluded_other" is not). This REUSES the pre-existing
+# DISPOSITION_EXCLUDED_OTHER value above rather than a dedicated
+# CSV-specific one, per M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-
+# READINESS.md §4.1 ("Blank `question` cells are recorded... excluded
+# from processing, same disposition shape M009A already uses
+# (`excluded_other`-equivalent) - reusing the `disposition` enum's
+# existing values rather than inventing CSV-specific ones"). An earlier
+# repair (`060e2cd`) added a dedicated `excluded_blank_question` choice
+# here; a subsequent Independent Audit found that conflicted with §4.1,
+# and Central Architecture directed its removal - see
+# `questionnaire/csv_import.py::extract_candidates` for how a
+# blank-question `excluded_other` row is distinguished from an
+# oversized-field `excluded_other` row (via `extraction_status`/
+# `extraction_error`), since both now share this one disposition value.
 IMPORT_QUESTION_DISPOSITION_CHOICES = [
     (IMPORT_QUESTION_DISPOSITION_QUESTION, "Question"),
     (IMPORT_QUESTION_DISPOSITION_HEADING, "Heading"),
@@ -533,7 +543,6 @@ IMPORT_QUESTION_DISPOSITION_CHOICES = [
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE, "Excluded - duplicate"),
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS, "Excluded - ambiguous"),
     (IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER, "Excluded - other"),
-    (IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION, "Excluded - blank question"),
 ]
 
 IMPORT_QUESTION_EXTRACTION_STATUS_PENDING = "pending"
@@ -572,7 +581,6 @@ class QuestionnaireImportQuestion(models.Model):
     DISPOSITION_EXCLUDED_DUPLICATE = IMPORT_QUESTION_DISPOSITION_EXCLUDED_DUPLICATE
     DISPOSITION_EXCLUDED_AMBIGUOUS = IMPORT_QUESTION_DISPOSITION_EXCLUDED_AMBIGUOUS
     DISPOSITION_EXCLUDED_OTHER = IMPORT_QUESTION_DISPOSITION_EXCLUDED_OTHER
-    DISPOSITION_EXCLUDED_BLANK_QUESTION = IMPORT_QUESTION_DISPOSITION_EXCLUDED_BLANK_QUESTION
 
     EXTRACTION_STATUS_PENDING = IMPORT_QUESTION_EXTRACTION_STATUS_PENDING
     EXTRACTION_STATUS_EXTRACTED = IMPORT_QUESTION_EXTRACTION_STATUS_EXTRACTED

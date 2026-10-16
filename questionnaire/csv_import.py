@@ -376,10 +376,25 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
     text - CSV has no structural signal equivalent to XLSX's merged-cell
     heading rule, so no "heading" disposition is ever produced here (never
     an invented NLP "looks instructional" heuristic). A BLANK question
-    cell is its own disposition, "excluded_blank_question" - a deliberate
-    CSV-specific divergence from XLSX's own silent-drop blank-row rule,
-    because a CSV row can carry independent customer-answer/reference
-    data that must never be lost along with a blank question cell.
+    cell is disposition "excluded_other" - per
+    M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md §4.1 ("Blank
+    `question` cells are recorded... excluded from processing, same
+    disposition shape M009A already uses (`excluded_other`-equivalent) -
+    reusing the `disposition` enum's existing values rather than
+    inventing CSV-specific ones"), this reuses the pre-existing
+    `excluded_other` value rather than a new CSV-specific one. The row is
+    still never silently dropped - a Candidate is still produced, still
+    carrying its `source_location` and any non-blank answer/reference
+    the row carries - a deliberate CSV-specific divergence from XLSX's
+    own silent-drop blank-row rule, because a CSV row can carry
+    independent customer-answer/reference data that must never be lost
+    along with a blank question cell. It remains distinguishable from
+    the OTHER rows that also carry `disposition == "excluded_other"`
+    (the oversized-field rejections below) via `extraction_status`/
+    `extraction_error`: a blank-question row is `extraction_status ==
+    "extracted"` with `extraction_error == ""`, while an oversized-field
+    row is `extraction_status == "failed"` with a specific, non-empty
+    `extraction_error`.
     """
     try:
         rows = _read_rows(file_path)
@@ -477,18 +492,32 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
         elif is_blank_question:
             # Defect B3, fixed here: a blank-question row still produces
             # a Candidate (row identification/provenance survives, row
-            # count reconciles against `rows_discovered`), with its own,
-            # specifically-named disposition - never "question" (so this
-            # row can never become eligible for later AI generation,
-            # which requires disposition == "question" elsewhere in the
-            # pipeline - this falls out naturally simply by never setting
-            # that value here), and distinct from "excluded_duplicate"/
-            # "excluded_other" so an operator/export can tell the three
-            # apart. Central Architecture determined CSV needs different
-            # handling here than XLSX's own blank-row-drops-silently rule
-            # (XLSX rows cannot carry independent per-row customer-
-            # answer/reference data the way a CSV row can).
-            disposition = "excluded_blank_question"
+            # count reconciles against `rows_discovered`), never
+            # "question" (so this row can never become eligible for
+            # later AI generation, which requires disposition ==
+            # "question" elsewhere in the pipeline - this falls out
+            # naturally simply by never setting that value here).
+            #
+            # Per M009-AMENDMENT-2026-10-13-CSV-ASSURANCE-READINESS.md
+            # §4.1 ("Blank `question` cells are recorded... excluded from
+            # processing, same disposition shape M009A already uses
+            # (`excluded_other`-equivalent) - reusing the `disposition`
+            # enum's existing values rather than inventing CSV-specific
+            # ones"), this REUSES the pre-existing "excluded_other" value
+            # rather than a new CSV-specific one (an earlier repair,
+            # `060e2cd`, invented "excluded_blank_question" here - a
+            # subsequent Independent Audit found this conflicted with
+            # §4.1, and Central Architecture directed the revert to
+            # "excluded_other" below). It remains distinguishable from
+            # the OTHER "excluded_other" producer in this same function
+            # (the oversized-field rejections above) via
+            # `extraction_status`/`extraction_error`: this branch keeps
+            # `extraction_status == "extracted"` and
+            # `extraction_error == ""` (the row is excluded, not failed),
+            # while the oversized-field branches above set
+            # `extraction_status == "failed"` with a specific, non-empty
+            # `extraction_error`.
+            disposition = "excluded_other"
             extraction_status = "extracted"
             extraction_error = ""
         else:
@@ -507,19 +536,34 @@ def extract_candidates(file_path: str) -> ExtractionOutcome:
         extraction_order += 1
         customer_provided_answer_text = None
         if (
-            disposition in ("question", "excluded_blank_question")
+            (
+                disposition == "question"
+                or (disposition == "excluded_other" and extraction_status == "extracted")
+            )
             and answer_value is not None
             and raw_answer_text.strip() != ""
         ):
             # Verbatim, byte-for-byte - the durable provenance field (WO
             # §2.4). Never truncated/normalised - this is the customer's
             # own already-supplied answer, not extracted/derived text.
-            # An OVERSIZED answer never reaches this branch at all - it
-            # is forced to disposition "excluded_other" above, before
-            # this check ever runs - so this verbatim-provenance promise
-            # and the B4.1 per-field bound never conflict. Included for
-            # "excluded_blank_question" too (B3's own requirement to
-            # retain any non-blank answer/reference a blank-question row
+            #
+            # "excluded_other" is now shared by TWO cases (B3's
+            # blank-question exclusion reuses it per §4.1 - see the
+            # `elif is_blank_question:` branch above), so disposition
+            # alone can no longer distinguish them; `extraction_status`
+            # does: the blank-question case is always
+            # `extraction_status == "extracted"`, while every
+            # oversized-field rejection (B4.1) is always
+            # `extraction_status == "failed"`. An OVERSIZED answer
+            # therefore never reaches this branch at all - it is forced
+            # to disposition "excluded_other" WITH
+            # extraction_status "failed" above, before this check ever
+            # runs (oversized-field rejection takes priority over the
+            # blank-question check, per the existing if/elif ordering) -
+            # so this verbatim-provenance promise and the B4.1 per-field
+            # bound never conflict. Included for the blank-question
+            # "excluded_other" case too (B3's own requirement to retain
+            # any non-blank answer/reference a blank-question row
             # carries), not only "question".
             customer_provided_answer_text = answer_value
 
