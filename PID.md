@@ -75,6 +75,12 @@ Infosecurs Limited is the first tenant/test case.
 
 PoC/Beta engineering uses synthetic or deliberately non-sensitive Customer-Zero-safe fixtures until real-data authorisation exists.
 
+### 3.5 IRENE — Structured-first AI Security Adviser and shared Task List (M010)
+
+Infosecurs is AI-first but structured-first at the Foundation tier. **IRENE** is the customer-facing AI Security Adviser; **GUNNAR** remains the internal engineering delivery controller. IRENE leads customers through the already-approved, versioned M008 question/checkbox/radio journeys, explains approved security requirements and answers, remembers per-user/organisation checkpoints, and administers a tenant-wide shared Security Task List. The actual M008 question catalogue, permitted option codes, conditional gates, canonical answer writer, risk/policy consequences and M007 18-item completion metrics remain authoritative. No chatbot-created parallel answer/scoring system is permitted.
+
+IRENE is a prominent modal over the authenticated dashboard, with a Tasks sidebar page; customers can always use manual workflows. Scheduled review rules add deduplicated due/overdue tasks based on genuine domain review dates. Generative AI is optional for bounded clarification, not mandatory for normal questionnaire progression. Every tool applies current membership, object and entitlement checks; the AI never chooses a tenant, invents security state, approves high-consequence changes or bypasses Customer Assurance readiness. Skills are Git-versioned, progressively loaded instructions, not permission grants. Relevant detailed architecture and PIDs live in `docs/pids/M010-IRENE-MASTER-PID.md` and the M010A–F package PIDs.
+
 ---
 
 ## 4. Users
@@ -150,6 +156,9 @@ Full workflow, UX polish, security hardening, AI eval, recovery, release evidenc
 ### M009 — Customer Assurance / Questionnaire Completion
 Extends M005 (never replaces it): secure bulk questionnaire-file ingestion (XLSX first-class, DOCX/PDF per the accepted format contract), deterministic source provenance, bulk orchestration of the existing grounded-answer engine, exception-first review, and versioned export/write-back. Architecture/PID authorised (`docs/pids/M009-CUSTOMER-ASSURANCE-QUESTIONNAIRE-COMPLETION.md`); implementation requires its own Work Orders.
 
+### M010 — IRENE AI-First Adviser, Structured Foundations Guidance and Security Tasks
+The primary guided interaction layer; shared tenant-scoped tasks, checkpoints, vetted product navigation, optional bounded advice, scheduled security-review reminders and entitlement-gated Customer Assurance coordination. Built on M007/M008, not a replacement for canonical M001–M009 services. Detailed PIDs M010A–F and a single-campaign Work Order exist (`docs/pids/M010-IRENE-MASTER-PID.md`). Product Authority requests a one-push implementation campaign; internal checks and STOPs remain mandatory, followed by one fresh integrated audit and Architect exact-head merge acceptance. Production launch remains separately gated.
+
 Future work such as supplier management, incident response, billing, Huntress/uSecure integration, GDPR and full ISO tooling is outside Beta 0.1 unless separately authorised.
 
 ---
@@ -175,6 +184,30 @@ M004 Policy  M005 Questionnaire Assurance
            ▼
      M009 Customer Assurance / Questionnaire Completion
 ```
+
+```text
+M007/M008 existing shell+structured answers + M002–M005 domain services
+          │
+          ▼
+    M010A task spine
+          │
+          ▼
+    M010B guided checkpoint
+          │
+          ▼
+    M010C IRENE modal+tools
+          │
+          ▼
+    M010D review scheduler
+          │
+          ▼
+    M010E entitlement/M009 links
+          │
+          ▼
+    M010F integrated audit
+```
+
+M009's own bulk pipeline is separate; it feeds IRENE only after separately accepted.
 
 ---
 
@@ -257,6 +290,10 @@ task in this product must be designed to this same doctrine from the
 outset: prefer a structured/controlled-value projection over raw customer
 prose, and treat sending free text to a consequential AI call as the
 exception requiring explicit justification, not the default.
+
+### 10.2 IRENE AI Adviser tool/capability boundary (M010)
+
+Conversation memory is not security truth; shared Task state is not a canonical security control assertion. Model tools are code-allowlisted and re-authorised per invocation; no raw SQL, arbitrary tenant ID, cross-tenant retrieval, public uploading bypass, or unsupervised risk/policy approval. Real customers require separate DPIA/data retention/processor and branding checks. Full detail in `docs/architecture/M010-SECURITY-THREAT-MODEL.md` and `docs/architecture/M010-ADVISER-TOOLS-AND-SKILLS.md`.
 
 ---
 
