@@ -62,8 +62,10 @@ the extra interpretation re-run cost matters.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
+from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -197,56 +199,146 @@ def _hash_grounding_snapshot(grounding_snapshot: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-@transaction.atomic
-def _persist_response(
+@dataclasses.dataclass(frozen=True)
+class PreparedQuestionnaireResponse:
+    """Everything `prepare_questionnaire_response` builds before any
+    persistence happens - the already-validated interpretation, grounding,
+    outcome and draft that `persist_prepared_response` needs to create
+    exactly one `QuestionnaireResponse` row. Nothing on this object is
+    written to the database by constructing it."""
+
+    organisation: Any
+    question: QuestionnaireQuestion
+    interpretation: Any
+    interpretation_record: Any
+    outcome: str
+    outcome_warnings: list
+    grounding_snapshot: dict
+    draft: Any
+    drafting_record: Any
+    actor: Any
+
+
+def prepare_questionnaire_response(
     organisation,
     question: QuestionnaireQuestion,
     *,
-    interpretation,
-    interpretation_record,
-    outcome: str,
-    outcome_warnings: list,
-    grounding_snapshot: dict,
-    draft,
-    drafting_record,
     actor,
-) -> QuestionnaireResponse:
-    review_warnings = list(outcome_warnings)
-    if draft.customer_review_note:
-        review_warnings.append(draft.customer_review_note)
+    interpretation_gateway: QuestionnaireInterpretationGateway = None,
+    drafting_gateway: QuestionnaireDraftingGateway = None,
+) -> PreparedQuestionnaireResponse:
+    """Run the interpret -> ground -> derive-outcome -> draft portion of the
+    pipeline (both AI calls, neither inside any transaction) and return the
+    result as a `PreparedQuestionnaireResponse`, without persisting
+    anything. Extracted unchanged from `generate_questionnaire_response` -
+    see that function's docstring, and the module docstring, for the full
+    pipeline and its failure-mode scope."""
+    interpretation_gateway = (
+        interpretation_gateway if interpretation_gateway is not None else LiteLLMGateway()
+    )
+    drafting_gateway = drafting_gateway if drafting_gateway is not None else LiteLLMGateway()
 
-    new_response = QuestionnaireResponse.objects.create(
+    interpretation_request = QuestionnaireInterpretationRequest(
+        organisation_id=str(organisation.pk),
+        question_text=question.question_text,
+        source_label=question.source_label,
+        available_keys=CATALOGUE,
+    )
+    interpretation, interpretation_record = interpret_questionnaire_question(
+        interpretation_gateway, interpretation_request, INTERPRETATION_PROMPT_VERSION
+    )
+    # Plain create, NOT wrapped in `persist_prepared_response`'s atomic
+    # block - interpretation may succeed even if drafting subsequently
+    # fails (PID §22's "interpretation succeeded" is independently true
+    # regardless of what happens next), so this event must not be rolled
+    # back by a later drafting failure.
+    record_event(
+        organisation,
+        ActivityEvent.EVENT_QUESTION_INTERPRETED,
+        actor=actor,
+        related_object_type="questionnaire_question",
+        related_object_id=str(question.id),
+        metadata={
+            "intent_type": interpretation.intent_type,
+            "requirement_scope": interpretation.requirement_scope,
+            "selected_keys": list(interpretation.selected_keys),
+            "evidence_explicitly_requested": interpretation.evidence_explicitly_requested,
+        },
+    )
+
+    grounding_snapshot = build_questionnaire_grounding_snapshot(
+        organisation, interpretation.selected_keys
+    )
+    outcome, outcome_warnings = derive_outcome(interpretation, grounding_snapshot)
+
+    drafting_request = QuestionnaireDraftingRequest(
+        organisation_id=str(organisation.pk),
+        question_text=question.question_text,
+        interpretation=interpretation,
+        outcome=outcome,
+        grounding_snapshot=grounding_snapshot,
+    )
+    draft, drafting_record = draft_questionnaire_answer(
+        drafting_gateway, drafting_request, DRAFTING_PROMPT_VERSION
+    )
+
+    return PreparedQuestionnaireResponse(
         organisation=organisation,
         question=question,
-        status=QuestionnaireResponse.STATUS_DRAFT,
-        interpreted_requirement_summary=interpretation.requirement_summary,
-        intent_type=interpretation.intent_type,
-        requirement_scope=interpretation.requirement_scope,
-        selected_keys=list(interpretation.selected_keys),
-        evidence_explicitly_requested=interpretation.evidence_explicitly_requested,
+        interpretation=interpretation,
+        interpretation_record=interpretation_record,
         outcome=outcome,
-        ai_draft_text=draft.answer_text,
-        current_answer_text=_initial_current_answer_text(outcome, draft),
-        review_warnings=review_warnings,
+        outcome_warnings=outcome_warnings,
         grounding_snapshot=grounding_snapshot,
-        grounding_snapshot_hash=_hash_grounding_snapshot(grounding_snapshot),
-        interpretation_prompt_version=interpretation.prompt_version,
-        drafting_prompt_version=draft.prompt_version,
-        interpretation_invocation_record=interpretation_record,
-        drafting_invocation_record=drafting_record,
-        created_by=actor,
+        draft=draft,
+        drafting_record=drafting_record,
+        actor=actor,
+    )
+
+
+@transaction.atomic
+def persist_prepared_response(prepared: PreparedQuestionnaireResponse) -> QuestionnaireResponse:
+    """Persist `prepared` as exactly one new `QuestionnaireResponse(
+    status=draft, ...)` in a single atomic block. Renamed from
+    `_persist_response` - identical body, now taking its inputs as one
+    `PreparedQuestionnaireResponse` instead of separate keyword
+    arguments."""
+    review_warnings = list(prepared.outcome_warnings)
+    if prepared.draft.customer_review_note:
+        review_warnings.append(prepared.draft.customer_review_note)
+
+    new_response = QuestionnaireResponse.objects.create(
+        organisation=prepared.organisation,
+        question=prepared.question,
+        status=QuestionnaireResponse.STATUS_DRAFT,
+        interpreted_requirement_summary=prepared.interpretation.requirement_summary,
+        intent_type=prepared.interpretation.intent_type,
+        requirement_scope=prepared.interpretation.requirement_scope,
+        selected_keys=list(prepared.interpretation.selected_keys),
+        evidence_explicitly_requested=prepared.interpretation.evidence_explicitly_requested,
+        outcome=prepared.outcome,
+        ai_draft_text=prepared.draft.answer_text,
+        current_answer_text=_initial_current_answer_text(prepared.outcome, prepared.draft),
+        review_warnings=review_warnings,
+        grounding_snapshot=prepared.grounding_snapshot,
+        grounding_snapshot_hash=_hash_grounding_snapshot(prepared.grounding_snapshot),
+        interpretation_prompt_version=prepared.interpretation.prompt_version,
+        drafting_prompt_version=prepared.draft.prompt_version,
+        interpretation_invocation_record=prepared.interpretation_record,
+        drafting_invocation_record=prepared.drafting_record,
+        created_by=prepared.actor,
     )
     # Emitted inside this same atomic block as the create (PID §24) - this
     # codebase's established "emit inside the same transaction as the state
     # change" discipline (see e.g. policy.views.policy_edit's
     # EVENT_POLICY_DRAFT_EDITED emission inside its own atomic block).
     record_event(
-        organisation,
+        prepared.organisation,
         ActivityEvent.EVENT_QUESTIONNAIRE_RESPONSE_GENERATED,
-        actor=actor,
+        actor=prepared.actor,
         related_object_type="questionnaire_response",
         related_object_id=str(new_response.id),
-        metadata={"outcome": outcome, "review_warning_count": len(review_warnings)},
+        metadata={"outcome": prepared.outcome, "review_warning_count": len(review_warnings)},
     )
     return new_response
 
@@ -280,67 +372,11 @@ def generate_questionnaire_response(
     object may be passed for both, or two independent ones - this function
     does not care which.
     """
-    interpretation_gateway = (
-        interpretation_gateway if interpretation_gateway is not None else LiteLLMGateway()
+    prepared = prepare_questionnaire_response(
+        organisation, question, actor=actor,
+        interpretation_gateway=interpretation_gateway, drafting_gateway=drafting_gateway,
     )
-    drafting_gateway = drafting_gateway if drafting_gateway is not None else LiteLLMGateway()
-
-    interpretation_request = QuestionnaireInterpretationRequest(
-        organisation_id=str(organisation.pk),
-        question_text=question.question_text,
-        source_label=question.source_label,
-        available_keys=CATALOGUE,
-    )
-    interpretation, interpretation_record = interpret_questionnaire_question(
-        interpretation_gateway, interpretation_request, INTERPRETATION_PROMPT_VERSION
-    )
-    # Plain create, NOT wrapped in `_persist_response`'s atomic block below -
-    # interpretation may succeed even if drafting subsequently fails (PID
-    # §22's "interpretation succeeded" is independently true regardless of
-    # what happens next), so this event must not be rolled back by a later
-    # drafting failure.
-    record_event(
-        organisation,
-        ActivityEvent.EVENT_QUESTION_INTERPRETED,
-        actor=actor,
-        related_object_type="questionnaire_question",
-        related_object_id=str(question.id),
-        metadata={
-            "intent_type": interpretation.intent_type,
-            "requirement_scope": interpretation.requirement_scope,
-            "selected_keys": list(interpretation.selected_keys),
-            "evidence_explicitly_requested": interpretation.evidence_explicitly_requested,
-        },
-    )
-
-    grounding_snapshot = build_questionnaire_grounding_snapshot(
-        organisation, interpretation.selected_keys
-    )
-    outcome, outcome_warnings = derive_outcome(interpretation, grounding_snapshot)
-
-    drafting_request = QuestionnaireDraftingRequest(
-        organisation_id=str(organisation.pk),
-        question_text=question.question_text,
-        interpretation=interpretation,
-        outcome=outcome,
-        grounding_snapshot=grounding_snapshot,
-    )
-    draft, drafting_record = draft_questionnaire_answer(
-        drafting_gateway, drafting_request, DRAFTING_PROMPT_VERSION
-    )
-
-    return _persist_response(
-        organisation,
-        question,
-        interpretation=interpretation,
-        interpretation_record=interpretation_record,
-        outcome=outcome,
-        outcome_warnings=outcome_warnings,
-        grounding_snapshot=grounding_snapshot,
-        draft=draft,
-        drafting_record=drafting_record,
-        actor=actor,
-    )
+    return persist_prepared_response(prepared)
 
 
 def accept_questionnaire_response(response: QuestionnaireResponse, *, actor) -> QuestionnaireResponse:
