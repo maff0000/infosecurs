@@ -25,7 +25,7 @@ import dataclasses
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseNotAllowed
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from entitlements.decorators import require_capability
@@ -232,6 +232,44 @@ def confirm_task(request, organisation_id):
         messages.error(request, "That confirmation could not be processed.")
 
     return redirect(f"{reverse('organisations:detail', args=[organisation.id])}?irene=open&irene_tab=ask")
+
+
+@login_required
+@require_capability("customer_assurance")
+def assurance_status(request, organisation_id):
+    """M010E PID §3 - the Monthly/PRO-gated Customer Assurance status
+    page. Deliberately gated on the EXPLICIT "customer_assurance"
+    capability (never the "irene" default `require_capability()` would
+    otherwise resolve for this `irene` namespace route) - a Foundational-
+    tier member hitting this URL directly, not through any link IRENE
+    would ever render for them, gets the ordinary, generic 403
+    `require_capability` already gives every other insufficient-tier
+    route in this codebase (PermissionDenied -> Django's own branded
+    403.html, carrying no message) - proving this gate is real access
+    control, not merely an absent link.
+
+    Reuses `irene.tools.get_customer_assurance_status` - the SAME tool
+    the Ask tab would call for this organisation - so this page and
+    anything IRENE says in conversation can never disagree about whether
+    the organisation is ready/entitled or what its real import rows are.
+    That tool independently re-proves BOTH the tier-2 entitlement and the
+    100% readiness gate on every call (see its own docstring) - this view
+    adds no readiness/entitlement check of its own beyond the
+    `require_capability("customer_assurance")` decorator above, exactly
+    the same "pipeline-level hook, never a view-level-only reimplementation"
+    discipline `questionnaire.upload_handler` already established for the
+    real upload view."""
+    from organisations.views import get_member_organisation_or_404
+
+    organisation = get_member_organisation_or_404(request.user, organisation_id)
+    request.session["current_organisation_id"] = str(organisation.id)
+    context = irene_tools.build_authorized_context(request, organisation)
+    status = irene_tools.get_customer_assurance_status(context)
+    return render(
+        request,
+        "irene/assurance_status.html",
+        {"organisation": organisation, "status": status},
+    )
 
 
 @login_required

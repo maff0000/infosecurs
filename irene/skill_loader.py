@@ -204,7 +204,7 @@ def load_skill(skill_name: str) -> LoadedSkill:
 # "no claims about unsupported features" (M010C PID §3) - rather than
 # listed-but-disabled, since no such skill directory exists in this
 # package's own scope to disable.
-ENABLED_SKILL_NAMES = ("foundations-guide", "task-administration")
+ENABLED_SKILL_NAMES = ("foundations-guide", "task-administration", "customer-assurance-guide")
 
 
 class SkillManifestValidationError(Exception):

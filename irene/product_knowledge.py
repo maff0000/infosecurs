@@ -163,6 +163,28 @@ PRODUCT_KNOWLEDGE_MAP: dict[str, ConceptEntry] = {
         version="1.0.0",
         sample_kwargs={"task_id": SAMPLE_TASK_ID},
     ),
+    # M010E PID §3 - the ONLY navigation this package adds: a safe link to
+    # the EXISTING, real, unmodified M009 upload view. `required_capability`
+    # is "customer_assurance" (tier 2, Monthly+) - the real, existing gate
+    # that route already carries via `entitlements.capabilities.
+    # ROUTE_NAMESPACE_TO_CAPABILITY["questionnaire"]`, unchanged by this
+    # package; `irene.tools.get_registered_route`'s own `_revalidate` call
+    # re-proves this independently on every resolution, so a caller whose
+    # tier has since dropped gets `None` here, never a stale link. There is
+    # no M009 write path anywhere near this entry - `get_registered_route`
+    # only ever resolves a URL string; the actual upload still only ever
+    # happens through that real view's own form POST.
+    "customer_assurance_upload": ConceptEntry(
+        concept_id="customer_assurance_upload",
+        label="Customer Assurance questionnaire upload",
+        service_reference="questionnaire.import_services:ingest_questionnaire_import",
+        route_name="questionnaire:import_upload",
+        relationship_type="workspace_page",
+        required_capability="customer_assurance",
+        allowed_projection_fields=(),
+        availability_flag=True,
+        version="1.0.0",
+    ),
 }
 
 

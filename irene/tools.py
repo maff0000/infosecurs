@@ -266,6 +266,102 @@ def get_registered_route(context: AuthorizedContext, *, concept_id: str, object_
         return None
 
 
+# M010E PID §3 - bounded (same discipline as DEFAULT_TASK_TOOL_PAGE_SIZE
+# above): the Customer Assurance read-only adapter never returns more than
+# this many `QuestionnaireImport` rows in one call.
+IMPORT_STATUS_PAGE_SIZE = 10
+
+
+def get_customer_assurance_status(context: AuthorizedContext) -> dict:
+    """
+    M010E PID §3 - the Customer Assurance (M009) read-only adapter's one
+    read tool. `required_capability` passed to `_revalidate` below is
+    deliberately the BASE "security" capability (Foundational tier and
+    above), never "customer_assurance" - a Foundational-tier member must
+    be able to call this tool at all, to receive a graceful, truthful
+    explanation of what is blocking Customer Assurance
+    (M010-MASTER-ARCHITECTURE.md §4's "explain available Foundations
+    progress and the entitlement-dependent Customer Assurance workflow
+    without leaking restricted data or invoking generation"); a Paused
+    (tier 0) session still fails closed here exactly like every other
+    read tool in this module, via `_revalidate`'s own ordinary
+    `PermissionDenied`.
+
+    The REAL tier-2 `customer_assurance` entitlement
+    (`entitlements.capabilities.has_capability`) and the REAL 100%
+    Foundations readiness gate (`security_baseline.readiness.
+    evaluate_assurance_readiness` - the SAME function `questionnaire.
+    upload_handler`'s own pipeline-level middleware hook uses to gate the
+    real upload view; never a second, independently-derived readiness
+    calculation) are BOTH independently re-checked INSIDE this function on
+    every call - never inherited from whatever view happened to dispatch
+    here, and never cached across calls. Only when BOTH pass does this
+    function ever read or return a single `QuestionnaireImport` row; for
+    every other caller - insufficient tier, OR sufficient tier but not yet
+    100% ready - it returns exactly the same blockers-only shape (fail
+    closed per M010E PID §3 scope item 3: "every IRENE tool/view that
+    touches anything beyond the bare Foundational tier's own scope must
+    independently fail closed ... for a sub-100%-ready-but-sufficient-tier
+    organisation"). The two gates are deliberately never distinguished in
+    the response shape - `has_customer_assurance_entitlement` is reported
+    plainly alongside the blockers either way, so the caller/skill can
+    phrase the explanation correctly, but the RESTRICTED fields
+    (`imports`/`upload_route`) are absent for both failure reasons alike.
+
+    Never returns `raw_extracted_text`, any questionnaire answer content,
+    or any CONFIRM/GAP/SUPPORTED verdict - only the bounded, safe fields
+    M010E PID §3's own scope names (filename, declared format,
+    security-gate status, extraction-summary question count), read
+    directly off the real, unmodified `QuestionnaireImport` model via a
+    plain, bounded `.filter()` query - the SAME read `questionnaire.
+    views.questionnaire_import_upload`/`questionnaire_import_detail`
+    already perform directly (no M009 service layer exists for this read,
+    so none is invented here either)."""
+    from entitlements.capabilities import has_capability
+    from questionnaire.models import QuestionnaireImport
+    from security_baseline.readiness import evaluate_assurance_readiness
+
+    organisation = _revalidate(context, "security")
+
+    readiness = evaluate_assurance_readiness(organisation)
+    has_customer_assurance = has_capability(context.request, "customer_assurance")
+
+    result = {
+        "has_customer_assurance_entitlement": has_customer_assurance,
+        "foundations_ready": readiness.is_ready,
+        "foundations_completion_percentage": readiness.completion.percentage,
+        "foundations_completed_count": readiness.completion.completed_count,
+        "foundations_total_count": readiness.completion.total_count,
+        "blockers": [{"code": blocker.code, "title": blocker.title} for blocker in readiness.blockers],
+        "upload_route": None,
+        "imports": None,
+    }
+
+    if not has_customer_assurance or not readiness.is_ready:
+        return result
+
+    result["upload_route"] = get_registered_route(context, concept_id="customer_assurance_upload")
+    imports = QuestionnaireImport.objects.filter(organisation=organisation).order_by("-uploaded_at")[
+        :IMPORT_STATUS_PAGE_SIZE
+    ]
+    result["imports"] = [
+        {
+            "import_id": str(import_record.id),
+            "original_filename": import_record.original_filename,
+            "file_format": import_record.file_format,
+            "security_gate_status": import_record.security_gate_status,
+            "status": import_record.status,
+            "question_count": (
+                (import_record.extraction_summary or {}).get("question_count")
+                if import_record.extraction_summary
+                else None
+            ),
+        }
+        for import_record in imports
+    ]
+    return result
+
+
 def get_available_tool_descriptions() -> list:
     """Safe, short (name + one-line description only) descriptions of
     every tool that is both registered AND feature-flag-enabled -
@@ -505,6 +601,20 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         description="Resolve a safe internal link for a registered Product Knowledge Map concept.",
         func=get_registered_route,
     ),
+    "get_customer_assurance_status": ToolSpec(
+        name="get_customer_assurance_status",
+        version="1.0.0",
+        action_class="R",
+        required_capability="security",
+        timeout_seconds=5.0,
+        max_results=1,
+        description=(
+            "Explain Customer Assurance readiness and entitlement, and report real "
+            "questionnaire-import status once both are satisfied."
+        ),
+        func=get_customer_assurance_status,
+        feature_flag="IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED",
+    ),
     "propose_task": ToolSpec(
         name="propose_task",
         version="1.0.0",
@@ -544,6 +654,8 @@ __all__ = [
     "get_task_detail",
     "get_allowed_stage",
     "get_registered_route",
+    "get_customer_assurance_status",
+    "IMPORT_STATUS_PAGE_SIZE",
     "propose_task",
     "confirm_task_creation",
 ]

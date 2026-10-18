@@ -59,6 +59,16 @@ class TestBootTimeValidator:
         assert "task_detail" in message
 
 
+class TestCustomerAssuranceUploadConcept:
+    """M010E PID §3 - the one navigation concept this package adds."""
+
+    def test_registered_and_available(self):
+        entry = get_concept("customer_assurance_upload")
+        assert entry is not None
+        assert entry.route_name == "questionnaire:import_upload"
+        assert entry.required_capability == "customer_assurance"
+
+
 class TestGetConcept:
     def test_returns_available_entry(self):
         assert get_concept("task_list") is not None

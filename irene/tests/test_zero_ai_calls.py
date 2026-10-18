@@ -37,6 +37,55 @@ class TestHomeRenderWithModalMakesZeroAICalls:
         assert mock_send.call_count == 0
 
 
+class TestAssuranceStatusPageMakesZeroAICalls:
+    """M010E PID §5 - the new Customer Assurance status page/tool is
+    entirely deterministic (readiness/entitlement/ORM reads only); it
+    must make zero AI-gateway calls regardless of IRENE_ADVISER_MODE_
+    ENABLED, and a simulated AI-provider failure must leave it (and the
+    existing manual M009 upload/status flow) completely unaffected -
+    reusing this file's own established `LiteLLMGateway._send` patch
+    technique for every surface M010E adds."""
+
+    def test_assurance_status_page_zero_gateway_calls(self, client_a, org_a, user_a, member_a):
+        with patch.object(LiteLLMGateway, "_send") as mock_send:
+            response = client_a.get(reverse("irene:assurance_status", args=[org_a.id]))
+        assert response.status_code == 200
+        assert mock_send.call_count == 0
+
+    def test_assurance_status_tool_zero_gateway_calls_even_if_adviser_mode_on(
+        self, org_a, user_a, member_a, settings
+    ):
+        """Even with adviser mode flagged on, this tool itself never
+        touches the gateway - it is a plain, deterministic read, exactly
+        like every other Class R tool in irene.tools."""
+        from entitlements.tiers import TIER_MONTHLY
+        from irene import tools as irene_tools
+        from irene.tests.conftest import request_at_tier
+
+        settings.IRENE_ADVISER_MODE_ENABLED = True
+        request = request_at_tier(user_a, tier=TIER_MONTHLY, organisation_id=org_a.id)
+        context = irene_tools.build_authorized_context(request, org_a)
+        with patch.object(LiteLLMGateway, "_send") as mock_send:
+            irene_tools.get_customer_assurance_status(context)
+        assert mock_send.call_count == 0
+
+    def test_simulated_ai_provider_failure_leaves_manual_m009_upload_unaffected(
+        self, client_a, org_a, user_a, member_a
+    ):
+        """A simulated AI-gateway failure must never affect the real,
+        manual M009 upload/status flow this package only reads from and
+        links to - that flow has no AI dependency of its own at all."""
+        from questionnaire.tests.conftest import _make_organisation_fully_assurance_ready
+
+        _make_organisation_fully_assurance_ready(org_a)
+        with patch.object(LiteLLMGateway, "_send", side_effect=RuntimeError("simulated provider outage")):
+            upload_response = client_a.get(reverse("questionnaire:import_upload", args=[org_a.id]))
+            assurance_response = client_a.get(reverse("irene:assurance_status", args=[org_a.id]))
+        assert upload_response.status_code == 200
+        assert assurance_response.status_code == 200
+        assert b"Upload a questionnaire" in assurance_response.content
+
+
 class TestAskTabWithAdviserModeOffMakesZeroAICalls:
     def test_ask_post_with_flag_off_zero_gateway_calls(self, client_a, org_a, user_a, member_a, settings):
         settings.IRENE_ADVISER_MODE_ENABLED = False
