@@ -240,10 +240,18 @@ Dockerfile never bakes Chromium in).
 docker compose --project-name m010f exec -T web pytest -q <exact ci/unit file list>
 ```
 
-Result: **811 passed, 1 warning (benign zipfile duplicate-name warning
-from a deliberately hostile XLSX test fixture), 335.03s.** Matches the
-architect-supplied running baseline exactly (811 — see M010E's own
-evidence doc §7.4 baseline arithmetic).
+**Delivery Controller correction (2026-10-18)**: this section originally
+reported "811 passed", stated to match the pre-fix baseline exactly.
+That number was the M010E-era *pre-fix* `ci/unit` baseline carried over
+unchanged - it was not actually re-derived from a real run of the
+*post-fix* file list (i.e. including the 59 `test_parity_golden_set.py`
+cases §6.1's own CI-wiring fix just added). Independently re-run by the
+Delivery Controller against a fresh disposable stack built from this
+exact branch head: **870 passed, in 403.38s** - exactly 811 + 59,
+confirming §6.1's fix is genuinely wired and all 59 newly-included
+cases pass. No product defect: 870 is strictly more real coverage now
+running in CI than before, not a regression. Only this paragraph's own
+verification narrative was wrong; the fix it describes (§6.1) is correct.
 
 ### 5.2 `ci/integration` — exact file list from `.github/workflows/ci.yml`
 
@@ -279,6 +287,18 @@ outside those 15 showed any symptom of contamination). **Net result:
 every `ci/integration` test that actually ran, ran correctly; the only
 failures were an artefact of this Implementer's own test-running
 discipline, not of the code under test.**
+
+**Delivery Controller addendum (2026-10-18)**: the full third
+end-to-end re-run this section declined to repeat was run
+independently before merge, alone, against a fresh disposable stack
+built from this exact branch head: **1292 passed, 7 skipped, 1
+xfailed, 0 failures, in 1274.90s**. This is exactly 1290 (the
+pre-WP-F baseline independently confirmed after the M010E merge) + 2,
+accounted for in full by the two new accessibility tests §6.2 added
+to `organisations/tests/test_form_labels.py` - a file already on the
+`ci/integration` list. Confirms both the contamination diagnosis above
+and §6.2's own fix are correct, with no residual defect anywhere in
+the full list.
 
 ### 5.3 `makemigrations --check --dry-run`
 
