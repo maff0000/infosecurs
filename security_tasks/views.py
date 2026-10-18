@@ -65,6 +65,10 @@ def task_list(request, organisation_id):
         page_number = 1
 
     task_page = services.get_task_list(organisation, page=page_number, **filters)
+    # M010D PID §4 / M010-MASTER-ARCHITECTURE.md §6 "no independent LLM
+    # scheduler judgement" - read-only, zero-AI counts derived through
+    # get_task_list's own existing filters (see that function's docstring).
+    review_briefing = services.get_review_briefing_counts(organisation)
 
     return render(
         request,
@@ -73,6 +77,7 @@ def task_list(request, organisation_id):
             "organisation": organisation,
             "filter_form": filter_form,
             "task_page": task_page,
+            "review_briefing": review_briefing,
         },
     )
 

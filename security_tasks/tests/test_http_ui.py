@@ -146,6 +146,40 @@ class TestTaskTransitionAndAssignFlow:
 
 
 @pytest.mark.django_db
+class TestReviewBriefingOnTaskListPage:
+    """M010D PID §4 - the read-only 'upcoming/overdue' summary on the
+    Tasks page, derived from `security_tasks.services.
+    get_review_briefing_counts` (itself built on `get_task_list`'s own
+    existing filters - never a new, parallel query path)."""
+
+    def test_overdue_and_due_soon_counts_render_on_the_list_page(self, client_a, org_a, user_a):
+        from django.utils import timezone
+
+        services.create_task(
+            org_a, actor=user_a, kind=TaskKind.MANUAL_OTHER, title="Overdue task",
+            idempotency_key=str(uuid.uuid4()), due_at=timezone.now() - timezone.timedelta(days=1),
+        )
+        response = client_a.get(reverse("security_tasks:list", args=[org_a.id]))
+        assert response.status_code == 200
+        assert b"Overdue" in response.content
+        assert b"Due in 7 days" in response.content
+        assert b"Due in 30 days" in response.content
+
+    def test_briefing_counts_never_include_another_organisations_tasks(
+        self, client_a, org_a, org_b, user_a, user_b, member_b
+    ):
+        from django.utils import timezone
+
+        services.create_task(
+            org_b, actor=user_b, kind=TaskKind.MANUAL_OTHER, title="Org B overdue task",
+            idempotency_key=str(uuid.uuid4()), due_at=timezone.now() - timezone.timedelta(days=1),
+        )
+        response = client_a.get(reverse("security_tasks:list", args=[org_a.id]))
+        assert response.status_code == 200
+        assert response.context["review_briefing"]["overdue"] == 0
+
+
+@pytest.mark.django_db
 class TestTaskTextEscaping:
     def test_hostile_title_is_escaped_in_list_and_detail(self, client_a, org_a, user_a):
         hostile = "<script>alert(document.cookie)</script>"

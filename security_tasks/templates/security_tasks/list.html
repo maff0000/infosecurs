@@ -58,6 +58,24 @@
     </div>
 </div>
 
+<div class="metric-card-row" aria-label="Upcoming and overdue review tasks">
+    <div class="metric-card">
+        <h2 class="metric-card__title">Overdue</h2>
+        <p class="metric-card__value">{{ review_briefing.overdue }}</p>
+        <p class="metric-card__copy">Review tasks past their due date.</p>
+    </div>
+    <div class="metric-card">
+        <h2 class="metric-card__title">Due in 7 days</h2>
+        <p class="metric-card__value">{{ review_briefing.due_within_7_days }}</p>
+        <p class="metric-card__copy">Review tasks due within the next week.</p>
+    </div>
+    <div class="metric-card">
+        <h2 class="metric-card__title">Due in 30 days</h2>
+        <p class="metric-card__value">{{ review_briefing.due_within_30_days }}</p>
+        <p class="metric-card__copy">Review tasks due within the next month.</p>
+    </div>
+</div>
+
 <form method="get" class="task-filter-form" aria-label="Filter tasks">
     <div class="task-filter-form__field">
         <label for="{{ filter_form.group.id_for_label }}">Group</label>
