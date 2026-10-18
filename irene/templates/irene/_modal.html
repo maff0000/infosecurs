@@ -1,0 +1,114 @@
+{% load static %}
+{# IRENE modal partial (M010C PID §1) - included from organisations/
+   templates/organisations/detail.html. Always rendered in the DOM;
+   [hidden]/JS only control PRESENTATION (static/irene/js/modal.js) -
+   with JS disabled this content is an ordinary, always-visible page
+   section, never a dead end (M010-UX-CUSTOMER-JOURNEYS.md §1). #}
+<link rel="stylesheet" href="{% static 'irene/css/modal.css' %}">
+
+<div class="irene-trigger">
+    <button type="button" id="irene-open-trigger" class="button button--secondary" aria-expanded="false" aria-haspopup="dialog">
+        Ask IRENE
+    </button>
+</div>
+
+<div id="irene-modal-overlay" class="irene-overlay" hidden></div>
+
+<div id="irene-modal"
+     class="irene-modal"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="irene-modal-heading"
+     data-auto-open="{% if irene.auto_open %}true{% else %}false{% endif %}"
+     hidden>
+    <div class="irene-modal__header">
+        <h2 id="irene-modal-heading" class="irene-modal__title" tabindex="-1">IRENE — your AI security adviser</h2>
+        <button type="button" id="irene-modal-close" class="irene-modal__close" aria-label="Close IRENE">Close</button>
+    </div>
+    <p class="irene-modal__disclaimer">
+        IRENE is an AI assistant, not a member of staff. She never approves policies, accepts risks or changes your saved answers on her own.
+    </p>
+
+    <div class="irene-tablist" role="tablist" aria-label="IRENE">
+        <button type="button" role="tab" data-irene-tab="continue" aria-selected="true" aria-controls="irene-panel-continue" id="irene-tab-continue">Continue</button>
+        <button type="button" role="tab" data-irene-tab="tasks" aria-selected="false" tabindex="-1" aria-controls="irene-panel-tasks" id="irene-tab-tasks">Tasks</button>
+        <button type="button" role="tab" data-irene-tab="ask" aria-selected="false" tabindex="-1" aria-controls="irene-panel-ask" id="irene-tab-ask">Ask</button>
+        <button type="button" role="tab" data-irene-tab="activity" aria-selected="false" tabindex="-1" aria-controls="irene-panel-activity" id="irene-tab-activity">Activity</button>
+    </div>
+
+    <div id="irene-panel-continue" class="irene-panel" data-irene-panel="continue" role="tabpanel" aria-labelledby="irene-tab-continue">
+        {% with question=irene.continue_tab.question %}
+        {% if question %}
+            <h3>{{ question.title }}</h3>
+            <p>{{ question.stage_progress_copy }}</p>
+            <p>Foundations completion: {{ question.completion_percentage }}%</p>
+            <a class="button button--primary" href="{{ question.manual_page_url }}">Continue — {{ question.title }}</a>
+        {% else %}
+            <p class="empty-state">You have no outstanding guided Foundations question right now.</p>
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <div id="irene-panel-tasks" class="irene-panel" data-irene-panel="tasks" hidden role="tabpanel" aria-labelledby="irene-tab-tasks">
+        {% if irene.tasks_tab.tasks %}
+            <ul class="irene-task-list">
+                {% for task in irene.tasks_tab.tasks %}
+                    <li>
+                        <span class="badge">{{ task.get_status_display }}</span>
+                        {{ task.title }}
+                        {% if task.due_at %}<span class="page-header__subtitle">due {{ task.due_at|date:"d M Y" }}</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty-state">No tasks yet.</p>
+        {% endif %}
+        <p><a class="button button--secondary" href="{{ irene.tasks_tab.tasks_url }}">Open full Tasks list ({{ irene.tasks_tab.total_count }})</a></p>
+    </div>
+
+    <div id="irene-panel-ask" class="irene-panel" data-irene-panel="ask" hidden role="tabpanel" aria-labelledby="irene-tab-ask">
+        {% if not irene.ask_tab.adviser_mode_enabled %}
+            <p class="message">You can continue the questionnaire; free-form explanations are temporarily unavailable.</p>
+        {% endif %}
+        <div class="irene-ask-history">
+            {% for message in irene.ask_tab.messages %}
+                <div class="irene-ask-message irene-ask-message--{{ message.role }}">
+                    <div class="irene-ask-message__role">{{ message.get_role_display }}</div>
+                    <div>{{ message.content }}</div>
+                </div>
+            {% endfor %}
+        </div>
+        {% for action in irene.ask_tab.pending_actions %}
+            <form method="post" action="{% url 'irene:confirm_task' organisation.id %}" class="irene-ask-proposal">
+                {% csrf_token %}
+                <input type="hidden" name="action_id" value="{{ action.id }}">
+                <p>Proposed task: <strong>{{ action.requested_params_redacted.title }}</strong></p>
+                <button type="submit" class="button button--primary">Confirm — create this task</button>
+            </form>
+        {% endfor %}
+        <form method="post" action="{% url 'irene:ask' organisation.id %}">
+            {% csrf_token %}
+            <label for="{{ irene.ask_tab.form.intent_code.id_for_label }}">What is this about?</label>
+            {{ irene.ask_tab.form.intent_code }}
+            <label for="{{ irene.ask_tab.form.message.id_for_label }}">Your question</label>
+            {{ irene.ask_tab.form.message }}
+            <button type="submit" class="button button--primary">Send</button>
+        </form>
+    </div>
+
+    <div id="irene-panel-activity" class="irene-panel" data-irene-panel="activity" hidden role="tabpanel" aria-labelledby="irene-tab-activity">
+        <ul class="irene-activity-list">
+            {% for event in irene.activity_tab.task_events %}
+                <li>{{ event.get_action_display }} — {{ event.task.title }} ({{ event.event_time|date:"d M Y H:i" }})</li>
+            {% endfor %}
+            {% for action in irene.activity_tab.assistant_actions %}
+                <li>IRENE {{ action.tool_name }} — {{ action.get_decision_state_display }} ({{ action.created_at|date:"d M Y H:i" }})</li>
+            {% endfor %}
+        </ul>
+        {% if not irene.activity_tab.task_events and not irene.activity_tab.assistant_actions %}
+            <p class="empty-state">No recent activity yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script src="{% static 'irene/js/modal.js' %}"></script>

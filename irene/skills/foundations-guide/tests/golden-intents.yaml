@@ -1,0 +1,19 @@
+# Golden intent -> skill routing fixtures for foundations-guide (M010C
+# PID §3; docs/skills/IRENE-SKILL-TEMPLATE.md §"References and tests").
+#
+# Documentation/fixture only - irene/tests/test_skill_loader.py and
+# irene/tests/test_skill_router.py assert the routing decisions these
+# rows describe directly against irene.skill_router, rather than parsing
+# this file at runtime (this codebase takes no new YAML-parsing
+# dependency - see irene/skill_loader.py's own module docstring).
+cases:
+  - intent_code: explain_control
+    expect_skill: foundations-guide
+  - intent_code: clarify_option
+    expect_skill: foundations-guide
+  - intent_code: suggest_followup
+    expect_skill: foundations-guide
+  - intent_code: task_status_help
+    expect_skill: task-administration
+  - intent_code: unclear
+    expect_skill: null

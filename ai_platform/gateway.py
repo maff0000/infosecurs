@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
+from ai_platform.adviser_contracts import AdviserRequest, AdviserResponse
 from ai_platform.contracts import ContractValidationError, GenerationResult, GroundingPayload
 from ai_platform.interpretation_contracts import InterpretationRequest, InterpretationResponse
 from ai_platform.policy_contracts import PolicyGenerationResult, PolicyGroundingPayload
@@ -235,12 +236,49 @@ class QuestionnaireDraftingGateway(abc.ABC):
         raise NotImplementedError
 
 
+class AdviserGateway(abc.ABC):
+    """Provider-neutral IRENE-ADVISER boundary (M010C PID §3-§6; docs/
+    architecture/M010-ADVISER-TOOLS-AND-SKILLS.md §5). See
+    `QuestionnaireInterpretationGateway`'s own docstring for why this is a
+    separate ABC from every other task's gateway, including that one:
+    `AdviserRequest`/`AdviserResponse` is its own request/response contract,
+    and every existing gateway test double only ever needed to satisfy the
+    methods its own task(s) required. `LiteLLMGateway` below implements
+    this ABC alongside the other four on one concrete class; `ai_platform.
+    testing.FakeAdviserGateway` is this ABC's own, separate test double -
+    the ONLY gateway `irene.orchestration` may construct in a test, per
+    this package's own "never a real/live call in a test" constraint.
+
+    This ABC is deliberately never invoked anywhere in this codebase
+    unless `settings.IRENE_ADVISER_MODE_ENABLED` is `True` (the shipped
+    default is `False`) - see `irene.orchestration.ask_irene`'s own
+    docstring for the exact gate.
+    """
+
+    @abc.abstractmethod
+    def ask_adviser(self, request: AdviserRequest, prompt_version: str) -> AdviserResponse:
+        """Run one Ask-tab adviser call and return a validated
+        `AdviserResponse`.
+
+        Raises a `GatewayError` subclass on any failure - never returns a
+        partially-valid result, and never returns a response naming a
+        `proposed_actions[].action_type` outside `ai_platform.
+        adviser_contracts.ALLOWED_PROPOSED_ACTION_TYPES` (enforced by
+        `AdviserResponse.from_response_dict`/`ProposedAction.__post_init__`
+        themselves - this method's own contract is simply "never return
+        something that fails that validation without raising
+        `InvalidResponseError` instead").
+        """
+        raise NotImplementedError
+
+
 class LiteLLMGateway(
     RiskGenerationGateway,
     RiskInterpretationGateway,
     PolicyGenerationGateway,
     QuestionnaireInterpretationGateway,
     QuestionnaireDraftingGateway,
+    AdviserGateway,
 ):
     """Real implementation - the existing Trinity LiteLLM-compatible
     gateway (PID §9.1, §9.2, §24).
@@ -566,6 +604,75 @@ class LiteLLMGateway(
             payload, prompt_version, request.interpretation.selected_keys
         )
 
+    def ask_adviser(self, request: AdviserRequest, prompt_version: str) -> AdviserResponse:
+        """`AdviserGateway.ask_adviser` (M010C). Reuses this class's own
+        mechanics exactly as every other task's method does above - same
+        HTTP client, same lazy config loading, same error taxonomy, same
+        credential handling.
+
+        `model_trace_id` is generated here (a fresh UUID), NEVER read off
+        the gateway's own JSON payload - see `AdviserResponse.
+        from_response_dict`'s own docstring for why the model has no
+        authority to assert its own trace id."""
+        import uuid as _uuid
+
+        from config.env import optional_env, require_env
+
+        from ai_platform.prompts import (
+            KNOWN_ADVISER_PROMPT_VERSIONS,
+            build_adviser_messages_for_version,
+        )
+
+        build_messages = build_adviser_messages_for_version(prompt_version)
+        if build_messages is None:
+            raise InvalidResponseError(
+                f"requested prompt_version {prompt_version!r} is not one of the "
+                f"adviser prompt versions this gateway build knows how to render "
+                f"{KNOWN_ADVISER_PROMPT_VERSIONS!r}"
+            )
+
+        base_url = require_env("AI_GATEWAY_BASE_URL").rstrip("/")
+        key_file = require_env("AI_GATEWAY_API_KEY_FILE")
+        # M010 architecture doc §4: "Use existing trinity-fast/trinity-core
+        # aliases" - trinity-fast for the short Ask-tab turn, never a new
+        # model-alias env var. No numeric budget override here: callers
+        # (irene.orchestration) are responsible for the bounded
+        # timeout/output-token configuration this package's evidence
+        # document discloses as an unapproved placeholder.
+        model_alias = optional_env("AI_ADVISER_MODEL_ALIAS", "trinity-fast")
+
+        api_key = self._read_credential(key_file)
+
+        request_body = json.dumps(
+            {
+                "model": model_alias,
+                "messages": build_messages(request),
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            url=f"{base_url}/v1/chat/completions",
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+
+        status, raw_body = self._send(http_request)
+        self._raise_for_status(status, raw_body)
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise InvalidResponseError("AI gateway response was not valid JSON") from exc
+
+        return self._parse_openai_adviser_response(
+            payload, prompt_version, model_trace_id=str(_uuid.uuid4()), skill_version=request.skill_version
+        )
+
     def _send(self, request: urllib.request.Request):
         """Perform the HTTP call, translating transport failures into typed
         gateway exceptions. Never logs/echoes the Authorization header."""
@@ -765,6 +872,32 @@ class LiteLLMGateway(
             return QuestionnaireDraft.from_response_dict(
                 structured,
                 selected_keys=selected_keys,
+                resolved_model=resolved_model,
+                prompt_version=prompt_version,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except ContractValidationError as exc:
+            raise InvalidResponseError(str(exc)) from exc
+
+    @staticmethod
+    def _parse_openai_adviser_response(
+        payload: dict, prompt_version: str, *, model_trace_id: str, skill_version: str
+    ) -> AdviserResponse:
+        """Adviser-task counterpart to the other tasks' own
+        `_parse_openai_*_response` methods - same envelope unwrap, different
+        response-contract parser (`AdviserResponse.from_response_dict`).
+        `model_trace_id`/`skill_version` are threaded through as SERVER-
+        supplied values, never read from the model's own payload."""
+        structured, resolved_model, prompt_tokens, completion_tokens = (
+            LiteLLMGateway._extract_structured_content(payload)
+        )
+
+        try:
+            return AdviserResponse.from_response_dict(
+                structured,
+                model_trace_id=model_trace_id,
+                skill_version=skill_version,
                 resolved_model=resolved_model,
                 prompt_version=prompt_version,
                 prompt_tokens=prompt_tokens,

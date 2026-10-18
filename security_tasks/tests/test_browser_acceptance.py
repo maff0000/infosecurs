@@ -74,6 +74,16 @@ def test_tasks_page_sidebar_filters_pagination_and_keyboard_nav(live_server):
             # Sidebar link navigation (never a direct goto for this check).
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md §1): a
+            # brand-new login's first Home visit may auto-open IRENE's
+            # modal overlay, which - correctly, by design - intercepts
+            # pointer events on the rest of the page while open. Dismiss
+            # it first so this pre-existing sidebar-navigation check
+            # (predating M010C) is unaffected by that later, unrelated
+            # addition - never a change to what this check itself proves.
+            irene_modal = page.locator("#irene-modal")
+            if irene_modal.count() and irene_modal.is_visible():
+                page.keyboard.press("Escape")
             sidebar_link = page.locator('.shell-sidebar a[href="{}"]'.format(
                 reverse("security_tasks:list", args=[organisation.id])
             ))

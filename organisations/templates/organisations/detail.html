@@ -110,4 +110,8 @@
            href="{% url 'organisations:customer_zero_reset' organisation.id %}">Reset test organisation</a>
     </div>
 {% endif %}
+
+{% if irene %}
+    {% include "irene/_modal.html" %}
+{% endif %}
 {% endblock %}

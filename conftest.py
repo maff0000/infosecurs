@@ -92,3 +92,26 @@ def _wi6_ensure_entitlements_seed_data(request):
         "entitlements.migrations.0004_foundations_real_destination"
     )
     repoint_foundations.point_foundations_at_its_real_workspace(live_apps, None)
+
+    # M010A/M010C: the same gap, now extended forward rather than
+    # silently reopened. `0005_seed_tasks_and_irene_product_areas.py`
+    # seeds the `tasks`/`irene` rows `security_tasks`/`irene`'s own
+    # `require_capability()`-guarded routes depend on; `0006_irene_real_
+    # destination.py` then repoints `irene` at its real workspace route,
+    # exactly mirroring 0004's own repoint of `foundations` immediately
+    # above. Without these two calls, `irene/tests/test_browser_
+    # acceptance.py` (a `transaction=True` test) flushing the database
+    # would silently strand every `irene`/`security_tasks` capability-
+    # guarded test that happens to run afterward in the same session with
+    # a blanket 403 - the exact same class of discovery this fixture's
+    # own docstring already describes for WI6, now recurring for M010A/
+    # M010C's own later-added seed rows.
+    seed_tasks_and_irene = importlib.import_module(
+        "entitlements.migrations.0005_seed_tasks_and_irene_product_areas"
+    )
+    seed_tasks_and_irene.seed_tasks_and_irene(live_apps, None)
+
+    repoint_irene = importlib.import_module(
+        "entitlements.migrations.0006_irene_real_destination"
+    )
+    repoint_irene.point_irene_at_its_real_workspace(live_apps, None)
