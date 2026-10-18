@@ -62,9 +62,24 @@ def _wi6_ensure_entitlements_seed_data(request):
     uses to call these functions safely outside an actual migration run,
     in the correct dependency order (0002 before 0003 - `0003_seed_
     foundation_requirements.py`'s own `seed_foundation_requirements`
-    requires `ProductArea` rows to already exist; 0004 last, so a reseed
-    always lands on the CURRENT accepted state - the real Foundations
-    workspace destination - not 0002's own original placeholder).
+    requires `ProductArea` rows to already exist; 0004 before 0005, since
+    0005 declares 0004 as its migration `dependencies` parent; 0004 then
+    0005 last, so a reseed always lands on the CURRENT accepted state -
+    the real Foundations workspace destination plus the M010A `tasks`/
+    `irene` rows - not 0002's own original placeholder).
+
+    M010 integration-review finding (2026-10-18, Central Architecture's
+    own GitHub-state cross-check of WP-A/WP-B): this fixture's `exists()`
+    short-circuit only proves "SOME ProductArea row survived", not "every
+    seed migration's rows survived" - a `transaction=True` flush between
+    0005 landing on `main` and this fixture's own update left exactly the
+    16 pre-M010 rows reseeded with no `tasks`/`irene` rows at all under a
+    reused test database, the identical failure class this fixture's own
+    docstring already diagnosed once for 0002-0004. Extended to call 0005
+    too, for the same reason - a capability-guarded M010A/B/C route now
+    depends on `has_capability` resolving the `tasks`/`irene`
+    `ProductArea` rows exactly as `require_capability` already depends on
+    `foundations`/`customer_assurance` etc.
     """
     if request.node.get_closest_marker("django_db") is None:
         return
@@ -92,3 +107,8 @@ def _wi6_ensure_entitlements_seed_data(request):
         "entitlements.migrations.0004_foundations_real_destination"
     )
     repoint_foundations.point_foundations_at_its_real_workspace(live_apps, None)
+
+    seed_tasks_and_irene = importlib.import_module(
+        "entitlements.migrations.0005_seed_tasks_and_irene_product_areas"
+    )
+    seed_tasks_and_irene.seed_tasks_and_irene(live_apps, None)
