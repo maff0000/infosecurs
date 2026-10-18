@@ -43,6 +43,25 @@ are deleted explicitly BEFORE `SecurityTask` (their own FK target) so each
 gets an accurate, independently-reported count rather than being
 cascade-deleted silently when `SecurityTask` rows are removed.
 
+**M010B addendum (2026-10):** `foundations_journey.JourneyCheckpoint`
+(docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md) added to the
+DELETE-classified table below - same class of finding as M010A's own
+addendum directly above: it carries a direct FK to `Organisation`
+(`CASCADE`), so it required a new `EXPECTED_DELETE_DIRECT_FK_MODELS`
+entry and a new explicit delete call in `reset_customer_zero_
+organisation`, found and fixed in the same work package before merge
+(the live preflight check would otherwise `FAIL CLOSED` on the very
+first reset run after this app's migration landed). No ordering
+constraint with the `security_tasks.SecurityTask` deletes is required
+either direction - `JourneyCheckpoint.pending_task` is `SET_NULL`, so
+Django's own delete collector handles it correctly regardless of which
+side is deleted first. `foundations_journey.UserJourneyPreference` is
+NOT added here - confirmed by direct read of `foundations_journey/
+models.py`: it carries no FK to `Organisation` at all (a user-scoped UI
+preference only), so a per-organisation reset correctly never touches it
+- the same "zero FK to Organisation" treatment this manifest already
+gives `entitlements.ProductArea` below.
+
 **Classification key:** every tenant-owned model is exactly one of:
 - **PRESERVE** — bootstrap identity; the reset must never touch this row.
 - **DELETE** — synthetic business/security data; the reset must remove
@@ -92,6 +111,7 @@ cascade-deleted silently when `SecurityTask` rows are removed.
 | `security_tasks.SecurityTask` **[M010A addition]** | `organisation` | CASCADE | no | Deleted last of the three new models, after its own dependents below, so their counts are captured before the cascade would otherwise remove them silently. |
 | `security_tasks.SecurityTaskDependency` **[M010A addition]** | `organisation`, `predecessor_task`, `successor_task` | all CASCADE | no | Direct FK to `Organisation` (not merely transitive via the task FKs) — must be deleted explicitly, counted, before `SecurityTask` above. |
 | `security_tasks.SecurityTaskEvent` **[M010A addition]** | `organisation`, `task` | both CASCADE | no | Append-only audit trail for the task spine; same "avoid false surviving business audit history" reasoning as `activity.ActivityEvent`. Direct FK to `Organisation` — same explicit-delete-before-`SecurityTask` requirement as `SecurityTaskDependency`. |
+| `foundations_journey.JourneyCheckpoint` **[M010B addition]** | `organisation`, `user`, `pending_task` | `organisation`/`user` CASCADE, `pending_task` SET_NULL | no | Holds only a navigation position (stage/question key, enum state, bookkeeping fields) per (organisation, user, journey_code) — no PII, no raw answer prose. No ordering constraint with `security_tasks.SecurityTask` either direction (`pending_task` is SET_NULL). |
 
 ## DERIVED / NO PERSISTED STATE — nothing to delete
 
@@ -124,7 +144,7 @@ Not a persisted per-organisation model — the *active HTTP session* for the req
 ## Totals
 
 - **7 bootstrap-identity row groups PRESERVE** (User, Organisation, CustomerZeroFixture, Membership, Account Holder's OrganisationPerson, Account Holder's 3 GovernanceRoleAssignments, the 2 global catalogues).
-- **20 app/model DELETE targets** (17 original + 3 `security_tasks` models added by M010A), all CASCADE from `organisation`, one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only) plus the new M010A-specific ordering note (SecurityTaskEvent/SecurityTaskDependency deleted before SecurityTask, for accurate counts only — not required for correctness, since all three CASCADE). Plus **1 further model, `security_baseline.AnswerSelectionDetail` [M008B WI1 addition]**, which cascades automatically via `BaselineAssessment` (no direct FK to `Organisation`, so it needs no separate delete call and introduces no new DIRECT-FK-to-Organisation entry in either `organisations.reset_service` guard set).
+- **21 app/model DELETE targets** (17 original + 3 `security_tasks` models added by M010A + 1 `foundations_journey.JourneyCheckpoint` added by M010B), all CASCADE from `organisation` (`JourneyCheckpoint`'s own `pending_task` FK is a separate, SET_NULL relation — never a second route to `Organisation`), one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only) plus the M010A-specific ordering note (SecurityTaskEvent/SecurityTaskDependency deleted before SecurityTask, for accurate counts only — not required for correctness, since all three CASCADE). Plus **1 further model, `security_baseline.AnswerSelectionDetail` [M008B WI1 addition]**, which cascades automatically via `BaselineAssessment` (no direct FK to `Organisation`, so it needs no separate delete call and introduces no new DIRECT-FK-to-Organisation entry in either `organisations.reset_service` guard set) — and **1 further model deliberately excluded**, `foundations_journey.UserJourneyPreference` [M010B addition], which carries no FK to `Organisation` at all (user-scoped only), the same "zero FK" treatment `entitlements.ProductArea` already receives below.
 - **1 derived app with zero persisted state** (`security_state`).
 - **1 separate filesystem resource** (evidence bytes) requiring a new containment-checked directory-deletion helper, committed only after the DB transaction succeeds.
 - **1 required session action** (`logout(request)`, not a model).

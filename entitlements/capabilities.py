@@ -38,6 +38,15 @@ ROUTE_NAMESPACE_TO_CAPABILITY: dict[str, str] = {
     # 0005_seed_tasks_and_irene_product_areas.py seeds the matching
     # `tasks` ProductArea row this maps to.
     "security_tasks": "tasks",
+    # M010B (docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md): the guided
+    # Stage 4 question card/task-handoff/pause-resume routes mirror
+    # `security_baseline`'s own manual Stage 4 routes exactly (same 12
+    # controls, same canonical write path) - SAME capability code as
+    # `security_baseline` directly above, "security", NOT "foundations"
+    # (which gates the read-only 18-item workspace and the Stage 1-3
+    # guided pages below - a different ProductArea entirely). Not a new
+    # ProductArea/migration of its own.
+    "foundations_journey": "security",
 }
 
 # `organisations` splits by `url_name`, not just namespace - mirroring the

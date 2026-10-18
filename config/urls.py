@@ -71,5 +71,18 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/tasks/",
         include("security_tasks.urls"),
     ),
+    # M010B: deliberately NOT "organisations/<uuid:organisation_id>/
+    # foundations/" - that exact path already belongs to
+    # organisations.urls's own "organisations:foundations" (the
+    # read-only 18-item Foundations workspace); colliding with it would
+    # make Django's resolver silently match that app's pattern first
+    # (included earlier) for every request here, the same path-
+    # collision class security_baseline.views.baseline_view's own
+    # docstring already documents finding for "foundations/" vs
+    # "baseline/questions/".
+    path(
+        "organisations/<uuid:organisation_id>/foundations-journey/",
+        include("foundations_journey.urls"),
+    ),
     path("organisations/", include("activity.urls")),
 ]

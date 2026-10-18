@@ -45,6 +45,12 @@
             security fact, control, policy or risk recorded elsewhere in INFOSECURS.
         {% elif detail.source_unavailable %}
             Source unavailable.
+        {% elif task.source_kind == "security_baseline.baselineanswer" and detail.source_object %}
+            {# M010B: the one registered source kind this package's guided journey #}
+            {# links through - a real, registered reverse() route, never a hand-built URL. #}
+            <a href="{% url 'security_baseline:foundations_question' task.organisation_id detail.source_object.question_key %}">
+                Foundations — {{ detail.source_object.question_key }}
+            </a>
         {% else %}
             {{ task.source_kind }}
         {% endif %}

@@ -95,6 +95,12 @@ INSTALLED_APPS = [
     # security task spine - SecurityTask/SecurityTaskDependency/
     # SecurityTaskEvent plus the Tasks sidebar page.
     "security_tasks",
+    # M010B (docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md): the guided
+    # Foundations journey adapter - JourneyCheckpoint/
+    # UserJourneyPreference plus the guided question card/task-handoff/
+    # pause-resume views. A thin adapter over the existing, unmodified
+    # security_baseline contracts - never a second answer/question store.
+    "foundations_journey",
 ]
 
 MIDDLEWARE = [

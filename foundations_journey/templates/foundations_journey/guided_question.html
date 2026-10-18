@@ -1,0 +1,128 @@
+{% extends "application_shell.html" %}
+
+{% block title %}{{ view_model.title }} — Guided — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  /* Page-local only, same convention as security_baseline/templates/
+     security_baseline/foundations_question.html's own identical comment
+     - shared geometry (progress/options/buttons/fieldset/field) lives in
+     static/organisations/css/app.css already; only the genuinely
+     page-specific "why we ask" lead-in styling is repeated here. */
+  .guided-why {
+    color: var(--color-text-muted);
+    margin: var(--space-1) 0 var(--space-4) 0;
+  }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Guided Foundations</h1>
+        <p class="page-header__subtitle">
+            {{ organisation.name }} &middot; Stage {{ view_model.stage_index }} of {{ view_model.stage_total }}
+            &middot; Question {{ view_model.question_index }} of {{ view_model.question_total }}
+        </p>
+    </div>
+</div>
+
+<div class="progress">
+    <span class="progress__label">{{ view_model.stage_progress_copy }}</span>
+    {% if not view_model.stage_complete %}
+        <span class="progress__track" aria-hidden="true">
+            <span class="progress__fill" style="width: {% widthratio view_model.reviewed_count view_model.question_total 100 %}%"></span>
+        </span>
+    {% endif %}
+</div>
+
+<p class="form-card__intro">
+    Overall Foundations completion: {{ view_model.completion_percentage }}%
+    ({{ view_model.completion_completed_count }} of {{ view_model.completion_total_count }} items).
+    This is a statement you confirm, not a control the system has independently verified - "Not sure" is an
+    honest, non-penalised answer.
+</p>
+
+{% if form_errors %}
+    <ul class="messages" role="alert">
+        {% for field, errors in form_errors.items %}
+            {% for error in errors %}
+                <li class="message message--error">{{ error }}</li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<h2 id="guided-question-heading">{{ view_model.question_text }}</h2>
+<p class="guided-why">Why we ask: {{ view_model.why_it_matters }}</p>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    <fieldset class="fieldset--bare" role="radiogroup" aria-labelledby="guided-question-heading">
+        <div class="option-group">
+            {% for code, label in view_model.options %}
+                <label class="option-card">
+                    <input type="radio" name="{{ option_field_name }}" value="{{ code }}"
+                           {% if view_model.saved_option_code == code %}checked{% endif %} required>
+                    <span>{{ label }}</span>
+                </label>
+            {% endfor %}
+        </div>
+    </fieldset>
+
+    {% if view_model.requires_confirmation %}
+        <div class="field">
+            <label>
+                <input type="checkbox" name="{{ confirm_field_name }}">
+                {{ view_model.confirmation_label }}
+            </label>
+            <p class="field__help">
+                Only needed if you select "Not applicable" above - otherwise this checkbox is ignored.
+            </p>
+        </div>
+    {% endif %}
+
+    {% if view_model.explainer %}
+        <p class="alert alert--info">{{ view_model.explainer }}</p>
+    {% endif %}
+
+    <div class="form-actions form-actions--sticky">
+        {% if view_model.previous_question_key %}
+            <a class="button button--secondary"
+               href="{% url 'foundations_journey:guided_question' organisation.id view_model.previous_question_key %}">&larr; Back</a>
+        {% else %}
+            <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">&larr; Back to overview</a>
+        {% endif %}
+        <button type="submit" class="button button--primary">Save answer</button>
+        {% if view_model.next_question_key %}
+            <a class="button button--secondary"
+               href="{% url 'foundations_journey:guided_question' organisation.id view_model.next_question_key %}">Continue &rarr;</a>
+        {% else %}
+            <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}">Finish for now &rarr;</a>
+        {% endif %}
+    </div>
+</form>
+
+<p><a href="{{ view_model.manual_page_url }}">Open full page</a></p>
+
+{% if view_model.saved_option_code %}
+<form method="post" action="{% url 'foundations_journey:offer_followup_task' organisation.id view_model.question_key %}">
+    {% csrf_token %}
+    {{ offer_task_form.idempotency_key }}
+    <button type="submit" class="button button--secondary">Add a follow-up task for this answer</button>
+</form>
+{% endif %}
+
+{% if checkpoint.checkpoint_state == "paused" %}
+<form method="post" action="{% url 'foundations_journey:resume' organisation.id %}">
+    {% csrf_token %}
+    {{ checkpoint_form.expected_version }}
+    <button type="submit" class="button button--secondary">Resume</button>
+</form>
+{% else %}
+<form method="post" action="{% url 'foundations_journey:pause' organisation.id %}">
+    {% csrf_token %}
+    {{ checkpoint_form.expected_version }}
+    <button type="submit" class="button button--secondary">Pause</button>
+</form>
+{% endif %}
+{% endblock %}
