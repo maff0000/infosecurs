@@ -130,6 +130,7 @@ def get_task_list(
     status=None,
     assignee_id=None,
     due_filter=None,
+    due_within_days=DUE_SOON_WINDOW_DAYS,
     search=None,
     page=1,
     page_size=DEFAULT_PAGE_SIZE,
@@ -161,7 +162,8 @@ def get_task_list(
             due_at__isnull=False, due_at__lt=now
         )
     elif due_filter == DUE_FILTER_DUE_SOON:
-        soon = now + timezone.timedelta(days=DUE_SOON_WINDOW_DAYS)
+        window_days = due_within_days if due_within_days and due_within_days > 0 else DUE_SOON_WINDOW_DAYS
+        soon = now + timezone.timedelta(days=window_days)
         queryset = queryset.exclude(status__in=CLOSED_STATUSES).filter(
             due_at__isnull=False, due_at__gte=now, due_at__lte=soon
         )
@@ -191,6 +193,33 @@ def get_task_list(
     items = tuple(queryset[offset : offset + page_size])
 
     return TaskPage(items=items, total_count=total_count, page=page, page_size=page_size, num_pages=num_pages)
+
+
+def get_review_briefing_counts(organisation) -> dict:
+    """Zero-AI "upcoming / overdue" summary counts (M010D PID §4,
+    M010-MASTER-ARCHITECTURE.md §6 "Do not make the Task List depend on a
+    model call"). Calls `get_task_list` three times and keeps only
+    `total_count` from each - deliberately never a new, parallel ORM
+    query path, so this can never drift out of sync with what the Tasks
+    page itself shows for the same filters. `page_size=1` keeps each call
+    cheap (the underlying `.count()` still runs once per call, same as
+    the Tasks page's own pagination already does).
+
+    The 7/30-day windows are the same disclosed, unapproved-placeholder
+    numbers `security_tasks.review_rules` uses for its own warning-window
+    bucketing - see that module's docstring and the evidence document."""
+    overdue = get_task_list(organisation, due_filter=DUE_FILTER_OVERDUE, page_size=1).total_count
+    due_7d = get_task_list(
+        organisation, due_filter=DUE_FILTER_DUE_SOON, due_within_days=7, page_size=1
+    ).total_count
+    due_30d = get_task_list(
+        organisation, due_filter=DUE_FILTER_DUE_SOON, due_within_days=30, page_size=1
+    ).total_count
+    return {
+        "overdue": overdue,
+        "due_within_7_days": due_7d,
+        "due_within_30_days": due_30d,
+    }
 
 
 @dataclasses.dataclass(frozen=True)
@@ -298,6 +327,7 @@ def create_task(
     source_origin=SourceOrigin.HUMAN,
     source_kind=SOURCE_KIND_NONE,
     source_object_id=None,
+    source_version="",
     occurrence_key=None,
     due_at=None,
     assignee_id=None,
@@ -351,10 +381,20 @@ def create_task(
                 source_origin=source_origin,
                 source_kind=source_kind,
                 source_object_id=source_object_id,
+                source_version=source_version or "",
                 occurrence_key=occurrence_key,
                 idempotency_key=idempotency_key,
                 due_at=due_at,
             )
+            event_metadata = {"task_kind": kind, "source_origin": source_origin}
+            if source_version:
+                # M010 data contract §5: "For rule versions/future policy
+                # changes, store trigger rule id/version in task events."
+                # `security_tasks.review_scheduler` passes its rule_id and
+                # rule_version packed into this one existing, already-
+                # modelled column (M010 data contract §1's own
+                # `source_version` field) - never a new column/table.
+                event_metadata["source_version"] = source_version
             SecurityTaskEvent.objects.create(
                 organisation=organisation,
                 task=task,
@@ -365,7 +405,7 @@ def create_task(
                 new_status=TaskStatus.OPEN,
                 revision=1,
                 request_id=idempotency_key,
-                metadata={"task_kind": kind, "source_origin": source_origin},
+                metadata=event_metadata,
             )
             return task
     except IntegrityError:
@@ -413,6 +453,7 @@ def transition_task(
     idempotency_key=None,
     completion_source_kind=None,
     completion_source_object_id=None,
+    closed_reason=None,
     override_blocked=False,
 ) -> SecurityTask:
     """Transition a task's `status`, with its event, inside one
@@ -473,6 +514,15 @@ def transition_task(
                 task.completion_evidence_source_kind = completion_source_kind
                 task.completion_evidence_source_object_id = completion_source_object_id
                 update_fields += ["completion_evidence_source_kind", "completion_evidence_source_object_id"]
+            if closed_reason:
+                # Exposes the already-modelled `SecurityTask.closed_reason`
+                # column (M010 data contract §1) through this existing
+                # transition path - never a new write path. Used by
+                # `security_tasks.review_scheduler` to record e.g.
+                # `SUPERSEDED_BY_NEW_OCCURRENCE` when a still-open task is
+                # closed because its source's due date changed.
+                task.closed_reason = closed_reason
+                update_fields.append("closed_reason")
             update_fields.append("completed_at")
         elif previous_status in CLOSED_STATUSES and next_status not in CLOSED_STATUSES:
             # Explicit reopen/restore (M010 data contract §2) - clear the
@@ -649,6 +699,7 @@ __all__ = [
     "TaskPage",
     "TaskDetail",
     "get_task_list",
+    "get_review_briefing_counts",
     "get_task_detail",
     "create_task",
     "transition_task",
