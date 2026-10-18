@@ -101,6 +101,7 @@ jobs:
           security_tasks/tests/test_run_security_reviews_command.py
           foundations_journey/tests/test_models.py
           foundations_journey/tests/test_checkpoint.py
+          foundations_journey/tests/test_parity_golden_set.py
           foundations_journey/tests/test_forgery_and_edge_cases.py
           foundations_journey/tests/test_task_handoff.py
           foundations_journey/tests/test_zero_ai_calls.py
