@@ -23,6 +23,16 @@ class TestRealSkillsValidate:
         skill = load_skill("task-administration")
         assert "propose_task" in skill.tools
 
+    def test_customer_assurance_guide_loads(self):
+        skill = load_skill("customer-assurance-guide")
+        assert skill.version == "1.0.0"
+        assert "customer_assurance_help" in skill.allowed_intents
+        assert "get_customer_assurance_status" in skill.tools
+        assert "get_registered_route" in skill.tools
+        # M010E PID §3 - this skill never gets a write tool.
+        assert "propose_task" not in skill.tools
+        assert "confirm_task_creation" not in skill.tools
+
 
 class TestSkillRouter:
     def test_explain_control_routes_to_foundations_guide(self):
@@ -34,6 +44,11 @@ class TestSkillRouter:
         skill = select_skill(IntentCode.TASK_NEXT_STEP_HELP)
         assert skill is not None
         assert skill.name == "task-administration"
+
+    def test_customer_assurance_help_routes_to_customer_assurance_guide(self):
+        skill = select_skill(IntentCode.CUSTOMER_ASSURANCE_HELP)
+        assert skill is not None
+        assert skill.name == "customer-assurance-guide"
 
     def test_unclear_intent_has_no_skill(self):
         assert select_skill(IntentCode.UNCLEAR) is None

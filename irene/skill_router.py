@@ -25,6 +25,7 @@ _SKILL_BY_INTENT: dict[str, str] = {
     IntentCode.SUGGEST_FOLLOWUP: "foundations-guide",
     IntentCode.TASK_STATUS_HELP: "task-administration",
     IntentCode.TASK_NEXT_STEP_HELP: "task-administration",
+    IntentCode.CUSTOMER_ASSURANCE_HELP: "customer-assurance-guide",
     # IntentCode.UNCLEAR deliberately has no entry - see select_skill below.
 }
 

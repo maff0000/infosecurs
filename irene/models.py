@@ -76,6 +76,13 @@ class IntentCode(models.TextChoices):
     SUGGEST_FOLLOWUP = "suggest_followup", "Suggest a follow-up task"
     TASK_STATUS_HELP = "task_status_help", "Explain current task status"
     TASK_NEXT_STEP_HELP = "task_next_step_help", "Explain the next step for a task"
+    # M010E PID §3/§4 - routes to the new customer-assurance-guide skill
+    # (irene/skills/customer-assurance-guide/SKILL.md). Not persisted as a
+    # model field's `choices=` anywhere (only this plain `TextChoices`
+    # class and `irene.forms.AskForm`'s own `forms.ChoiceField` reference
+    # it), so adding this value requires no migration - verified directly,
+    # not merely asserted (see docs/evidence/M010E-ASSURANCE-ENTITLEMENTS.md).
+    CUSTOMER_ASSURANCE_HELP = "customer_assurance_help", "Explain Customer Assurance readiness and status"
     UNCLEAR = "unclear", "Unclear / general"
 
 

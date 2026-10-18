@@ -13,4 +13,8 @@ urlpatterns = [
     path("ask/", views.ask, name="ask"),
     path("ask/confirm-task/", views.confirm_task, name="confirm_task"),
     path("preference/auto-open/", views.set_auto_open_preference, name="set_auto_open_preference"),
+    # M010E PID §3 - the Monthly/PRO-gated Customer Assurance status page
+    # (see views.assurance_status's own docstring for the explicit
+    # capability-gating reasoning).
+    path("assurance/", views.assurance_status, name="assurance_status"),
 ]

@@ -76,6 +76,63 @@ class TestCrossTenantCanaryIsolation:
         assert result is None
 
 
+class TestCustomerAssuranceTwoOrganisationProbe:
+    """M010E PID §6's two-organisation adversarial proof, extending this
+    file's own established shape rather than inventing a different one -
+    a Monthly/PRO user of org_b must never see org_a's real
+    `QuestionnaireImport` status through `get_customer_assurance_status`,
+    even with a forged `organisation_id` reflected into the
+    `AuthorizedContext` by hand (mirroring
+    TestForgedOrganisationIdInToolArgs.test_forged_context_organisation_
+    id_still_fails_closed below exactly, applied to this package's own
+    new tool)."""
+
+    def test_org_b_member_never_sees_org_as_import_status(self, org_a, org_b, user_a, member_a, user_b, member_b):
+        from entitlements.tiers import TIER_MONTHLY
+        from questionnaire.models import QuestionnaireImport
+        from questionnaire.tests.conftest import _make_organisation_fully_assurance_ready
+
+        _make_organisation_fully_assurance_ready(org_a)
+        _make_organisation_fully_assurance_ready(org_b)
+        QuestionnaireImport.objects.create(
+            organisation=org_a,
+            uploaded_by=user_a,
+            original_filename=CANARY_A + ".xlsx",
+            stored_filename="stored-canary-a.xlsx",
+            detected_content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            file_format=QuestionnaireImport.FILE_FORMAT_XLSX,
+            sha256_hash="a" * 64,
+            size_bytes=1024,
+            security_gate_status=QuestionnaireImport.SECURITY_GATE_PASSED,
+            status=QuestionnaireImport.STATUS_EXTRACTED,
+            extraction_summary={"question_count": 1},
+        )
+
+        request_b = request_at_tier(user_b, tier=TIER_MONTHLY, organisation_id=org_b.id)
+        context_b = irene_tools.build_authorized_context(request_b, org_b)
+        result = irene_tools.get_customer_assurance_status(context_b)
+        assert result["imports"] == []  # org_b genuinely has none - never org_a's
+        assert (CANARY_A + ".xlsx").encode() not in repr(result).encode()
+
+    def test_forged_organisation_id_in_context_fails_closed_not_org_as_data(
+        self, org_a, org_b, user_a, member_a
+    ):
+        import dataclasses
+
+        from django.http import Http404
+        from entitlements.tiers import TIER_MONTHLY
+
+        request = request_at_tier(user_a, tier=TIER_MONTHLY, organisation_id=org_a.id)
+        context = irene_tools.build_authorized_context(request, org_a)
+        forged = dataclasses.replace(context, organisation_id=str(org_b.id))
+
+        # user_a is a member of org_a, NOT org_b - the forged context must
+        # fail closed (Http404 via live _revalidate), never silently
+        # resolve org_b's real status using user_a's authenticated session.
+        with pytest.raises(Http404):
+            irene_tools.get_customer_assurance_status(forged)
+
+
 class TestForgedOrganisationIdInToolArgs:
     """M010 threat model §3: 'Model supplies B's organisation_id in tool
     JSON' -> 'Ignore/reject model-supplied identity; server uses active

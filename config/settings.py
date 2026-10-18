@@ -72,6 +72,24 @@ IRENE_TASK_TOOLS_ENABLED = optional_env("IRENE_TASK_TOOLS_ENABLED", "true").lowe
 # flag may ever be set to true outside a test.
 IRENE_ADVISER_MODE_ENABLED = optional_env("IRENE_ADVISER_MODE_ENABLED", "false").lower() == "true"
 
+# `IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED` (M010E PID §1/§3) - the
+# read-only Customer Assurance (M009) status tool/page
+# (irene.tools.get_customer_assurance_status, irene:assurance_status).
+# Defaults ON: like IRENE_TASK_TOOLS_ENABLED above, this has no live AI
+# dependency at all - it only re-reads `entitlements.capabilities.
+# has_capability`, `security_baseline.readiness.
+# evaluate_assurance_readiness` and the existing, unmodified
+# `QuestionnaireImport` model, all already independently tier/readiness-
+# gated on every call. A separate flag from IRENE_ENABLED/
+# IRENE_TASK_TOOLS_ENABLED per D11 ("Higher-tier capabilities are
+# feature-flagged, not improvised") - this is the one new higher-tier
+# (Monthly/PRO) surface this campaign adds, so it gets its own
+# independent rollback switch rather than riding on a Foundational-tier
+# flag's default.
+IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED = (
+    optional_env("IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED", "true").lower() == "true"
+)
+
 # ---------------------------------------------------------------------------
 # Core
 # ---------------------------------------------------------------------------
