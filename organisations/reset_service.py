@@ -60,6 +60,7 @@ from questionnaire.models import QuestionnaireImport, QuestionnaireQuestion, Que
 from remediation.models import ActionEvidenceLink, RemediationAction
 from risk_register.models import Risk
 from security_baseline.models import BaselineAssessment
+from security_tasks.models import SecurityTask, SecurityTaskDependency, SecurityTaskEvent
 from workplace.models import Workplace
 
 # ---------------------------------------------------------------------------
@@ -116,6 +117,18 @@ EXPECTED_DELETE_DIRECT_FK_MODELS = frozenset(
         "questionnaire.QuestionnaireImport",
         "activity.ActivityEvent",
         "ai_platform.AIInvocationRecord",
+        # M010A (docs/pids/M010A-TASK-SPINE.md) - all three new models have
+        # a DIRECT ForeignKey to Organisation (SecurityTaskDependency/
+        # SecurityTaskEvent each carry their own `organisation` FK in
+        # addition to their FKs to SecurityTask - see security_tasks/
+        # models.py's own docstring for why), so all three must be
+        # explicitly accounted for here, not merely "cascades via the
+        # parent task" like security_baseline.BaselineAnswer. Synthetic
+        # administrative task data for the fixture organisation - DELETE,
+        # same bucket as every other tenant-owned model above.
+        "security_tasks.SecurityTask",
+        "security_tasks.SecurityTaskDependency",
+        "security_tasks.SecurityTaskEvent",
     }
 )
 
@@ -407,6 +420,21 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
             organisation=organisation
         ).delete()[0]
         deleted_counts["ai_platform.AIInvocationRecord"] = AIInvocationRecord.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        # M010A: dependents (both of which also carry their own direct
+        # `organisation` FK - see the EXPECTED_DELETE_DIRECT_FK_MODELS
+        # comment above) deleted explicitly BEFORE their parent
+        # SecurityTask rows, so each gets its own accurate count here
+        # rather than being silently cascade-deleted (and therefore
+        # under-reported) the moment SecurityTask rows are removed below.
+        deleted_counts["security_tasks.SecurityTaskEvent"] = SecurityTaskEvent.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        deleted_counts["security_tasks.SecurityTaskDependency"] = (
+            SecurityTaskDependency.objects.filter(organisation=organisation).delete()[0]
+        )
+        deleted_counts["security_tasks.SecurityTask"] = SecurityTask.objects.filter(
             organisation=organisation
         ).delete()[0]
 

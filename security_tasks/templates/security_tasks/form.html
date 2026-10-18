@@ -1,0 +1,38 @@
+{% extends "application_shell.html" %}
+
+{% block title %}New task — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>New task</h1>
+        <p class="page-header__subtitle"><a href="{% url 'security_tasks:list' organisation.id %}">&larr; Back to Tasks</a> &middot; {{ organisation.name }}</p>
+    </div>
+</div>
+
+<form method="post" class="summary-card" novalidate>
+    {% csrf_token %}
+    {{ form.idempotency_key }}
+
+    <label for="{{ form.title.id_for_label }}">Title</label>
+    {{ form.title }}
+    {% if form.title.errors %}<p class="field-error">{{ form.title.errors|join:", " }}</p>{% endif %}
+
+    <label for="{{ form.summary.id_for_label }}">Summary (optional)</label>
+    {{ form.summary }}
+
+    <label for="{{ form.priority.id_for_label }}">Priority</label>
+    {{ form.priority }}
+
+    <label for="{{ form.assignee.id_for_label }}">Assign to</label>
+    {{ form.assignee }}
+
+    <label for="{{ form.due_at.id_for_label }}">Due date (optional)</label>
+    {{ form.due_at }}
+
+    <div class="form-actions">
+        <button type="submit" class="button button--primary">Create task</button>
+        <a class="button button--secondary" href="{% url 'security_tasks:list' organisation.id %}">Cancel</a>
+    </div>
+</form>
+{% endblock %}
