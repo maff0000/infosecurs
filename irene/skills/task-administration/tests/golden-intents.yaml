@@ -1,0 +1,10 @@
+# Golden intent -> skill routing fixtures for task-administration - see
+# irene/skills/foundations-guide/tests/golden-intents.yaml's own header
+# comment for why this is documentation/fixture only, not runtime-parsed.
+cases:
+  - intent_code: task_status_help
+    expect_skill: task-administration
+  - intent_code: task_next_step_help
+    expect_skill: task-administration
+  - intent_code: explain_control
+    expect_skill: foundations-guide

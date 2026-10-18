@@ -18,8 +18,12 @@ from __future__ import annotations
 
 from typing import Optional
 
+import uuid as _uuid
+
+from ai_platform.adviser_contracts import AdviserResponse
 from ai_platform.contracts import GenerationResult, GroundingPayload, RiskCandidate
 from ai_platform.gateway import (
+    AdviserGateway,
     GatewayAuthError,
     GatewayConnectionError,
     GatewayRateLimitError,
@@ -494,3 +498,77 @@ class FakeQuestionnaireDraftingGateway(QuestionnaireDraftingGateway):
             raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
 
         raise ValueError(f"FakeQuestionnaireDraftingGateway: unknown mode {self.mode!r}")
+
+
+def default_valid_adviser_result(request, prompt_version: str = "adviser_v1") -> AdviserResponse:
+    """A minimal, valid `AdviserResponse` - the default "happy path"
+    fixture `FakeAdviserGateway(mode="valid")` builds when no explicit
+    `result` is supplied (M010C PID §6: "Run prompts through fake
+    gateway"). Carries no `source_links`/`proposed_actions` - the same
+    "always contract-valid regardless of what this specific request
+    carried" reasoning every other `default_valid_*` fixture in this module
+    already documents."""
+    return AdviserResponse(
+        message="Fixture answer: this is a deterministic test double, not a real model response.",
+        intent_code=request.intent_code,
+        source_links=[],
+        proposed_actions=[],
+        followup_question=None,
+        uncertainty_flag=False,
+        model_trace_id=str(_uuid.uuid4()),
+        skill_version=request.skill_version,
+        resolved_model="fixture-model/fake-v1",
+        prompt_version=prompt_version,
+        prompt_tokens=64,
+        completion_tokens=32,
+    )
+
+
+class FakeAdviserGateway(AdviserGateway):
+    """Deterministic `AdviserGateway` double (M010C PID §6), mirroring
+    every other fake gateway's mode-based pattern exactly - see any of
+    their docstrings for the shared rationale. This is the ONLY gateway
+    `irene.orchestration`/`irene` tests may construct - this package never
+    makes a real network call (M010C delivery constraint: "Every test you
+    write must use ai_platform.testing's fake gateway pattern ... never a
+    real live call").
+
+    Modes: ``"valid"``, ``"invalid_schema"``, ``"timeout"``,
+    ``"auth_error"``, ``"rate_limit"``, ``"retryable"``,
+    ``"fail_then_succeed"``, ``"always_fail_retryable"``.
+
+    `calls` records every `(request, prompt_version)` pair passed to
+    `ask_adviser`, in order - including proving that hostile/prompt-
+    injection-shaped text in `request.user_message` is passed through
+    completely unchanged, and that this fake's behaviour does not vary
+    with the *content* of that text (only with its own constructor-
+    selected `mode`)."""
+
+    def __init__(self, mode: str = "valid", result: Optional[AdviserResponse] = None):
+        self.mode = mode
+        self._result = result
+        self.calls: list = []
+
+    def ask_adviser(self, request, prompt_version: str) -> AdviserResponse:
+        self.calls.append((request, prompt_version))
+
+        if self.mode == "valid":
+            return self._result or default_valid_adviser_result(request, prompt_version)
+        if self.mode == "invalid_schema":
+            raise InvalidResponseError("fixture: gateway returned an unparseable/invalid payload")
+        if self.mode == "timeout":
+            raise GatewayTimeoutError("fixture: gateway timed out")
+        if self.mode == "auth_error":
+            raise GatewayAuthError("fixture: gateway rejected credentials")
+        if self.mode == "rate_limit":
+            raise GatewayRateLimitError("fixture: gateway rate limit exceeded")
+        if self.mode == "retryable":
+            raise GatewayConnectionError("fixture: retryable gateway/network failure")
+        if self.mode == "fail_then_succeed":
+            if len(self.calls) == 1:
+                raise GatewayConnectionError("fixture: transient failure on first attempt")
+            return self._result or default_valid_adviser_result(request, prompt_version)
+        if self.mode == "always_fail_retryable":
+            raise GatewayConnectionError("fixture: gateway/network failure (never recovers)")
+
+        raise ValueError(f"FakeAdviserGateway: unknown mode {self.mode!r}")

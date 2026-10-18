@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from ai_platform.prompts import (
+    adviser_v1,
     policy_generation_v1,
     policy_generation_v2,
     questionnaire_drafting_v1,
@@ -139,4 +140,21 @@ def build_questionnaire_drafting_messages_for_version(prompt_version: str) -> Op
     `prompt_version` for the questionnaire-answer-drafting task, or `None`
     if `prompt_version` is not one this build knows how to render."""
     module = _QUESTIONNAIRE_DRAFTING_PROMPT_MODULES_BY_VERSION.get(prompt_version)
+    return module.build_messages if module is not None else None
+
+
+# --- IRENE adviser task (M010C PID §3-§6) - separate registry, same
+# reasoning again: `build_messages` here takes an `AdviserRequest`. --------
+_ADVISER_PROMPT_MODULES_BY_VERSION = {
+    adviser_v1.PROMPT_VERSION: adviser_v1,
+}
+
+KNOWN_ADVISER_PROMPT_VERSIONS = tuple(_ADVISER_PROMPT_MODULES_BY_VERSION)
+
+
+def build_adviser_messages_for_version(prompt_version: str) -> Optional[Callable]:
+    """Return the `build_messages(request)` callable that renders
+    `prompt_version` for the IRENE adviser task, or `None` if
+    `prompt_version` is not one this build knows how to render."""
+    module = _ADVISER_PROMPT_MODULES_BY_VERSION.get(prompt_version)
     return module.build_messages if module is not None else None

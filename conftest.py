@@ -112,3 +112,17 @@ def _wi6_ensure_entitlements_seed_data(request):
         "entitlements.migrations.0005_seed_tasks_and_irene_product_areas"
     )
     seed_tasks_and_irene.seed_tasks_and_irene(live_apps, None)
+
+    # M010C: the identical gap, extended forward again rather than
+    # silently reopened. `0006_irene_real_destination.py` repoints
+    # `irene` at its real workspace route, exactly mirroring 0004's own
+    # repoint of `foundations` above. Without this call, a `transaction=
+    # True` flush would leave `irene`'s ProductArea row pointed at its
+    # original placeholder destination for every test running afterward
+    # in the same session - the same discovery this fixture's own
+    # docstring already describes for WI6 and for 0005 above it,
+    # recurring again for M010C's own later migration.
+    repoint_irene = importlib.import_module(
+        "entitlements.migrations.0006_irene_real_destination"
+    )
+    repoint_irene.point_irene_at_its_real_workspace(live_apps, None)

@@ -162,6 +162,16 @@ def test_home_monthly_tier_at_all_three_pid28_widths(live_server):
                 page.goto(home_url)
                 page.wait_for_load_state("networkidle")
 
+                # M010C: a brand-new login's first Home visit may
+                # auto-open IRENE's modal overlay, which - correctly, by
+                # design - intercepts pointer events on the rest of the
+                # page while open. Dismiss it first so this pre-existing
+                # (predating M010C) layout/no-collision check is
+                # unaffected by that later, unrelated addition.
+                irene_modal = page.locator("#irene-modal")
+                if irene_modal.count() and irene_modal.is_visible():
+                    page.keyboard.press("Escape")
+
                 _assert_no_overflow(page, f"Home @ {width}px")
                 _assert_sidebar_no_collision(page, width)
 

@@ -84,5 +84,13 @@ urlpatterns = [
         "organisations/<uuid:organisation_id>/foundations-journey/",
         include("foundations_journey.urls"),
     ),
+    # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md §1) - the direct-
+    # URL-enforcement workspace route plus Ask/confirm-task POST
+    # endpoints. The modal itself is rendered as part of
+    # "organisations:detail" (Home) - see irene/views.py's own docstring.
+    path(
+        "organisations/<uuid:organisation_id>/irene/",
+        include("irene.urls"),
+    ),
     path("organisations/", include("activity.urls")),
 ]

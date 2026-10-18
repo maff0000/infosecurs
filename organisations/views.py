@@ -320,6 +320,25 @@ def organisation_detail(request, organisation_id):
     # above returns before reaching here and gets zero new calls.
     current_stage = current_guided_stage(organisation)
 
+    # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md §1): the IRENE
+    # modal renders as PART of Home, after the rest of this view's own
+    # content is already resolved - never for a Paused session (see this
+    # function's own docstring: Paused gets zero entitlement-gated
+    # content). `build_modal_context` returns `None` if `IRENE_ENABLED`
+    # is off or this session lacks the `irene` capability - the template
+    # simply omits the modal section in that case, same as any other
+    # `{% if %}`-gated block. Lazy import: `irene.views` imports
+    # `organisations.views` (lazily, inside its own view bodies) for
+    # `get_member_organisation_or_404` - importing `irene.views` back at
+    # THIS module's top level would not itself cycle today, but keeping
+    # the import here, local to the one call site that needs it, matches
+    # this codebase's own established convention for a new cross-app
+    # dependency introduced by a later package (see entitlements.
+    # decorators's own module docstring for the precedent).
+    from irene.views import build_modal_context
+
+    irene_context = build_modal_context(request, organisation)
+
     return render(
         request,
         "organisations/detail.html",
@@ -335,6 +354,7 @@ def organisation_detail(request, organisation_id):
             "needs_attention_lines": _needs_attention_lines(needs_attention, organisation.id),
             "current_stage": current_stage,
             "customer_zero_reset_enabled": customer_zero_reset_enabled,
+            "irene": irene_context,
         },
     )
 

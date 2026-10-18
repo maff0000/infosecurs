@@ -47,6 +47,13 @@ ROUTE_NAMESPACE_TO_CAPABILITY: dict[str, str] = {
     # guided pages below - a different ProductArea entirely). Not a new
     # ProductArea/migration of its own.
     "foundations_journey": "security",
+    # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md §1): the IRENE
+    # direct-URL-enforcement workspace + Ask/confirm-task endpoints -
+    # gates on the `irene` ProductArea entitlements/migrations/
+    # 0005_seed_tasks_and_irene_product_areas.py already seeded, same
+    # "namespace maps to the ProductArea.code of the same name" shape as
+    # "security_tasks": "tasks" above.
+    "irene": "irene",
 }
 
 # `organisations` splits by `url_name`, not just namespace - mirroring the
