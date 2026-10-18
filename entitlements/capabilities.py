@@ -33,6 +33,11 @@ ROUTE_NAMESPACE_TO_CAPABILITY: dict[str, str] = {
     "governance": "company",
     "workplace": "company",
     "activity": "company",
+    # M010A (docs/pids/M010A-TASK-SPINE.md §2): the new shared Tasks
+    # sidebar page - entitlements/migrations/
+    # 0005_seed_tasks_and_irene_product_areas.py seeds the matching
+    # `tasks` ProductArea row this maps to.
+    "security_tasks": "tasks",
 }
 
 # `organisations` splits by `url_name`, not just namespace - mirroring the

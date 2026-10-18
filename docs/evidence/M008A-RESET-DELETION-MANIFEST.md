@@ -21,6 +21,28 @@ AnswerSelectionDetail` does not appear in that live set, so
 `organisations/reset_service.py`'s `EXPECTED_DELETE_DIRECT_FK_MODELS`/
 `EXPECTED_PRESERVE_DIRECT_FK_MODELS` sets required zero changes.
 
+**M010A addendum (2026-10):** `security_tasks.SecurityTask`,
+`security_tasks.SecurityTaskDependency` and `security_tasks.
+SecurityTaskEvent` (docs/pids/M010A-TASK-SPINE.md) added to the
+DELETE-classified table below. Unlike `security_baseline.
+AnswerSelectionDetail`'s M008B addendum above, all three of these DO carry
+a direct FK to `Organisation` (confirmed by direct read of
+`security_tasks/models.py`: `SecurityTaskDependency`/`SecurityTaskEvent`
+each have their own `organisation` FK in addition to their FK to
+`SecurityTask`, a deliberate per-row tenant-scoping choice documented in
+that app's own models.py, not an oversight) - so, unlike that addendum,
+this one DOES require new entries in `organisations.reset_service.
+EXPECTED_DELETE_DIRECT_FK_MODELS` and new explicit, counted delete calls
+in `reset_customer_zero_organisation` (confirmed: the live preflight check
+raised `ModelDriftError` for exactly these three labels the first time
+M010A's own test suite ran reset-reconciliation tests against a database
+that already had the `security_tasks` app installed, correctly catching
+this real schema growth before any delete ran - see M010A's own evidence
+document for the reproduction). `SecurityTaskEvent`/`SecurityTaskDependency`
+are deleted explicitly BEFORE `SecurityTask` (their own FK target) so each
+gets an accurate, independently-reported count rather than being
+cascade-deleted silently when `SecurityTask` rows are removed.
+
 **Classification key:** every tenant-owned model is exactly one of:
 - **PRESERVE** — bootstrap identity; the reset must never touch this row.
 - **DELETE** — synthetic business/security data; the reset must remove
@@ -40,7 +62,7 @@ AnswerSelectionDetail` does not appear in that live set, so
 | `organisations.OrganisationMembership` | the Owner membership row | Required for the user to reach the organisation at all post-reset. |
 | `governance.OrganisationPerson` (Account Holder's own row only) | the one row with `user=<customer zero user>` | Confirmed: enforced unique by the partial `unique_linked_user_per_organisation` constraint (`user__isnull=False`) — there is exactly one such row per organisation. |
 | `governance.GovernanceRoleAssignment` (the 3 rows assigned to the Account Holder) | all 3 `ROLE_CHOICES` rows, `person=<Account Holder's OrganisationPerson>` | **Confirmed by direct code read of `governance.services.ensure_account_holder_person`**: on genuine first bootstrap it unconditionally assigns *all three* role choices to the Account Holder. A reset's fresh-state contract must reproduce exactly this — not zero roles. |
-| `entitlements.ProductArea` | all 16 seeded rows, globally | Zero FK to `Organisation` anywhere in this model — confirmed structurally impossible for a per-organisation reset to touch it. |
+| `entitlements.ProductArea` | all seeded rows, globally (16 as of M007-WI1; 18 as of the M010A addition of `tasks`/`irene` — docs/pids/M010A-TASK-SPINE.md §2) | Zero FK to `Organisation` anywhere in this model — confirmed structurally impossible for a per-organisation reset to touch it, regardless of row count. |
 | `entitlements.FoundationRequirement` | all 18 seeded rows, globally | Same — zero FK to `Organisation`. `product_area` FK is `PROTECT`, but that's internal to the untouched global catalogue. |
 
 ## Synthetic business/security data — DELETE (every row scoped to the target organisation)
@@ -67,6 +89,9 @@ AnswerSelectionDetail` does not appear in that live set, so
 | `questionnaire.QuestionnaireResponse` | `organisation`, `question` | both CASCADE | no | Same immutability-guard-vs-cascade-delete reasoning as `PolicyVersion` above — confirmed by reading its `save()` override directly; irrelevant to deletion. |
 | `activity.ActivityEvent` | `organisation` | CASCADE | no | Append-only log; PID §A4 explicitly: "avoid false surviving business audit history" for a synthetic fixture. |
 | `ai_platform.AIInvocationRecord` | `organisation` | CASCADE | no | Stores only a hash, never raw prompt/response — nothing extra to scrub. |
+| `security_tasks.SecurityTask` **[M010A addition]** | `organisation` | CASCADE | no | Deleted last of the three new models, after its own dependents below, so their counts are captured before the cascade would otherwise remove them silently. |
+| `security_tasks.SecurityTaskDependency` **[M010A addition]** | `organisation`, `predecessor_task`, `successor_task` | all CASCADE | no | Direct FK to `Organisation` (not merely transitive via the task FKs) — must be deleted explicitly, counted, before `SecurityTask` above. |
+| `security_tasks.SecurityTaskEvent` **[M010A addition]** | `organisation`, `task` | both CASCADE | no | Append-only audit trail for the task spine; same "avoid false surviving business audit history" reasoning as `activity.ActivityEvent`. Direct FK to `Organisation` — same explicit-delete-before-`SecurityTask` requirement as `SecurityTaskDependency`. |
 
 ## DERIVED / NO PERSISTED STATE — nothing to delete
 
@@ -99,7 +124,7 @@ Not a persisted per-organisation model — the *active HTTP session* for the req
 ## Totals
 
 - **7 bootstrap-identity row groups PRESERVE** (User, Organisation, CustomerZeroFixture, Membership, Account Holder's OrganisationPerson, Account Holder's 3 GovernanceRoleAssignments, the 2 global catalogues).
-- **17 app/model DELETE targets**, all CASCADE from `organisation`, one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only). Plus **1 further model, `security_baseline.AnswerSelectionDetail` [M008B WI1 addition]**, which cascades automatically via `BaselineAssessment` (no direct FK to `Organisation`, so it needs no separate delete call and introduces no new DIRECT-FK-to-Organisation entry in either `organisations.reset_service` guard set).
+- **20 app/model DELETE targets** (17 original + 3 `security_tasks` models added by M010A), all CASCADE from `organisation`, one real intra-transaction ordering constraint (GovernanceRoleAssignment before OrganisationPerson, scoped to non-Account-Holder rows only) plus the new M010A-specific ordering note (SecurityTaskEvent/SecurityTaskDependency deleted before SecurityTask, for accurate counts only — not required for correctness, since all three CASCADE). Plus **1 further model, `security_baseline.AnswerSelectionDetail` [M008B WI1 addition]**, which cascades automatically via `BaselineAssessment` (no direct FK to `Organisation`, so it needs no separate delete call and introduces no new DIRECT-FK-to-Organisation entry in either `organisations.reset_service` guard set).
 - **1 derived app with zero persisted state** (`security_state`).
 - **1 separate filesystem resource** (evidence bytes) requiring a new containment-checked directory-deletion helper, committed only after the DB transaction succeeds.
 - **1 required session action** (`logout(request)`, not a model).

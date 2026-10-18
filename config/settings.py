@@ -91,6 +91,10 @@ INSTALLED_APPS = [
     "identity",
     "policy",
     "questionnaire",
+    # M010A (docs/pids/M010A-TASK-SPINE.md): shared, tenant-isolated
+    # security task spine - SecurityTask/SecurityTaskDependency/
+    # SecurityTaskEvent plus the Tasks sidebar page.
+    "security_tasks",
 ]
 
 MIDDLEWARE = [

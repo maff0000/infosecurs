@@ -68,7 +68,15 @@ class TestTierMatrixIsCumulative:
     def test_foundation_sees_home_foundations_security_policies_company_not_customer_assurance(self, user):
         request = _request_at_tier(user, TIER_FOUNDATION)
         tree = build_navigation_tree(request, uuid.uuid4())
-        assert _codes(tree) == ["home", "foundations", "security", "policies", "company"]
+        # M010A (docs/pids/M010A-TASK-SPINE.md §2) added the `tasks` top-
+        # level area at min_package_tier=1/display_order=25 - it now
+        # appears between `foundations` (20) and `security` (40) at every
+        # tier >= Foundational, matching M010-MASTER-ARCHITECTURE.md §1's
+        # "The sidebar retains Dashboard, Foundations and Tasks". `irene`
+        # is NOT in this list - it is seeded `show_in_navigation=False`
+        # (a modal entry point, not a sidebar page) and so never appears
+        # in any build_navigation_tree() output at any tier.
+        assert _codes(tree) == ["home", "foundations", "tasks", "security", "policies", "company"]
 
         security = next(item for item in tree if item.code == "security")
         assert _codes(security.children) == [
@@ -93,11 +101,12 @@ class TestTierMatrixIsCumulative:
 
         assert monthly_codes == foundation_codes | {"customer_assurance"}
         # Ordering: customer_assurance (display_order 30) sits between
-        # foundations (20) and security (40) - the tree reflects seeded
+        # tasks (25, M010A) and security (40) - the tree reflects seeded
         # display_order, never a hand-maintained list.
         assert _codes(monthly_tree) == [
             "home",
             "foundations",
+            "tasks",
             "customer_assurance",
             "security",
             "policies",
@@ -120,10 +129,18 @@ class TestTierMatrixIsCumulative:
         }
 
         assert monthly_all_codes <= pro_codes
-        # Pro sees every single seeded ProductArea - there is no Pro-only
-        # area yet (PID §5.2's own "M007 does not need to invent a fake
-        # Pro-only feature").
-        assert pro_codes == set(ProductArea.objects.values_list("code", flat=True))
+        # Pro sees every single seeded ProductArea that is actually meant
+        # to appear in navigation at all - there is no Pro-only area yet
+        # (PID §5.2's own "M007 does not need to invent a fake Pro-only
+        # feature"). M010A's `irene` row is the one deliberate, documented
+        # exception (docs/pids/M010A-TASK-SPINE.md §2's "placeholder for
+        # the future IRENE modal entry point" - seeded
+        # `show_in_navigation=False` on purpose, so build_navigation_tree()
+        # excludes it at every tier, not just Pro - see entitlements/
+        # migrations/0005_seed_tasks_and_irene_product_areas.py).
+        assert pro_codes == set(
+            ProductArea.objects.filter(show_in_navigation=True).values_list("code", flat=True)
+        )
 
     def test_inactive_area_never_appears_regardless_of_tier(self, user):
         area = ProductArea.objects.get(code="policies")
