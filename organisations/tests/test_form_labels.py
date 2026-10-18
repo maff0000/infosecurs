@@ -82,3 +82,29 @@ class TestOrganisationScopedFormsAreLabelled:
 
     def test_questionnaire_paste_question_form(self, client_a, org_a):
         _assert_fully_labelled(client_a.get(reverse("questionnaire:list", args=[org_a.id])))
+
+    # M010F (docs/pids/M010F-INTEGRATION-SECURITY-RELEASE.md §5
+    # "accessibility axe or equivalent ... against the new IRENE-owned
+    # pages specifically"): the two new form surfaces M010A/M010C
+    # introduced were never added to this mechanical regression net -
+    # their markup was independently confirmed correctly labelled by
+    # direct template read (security_tasks/templates/security_tasks/
+    # form.html, irene/templates/irene/_modal.html), but neither was
+    # covered by this file's own CI-run check before now. Closing that
+    # coverage gap here, same discipline as every other page above.
+    def test_security_tasks_create_form(self, client_a, org_a):
+        _assert_fully_labelled(client_a.get(reverse("security_tasks:create", args=[org_a.id])))
+
+    def test_home_page_with_irene_modal_ask_form(self, client_a, org_a):
+        # `organisations:detail` (Home) renders the IRENE modal's Ask-tab
+        # form markup as part of the SAME response whenever `IRENE_ENABLED`
+        # is on (the default - config/settings.py) and the session holds
+        # the `irene` capability (client_a/member_a does, min_package_tier
+        # 1) - see `irene.views.build_modal_context` and
+        # `irene/templates/irene/_modal.html`’s own `irene-panel-ask`
+        # block. No separate full-page route renders this form (`irene:
+        # workspace` only redirects back to Home - see its own docstring),
+        # so Home is the one real page to check.
+        response = client_a.get(reverse("organisations:detail", args=[org_a.id]))
+        assert b"irene-modal" in response.content
+        _assert_fully_labelled(response)
