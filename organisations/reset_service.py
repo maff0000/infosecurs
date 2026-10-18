@@ -50,6 +50,7 @@ from activity.models import ActivityEvent
 from ai_platform.models import AIInvocationRecord
 from evidence.models import ControlEvidenceLink, EvidenceItem
 from evidence.storage import delete_organisation_evidence_directory
+from foundations_journey.models import JourneyCheckpoint
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
 from governance.services import ensure_account_holder_person
 from key_assets.models import KeyAsset
@@ -129,6 +130,18 @@ EXPECTED_DELETE_DIRECT_FK_MODELS = frozenset(
         "security_tasks.SecurityTask",
         "security_tasks.SecurityTaskDependency",
         "security_tasks.SecurityTaskEvent",
+        # M010B (docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md) - a
+        # DIRECT ForeignKey to Organisation (CASCADE). Holds only a
+        # navigation position (stage/question key, enum state,
+        # bookkeeping fields) for one (organisation, user, journey_code)
+        # - no PII, no raw answer prose. DELETE, same bucket as every
+        # other tenant-owned model above. `foundations_journey.
+        # UserJourneyPreference` is NOT listed here - it carries no FK to
+        # Organisation at all (user-scoped only), so a per-organisation
+        # reset correctly never touches it (same "zero FK to
+        # Organisation" treatment this manifest already gives
+        # `entitlements.ProductArea`).
+        "foundations_journey.JourneyCheckpoint",
     }
 )
 
@@ -422,6 +435,13 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
         deleted_counts["ai_platform.AIInvocationRecord"] = AIInvocationRecord.objects.filter(
             organisation=organisation
         ).delete()[0]
+        # M010B: no ordering constraint with the SecurityTask deletes
+        # below - `pending_task` is SET_NULL, so whichever side deletes
+        # first, Django's own delete collector (not this module) handles
+        # nullifying/removing the FK correctly either way.
+        deleted_counts["foundations_journey.JourneyCheckpoint"] = (
+            JourneyCheckpoint.objects.filter(organisation=organisation).delete()[0]
+        )
         # M010A: dependents (both of which also carry their own direct
         # `organisation` FK - see the EXPECTED_DELETE_DIRECT_FK_MODELS
         # comment above) deleted explicitly BEFORE their parent
