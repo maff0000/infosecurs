@@ -292,3 +292,13 @@ After evidence merges, report the exact resulting `main` SHA to Central Architec
 STOP.
 
 Do not start M006 until Central Architecture ratifies this relocation gate GREEN.
+
+---
+
+## Amendment (2026-10-20) — Deployment Boundary
+
+The "Durable placement rule" above (`INFOSECURS PROJECT_ROOT = /srv/infosecurs`) correctly fixed where Infosecurs lived after the Trinity relocation. It did not anticipate, and does not authorise, that same path being used as an ongoing, long-lived development Git working tree while it simultaneously serves as a persistent application container's live, bind-mounted source. The 2026-10-19 incident (`docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`) is the proof that it must not.
+
+This rule is accordingly narrowed, not reversed: `PROJECT_ROOT` means the deployment's build context only. Ongoing development, review and worktree operations use a separate clone outside this path. Full governing text: `PID.md` Sec6.1; amendment rationale: `docs/architecture/DEPLOYMENT-BOUNDARY-PID-AMENDMENT.md`; implementation (once separately accepted): `docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md`.
+
+The original rule text above is preserved unchanged for historical record; this amendment supersedes only the single ambiguity it left open.
