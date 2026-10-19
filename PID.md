@@ -131,7 +131,7 @@ Core principles:
 
 ### 6.1 Deployment boundary (persistent runtime)
 
-**Architecture decision (Central Architecture, 2026-10-20, following `docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`):** the persistent INFOSECURS Beta must run immutable, exact-SHA application artifacts. It must never execute source code from a mutable development Git working tree.
+**Architecture decision (Central Architecture, 2026-10-19, following `docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`):** the persistent INFOSECURS Beta must run immutable, exact-SHA application artifacts. It must never execute source code from a mutable development Git working tree.
 
 Development clones and worktrees are segregated from persistent deployment resources. Persistent runtime uses a proper WSGI/ASGI server without Django's development autoreloader.
 
@@ -325,7 +325,7 @@ GitHub is authoritative for:
 
 Memory Fabric may orient GUNNAR but never overrides GitHub project truth.
 
-**Mandatory delivery doctrine (reinforced 2026-10-20, following the deployment-boundary incident):**
+**Mandatory delivery doctrine (reinforced 2026-10-19, following the deployment-boundary incident):**
 
 ```text
 Architecture decision
