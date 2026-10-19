@@ -1,0 +1,144 @@
+{% extends "application_shell.html" %}
+
+{% block title %}{{ task.title }} — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .task-detail__status-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .badge--status-open { background: var(--color-border); color: var(--color-text); }
+  .badge--status-in_progress { background: #fdf1d6; color: #8a5a00; }
+  .badge--status-blocked { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--status-awaiting_external { background: #fdf1d6; color: #8a5a00; }
+  .badge--status-awaiting_review { background: #fbe6d6; color: #a3521f; }
+  .badge--status-done { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--status-cancelled { background: var(--color-border); color: var(--color-text); }
+  .task-detail__section { margin-bottom: var(--space-4); }
+  .task-detail__label { font-weight: 600; margin: 0 0 var(--space-1) 0; }
+  .dependency-list, .event-list { margin: 0; padding-left: 1.2rem; }
+  .event-list li { font-size: 0.9rem; margin-bottom: var(--space-2); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>{{ task.title }}</h1>
+        <p class="page-header__subtitle"><a href="{% url 'security_tasks:list' organisation.id %}">&larr; Back to Tasks</a> &middot; {{ organisation.name }}</p>
+    </div>
+</div>
+
+<div class="task-detail__status-row">
+    <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+    <span class="badge">{{ task.get_task_kind_display }}</span>
+    <span class="badge">{{ task.get_priority_display }} priority</span>
+</div>
+
+<div class="summary-card task-detail__section">
+    <h2>Details</h2>
+    {% if task.summary %}<p>{{ task.summary }}</p>{% endif %}
+    <p class="task-detail__label">Assigned to</p>
+    <p>{% if task.assigned_to %}{{ task.assigned_to }}{% else %}Unassigned{% endif %}</p>
+    <p class="task-detail__label">Due date</p>
+    <p>{% if task.due_at %}{{ task.due_at|date:"d M Y H:i" }} UTC{% else %}No due date set{% endif %}</p>
+    <p class="task-detail__label">Source</p>
+    <p>
+        {% if task.source_kind == "none" %}
+            No linked source — this is an administrative task only. Marking it done never changes any
+            security fact, control, policy or risk recorded elsewhere in INFOSECURS.
+        {% elif detail.source_unavailable %}
+            Source unavailable.
+        {% elif task.source_kind == "security_baseline.baselineanswer" and detail.source_object %}
+            {# M010B: the one registered source kind this package's guided journey #}
+            {# links through - a real, registered reverse() route, never a hand-built URL. #}
+            <a href="{% url 'security_baseline:foundations_question' task.organisation_id detail.source_object.question_key %}">
+                Foundations — {{ detail.source_object.question_key }}
+            </a>
+        {% else %}
+            {{ task.source_kind }}
+        {% endif %}
+    </p>
+</div>
+
+<div class="summary-card task-detail__section">
+    <h2>Dependencies</h2>
+    <p class="task-detail__label">Blocked by</p>
+    {% if detail.predecessor_dependencies %}
+        <ul class="dependency-list">
+            {% for dep in detail.predecessor_dependencies %}
+                <li>
+                    <a href="{% url 'security_tasks:detail' organisation.id dep.predecessor_task.id %}">{{ dep.predecessor_task.title }}</a>
+                    ({{ dep.predecessor_task.get_status_display }})
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Not blocked by any other task.</p>
+    {% endif %}
+    <p class="task-detail__label" style="margin-top: var(--space-3);">Blocks</p>
+    {% if detail.successor_dependencies %}
+        <ul class="dependency-list">
+            {% for dep in detail.successor_dependencies %}
+                <li><a href="{% url 'security_tasks:detail' organisation.id dep.successor_task.id %}">{{ dep.successor_task.title }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Does not block any other task.</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'security_tasks:link_dependency' organisation.id task.id %}" style="margin-top: var(--space-3);">
+        {% csrf_token %}
+        <label for="{{ dependency_form.predecessor.id_for_label }}">Add a task this one is blocked by</label>
+        {{ dependency_form.predecessor }}
+        <button type="submit" class="button button--secondary">Add dependency</button>
+    </form>
+</div>
+
+<div class="summary-card task-detail__section">
+    <h2>Change status</h2>
+    <form method="post" action="{% url 'security_tasks:transition' organisation.id task.id %}">
+        {% csrf_token %}
+        {{ transition_form.expected_version }}
+        <label for="{{ transition_form.next_status.id_for_label }}">New status</label>
+        {{ transition_form.next_status }}
+        <label for="{{ transition_form.reason.id_for_label }}">Reason</label>
+        {{ transition_form.reason }}
+        <label>
+            {{ transition_form.override_blocked }}
+            Override blocking dependencies (requires a reason above)
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="button button--primary">Update status</button>
+        </div>
+    </form>
+</div>
+
+<div class="summary-card task-detail__section">
+    <h2>Assignment</h2>
+    <form method="post" action="{% url 'security_tasks:assign' organisation.id task.id %}">
+        {% csrf_token %}
+        {{ assign_form.expected_version }}
+        <label for="{{ assign_form.assignee.id_for_label }}">Assign to</label>
+        {{ assign_form.assignee }}
+        <div class="form-actions">
+            <button type="submit" class="button button--secondary">Update assignment</button>
+        </div>
+    </form>
+</div>
+
+<div class="summary-card task-detail__section">
+    <h2>History</h2>
+    {% if detail.events %}
+        <ul class="event-list">
+            {% for event in detail.events %}
+                <li>
+                    {{ event.event_time|date:"d M Y H:i" }} UTC &middot; {{ event.get_action_display }}
+                    {% if event.previous_status and event.new_status and event.previous_status != event.new_status %}
+                        ({{ event.previous_status }} &rarr; {{ event.new_status }})
+                    {% endif %}
+                    {% if event.actor_user %} &middot; {{ event.actor_user }}{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No history recorded yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

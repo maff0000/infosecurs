@@ -63,6 +63,18 @@ def _wait_for_sidebar_transition(page):
     page.wait_for_timeout(300)
 
 
+def _dismiss_irene_modal_if_open(page):
+    """M010C: a brand-new login's first Home visit may auto-open IRENE's
+    modal, whose overlay correctly (by design) intercepts pointer events
+    on the rest of the page while open - including the hamburger toggle
+    this file's own pre-existing (predating M010C) drawer checks click
+    immediately after loading Home. Dismiss it first so those checks are
+    unaffected by that later, unrelated addition."""
+    modal = page.locator("#irene-modal")
+    if modal.count() and modal.is_visible():
+        page.keyboard.press("Escape")
+
+
 def _nav_links(page):
     """(href, text) pairs for every real nav link currently in the DOM,
     inside `#shell-sidebar` - used to compare the desktop render and the
@@ -86,6 +98,7 @@ def test_hamburger_hidden_sidebar_off_canvas_at_narrow_but_visible_at_desktop(li
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             toggle = page.locator("#shell-nav-toggle")
             assert toggle.is_visible()
@@ -119,6 +132,7 @@ def test_click_opens_drawer_and_sets_aria_expanded_true(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             toggle = page.locator("#shell-nav-toggle")
             toggle.click()
@@ -153,6 +167,7 @@ def test_drawer_shows_identical_markup_to_desktop_sidebar_same_session(live_serv
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
             desktop_links = _nav_links(page)
             assert len(desktop_links) > 0
 
@@ -187,6 +202,7 @@ def test_escape_closes_drawer_and_returns_focus_to_hamburger(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             toggle = page.locator("#shell-nav-toggle")
             toggle.click()
@@ -226,6 +242,7 @@ def test_overlay_click_closes_drawer(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             toggle = page.locator("#shell-nav-toggle")
             toggle.click()
@@ -283,6 +300,7 @@ def test_overlay_click_returns_focus_to_toggle(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             toggle = page.locator("#shell-nav-toggle")
             toggle.click()
@@ -313,6 +331,7 @@ def test_hamburger_is_keyboard_operable(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             page.locator("#shell-nav-toggle").focus()
             is_focused = page.evaluate(
@@ -349,6 +368,7 @@ def test_no_keyboard_trap_in_open_drawer(live_server):
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             page.locator("#shell-nav-toggle").click()
             link_count = page.locator("#shell-sidebar .shell-nav__link").count()
@@ -387,6 +407,7 @@ def test_selecting_a_drawer_link_navigates_and_does_not_leave_drawer_obscuring_d
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             page.locator("#shell-nav-toggle").click()
             first_link = page.locator("#shell-sidebar .shell-nav__link").first
@@ -425,6 +446,7 @@ def test_no_unauthorised_item_reachable_via_dom_manipulation_of_presentation_sta
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             via_click = None
             page.locator("#shell-nav-toggle").click()

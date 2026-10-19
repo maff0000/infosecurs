@@ -1,0 +1,144 @@
+{% extends "application_shell.html" %}
+
+{% block title %}Tasks — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<style>
+  .task-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: end;
+    margin-bottom: var(--space-4);
+  }
+  .task-filter-form__field { display: flex; flex-direction: column; gap: var(--space-1); }
+  .task-filter-form__field label { font-size: 0.85rem; font-weight: 600; }
+  .task-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .task-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+  .task-card__body { flex: 1 1 360px; min-width: 0; }
+  .task-card__title {
+    font-weight: 600;
+    margin: 0 0 var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .task-card__title a { min-width: 0; overflow-wrap: anywhere; }
+  .task-card__meta { color: var(--color-text-muted); font-size: 0.85rem; margin: 0; }
+  .badge--status-open { background: var(--color-border); color: var(--color-text); }
+  .badge--status-in_progress { background: #fdf1d6; color: #8a5a00; }
+  .badge--status-blocked { background: var(--color-error-bg); color: var(--color-error-text); }
+  .badge--status-awaiting_external { background: #fdf1d6; color: #8a5a00; }
+  .badge--status-awaiting_review { background: #fbe6d6; color: #a3521f; }
+  .badge--status-done { background: var(--color-success-bg); color: var(--color-success-text); }
+  .badge--status-cancelled { background: var(--color-border); color: var(--color-text); }
+  .badge--priority-high { background: #fbe6d6; color: #a3521f; }
+  .badge--priority-urgent { background: var(--color-error-bg); color: var(--color-error-text); }
+  .task-pagination { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-4); }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Tasks</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+    <div class="page-header__actions">
+        <a class="button button--primary" href="{% url 'security_tasks:create' organisation.id %}">New task</a>
+    </div>
+</div>
+
+<div class="metric-card-row" aria-label="Upcoming and overdue review tasks">
+    <div class="metric-card">
+        <h2 class="metric-card__title">Overdue</h2>
+        <p class="metric-card__value">{{ review_briefing.overdue }}</p>
+        <p class="metric-card__copy">Review tasks past their due date.</p>
+    </div>
+    <div class="metric-card">
+        <h2 class="metric-card__title">Due in 7 days</h2>
+        <p class="metric-card__value">{{ review_briefing.due_within_7_days }}</p>
+        <p class="metric-card__copy">Review tasks due within the next week.</p>
+    </div>
+    <div class="metric-card">
+        <h2 class="metric-card__title">Due in 30 days</h2>
+        <p class="metric-card__value">{{ review_briefing.due_within_30_days }}</p>
+        <p class="metric-card__copy">Review tasks due within the next month.</p>
+    </div>
+</div>
+
+<form method="get" class="task-filter-form" aria-label="Filter tasks">
+    <div class="task-filter-form__field">
+        <label for="{{ filter_form.group.id_for_label }}">Group</label>
+        {{ filter_form.group }}
+    </div>
+    <div class="task-filter-form__field">
+        <label for="{{ filter_form.status.id_for_label }}">Status</label>
+        {{ filter_form.status }}
+    </div>
+    <div class="task-filter-form__field">
+        <label for="{{ filter_form.assignee.id_for_label }}">Assignee</label>
+        {{ filter_form.assignee }}
+    </div>
+    <div class="task-filter-form__field">
+        <label for="{{ filter_form.due.id_for_label }}">Due</label>
+        {{ filter_form.due }}
+    </div>
+    <div class="task-filter-form__field">
+        <label for="{{ filter_form.q.id_for_label }}">Search</label>
+        {{ filter_form.q }}
+    </div>
+    <div class="task-filter-form__field">
+        <button type="submit" class="button button--secondary">Apply filters</button>
+    </div>
+</form>
+
+{% if task_page.items %}
+    <div class="task-grid">
+        {% for task in task_page.items %}
+            <div class="task-card">
+                <div class="task-card__body">
+                    <p class="task-card__title">
+                        <a href="{% url 'security_tasks:detail' organisation.id task.id %}">{{ task.title }}</a>
+                        <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+                        {% if task.priority == "high" or task.priority == "urgent" %}
+                            <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+                        {% endif %}
+                    </p>
+                    <p class="task-card__meta">
+                        {{ task.get_task_kind_display }}
+                        {% if task.assigned_to %} &middot; Assigned to {{ task.assigned_to }}{% else %} &middot; Unassigned{% endif %}
+                        {% if task.due_at %} &middot; Due {{ task.due_at|date:"d M Y" }}{% endif %}
+                    </p>
+                </div>
+                <div class="task-card__actions">
+                    <a class="button button--secondary" href="{% url 'security_tasks:detail' organisation.id task.id %}">View</a>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state"><p>No tasks match these filters.</p></div>
+{% endif %}
+
+{% if task_page.num_pages > 1 %}
+    <nav class="task-pagination" aria-label="Task list pagination">
+        {% if task_page.has_previous %}
+            <a class="button button--secondary" href="?{{ request.GET.urlencode }}&page={{ task_page.page|add:"-1" }}">Previous</a>
+        {% endif %}
+        <span>Page {{ task_page.page }} of {{ task_page.num_pages }} ({{ task_page.total_count }} task{{ task_page.total_count|pluralize }})</span>
+        {% if task_page.has_next %}
+            <a class="button button--secondary" href="?{{ request.GET.urlencode }}&page={{ task_page.page|add:"1" }}">Next</a>
+        {% endif %}
+    </nav>
+{% endif %}
+{% endblock %}

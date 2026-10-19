@@ -91,6 +91,29 @@ jobs:
           questionnaire/tests/test_m009a_clamav_image_pin.py
           questionnaire/tests/test_m009b_csv_import.py
           organisations/tests/test_m009a_reset_reconciliation.py
+          security_tasks/tests/test_models.py
+          security_tasks/tests/test_services.py
+          security_tasks/tests/test_dependencies.py
+          security_tasks/tests/test_completion_independence.py
+          security_tasks/tests/test_review_rules.py
+          security_tasks/tests/test_review_scheduler.py
+          security_tasks/tests/test_review_briefing.py
+          security_tasks/tests/test_run_security_reviews_command.py
+          foundations_journey/tests/test_models.py
+          foundations_journey/tests/test_checkpoint.py
+          foundations_journey/tests/test_parity_golden_set.py
+          foundations_journey/tests/test_forgery_and_edge_cases.py
+          foundations_journey/tests/test_task_handoff.py
+          foundations_journey/tests/test_zero_ai_calls.py
+          irene/tests/test_models.py
+          irene/tests/test_services.py
+          irene/tests/test_product_knowledge.py
+          irene/tests/test_tools.py
+          irene/tests/test_skills.py
+          irene/tests/test_orchestration.py
+          irene/tests/test_zero_ai_calls.py
+          irene/tests/test_capability_matrix.py
+          irene/tests/test_customer_assurance_tools.py
 
   integration:
     name: ci/integration
@@ -204,3 +227,13 @@ jobs:
           questionnaire/tests/test_m009a_entitlement.py
           questionnaire/tests/test_m009a_browser_acceptance.py
           questionnaire/tests/test_m009b_readiness_gate.py
+          security_tasks/tests/test_tenant_isolation.py
+          security_tasks/tests/test_http_ui.py
+          security_tasks/tests/test_concurrency.py
+          security_tasks/tests/test_review_scheduler_concurrency.py
+          security_tasks/tests/test_browser_acceptance.py
+          foundations_journey/tests/test_concurrency.py
+          foundations_journey/tests/test_browser_acceptance.py
+          irene/tests/test_http_ui.py
+          irene/tests/test_adversarial.py
+          irene/tests/test_browser_acceptance.py

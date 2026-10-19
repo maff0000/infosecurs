@@ -36,6 +36,11 @@ EXPECTED_PRODUCT_AREA_CODES = {
     "governance",
     "workplace",
     "activity",
+    # M010A (entitlements/migrations/0005_seed_tasks_and_irene_product_
+    # areas.py, docs/pids/M010A-TASK-SPINE.md §2) - strictly additive to
+    # the 16 rows above, none of which this migration alters.
+    "tasks",
+    "irene",
 }
 
 EXPECTED_BASELINE_REQUIREMENT_CODES = {
@@ -81,7 +86,11 @@ EXPECTED_BASELINE_WEIGHTS = {
 
 class TestProductAreaSeed:
     def test_exact_row_count(self):
-        assert ProductArea.objects.count() == 16
+        # 16 original (M007-WI1) + 2 additive M010A rows (`tasks`, `irene`
+        # - entitlements/migrations/0005_seed_tasks_and_irene_product_
+        # areas.py). See that migration's own docstring for proof it never
+        # alters any of the original 16.
+        assert ProductArea.objects.count() == 18
 
     def test_exact_code_set(self):
         assert set(ProductArea.objects.values_list("code", flat=True)) == EXPECTED_PRODUCT_AREA_CODES
@@ -133,13 +142,27 @@ class TestProductAreaSeed:
             "workplace": 1,
             "activity": 1,
             "customer_assurance": 2,
+            # M010A additions - both Foundational tier (1), matching
+            # M010-MASTER-ARCHITECTURE.md §9's "Foundational: ...safe task
+            # management...".
+            "tasks": 1,
+            "irene": 1,
         }
         actual = dict(ProductArea.objects.values_list("code", "min_package_tier"))
         assert actual == expected
 
-    def test_all_seeded_rows_active_and_shown_in_navigation(self):
+    def test_all_seeded_rows_are_active(self):
         assert not ProductArea.objects.filter(is_active=False).exists()
-        assert not ProductArea.objects.filter(show_in_navigation=False).exists()
+
+    def test_all_seeded_rows_shown_in_navigation_except_the_irene_placeholder(self):
+        """M010A's `irene` row is a deliberate exception (docs/pids/
+        M010A-TASK-SPINE.md §2's own "placeholder for the future IRENE
+        modal entry point") - IRENE is a modal entry point, not a sidebar
+        page, so it is seeded `show_in_navigation=False` on purpose. Every
+        OTHER row, including the two M010A added, remains
+        `show_in_navigation=True`."""
+        hidden = set(ProductArea.objects.filter(show_in_navigation=False).values_list("code", flat=True))
+        assert hidden == {"irene"}
 
 
 class TestFoundationRequirementSeed:

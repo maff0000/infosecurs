@@ -50,8 +50,10 @@ from activity.models import ActivityEvent
 from ai_platform.models import AIInvocationRecord
 from evidence.models import ControlEvidenceLink, EvidenceItem
 from evidence.storage import delete_organisation_evidence_directory
+from foundations_journey.models import JourneyCheckpoint
 from governance.models import GovernanceRoleAssignment, OrganisationPerson
 from governance.services import ensure_account_holder_person
+from irene.models import AssistantAction, AssistantConversation
 from key_assets.models import KeyAsset
 from organisations.models import AuditEvent, CustomerZeroFixture, Organisation, OrganisationProfile
 from policy.models import PolicyDocument, PolicyVersion
@@ -60,6 +62,7 @@ from questionnaire.models import QuestionnaireImport, QuestionnaireQuestion, Que
 from remediation.models import ActionEvidenceLink, RemediationAction
 from risk_register.models import Risk
 from security_baseline.models import BaselineAssessment
+from security_tasks.models import SecurityTask, SecurityTaskDependency, SecurityTaskEvent
 from workplace.models import Workplace
 
 # ---------------------------------------------------------------------------
@@ -116,6 +119,44 @@ EXPECTED_DELETE_DIRECT_FK_MODELS = frozenset(
         "questionnaire.QuestionnaireImport",
         "activity.ActivityEvent",
         "ai_platform.AIInvocationRecord",
+        # M010A (docs/pids/M010A-TASK-SPINE.md) - all three new models have
+        # a DIRECT ForeignKey to Organisation (SecurityTaskDependency/
+        # SecurityTaskEvent each carry their own `organisation` FK in
+        # addition to their FKs to SecurityTask - see security_tasks/
+        # models.py's own docstring for why), so all three must be
+        # explicitly accounted for here, not merely "cascades via the
+        # parent task" like security_baseline.BaselineAnswer. Synthetic
+        # administrative task data for the fixture organisation - DELETE,
+        # same bucket as every other tenant-owned model above.
+        "security_tasks.SecurityTask",
+        "security_tasks.SecurityTaskDependency",
+        "security_tasks.SecurityTaskEvent",
+        # M010B (docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md) - a
+        # DIRECT ForeignKey to Organisation (CASCADE). Holds only a
+        # navigation position (stage/question key, enum state,
+        # bookkeeping fields) for one (organisation, user, journey_code)
+        # - no PII, no raw answer prose. DELETE, same bucket as every
+        # other tenant-owned model above. `foundations_journey.
+        # UserJourneyPreference` is NOT listed here - it carries no FK to
+        # Organisation at all (user-scoped only), so a per-organisation
+        # reset correctly never touches it (same "zero FK to
+        # Organisation" treatment this manifest already gives
+        # `entitlements.ProductArea`).
+        "foundations_journey.JourneyCheckpoint",
+        # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md) - both carry
+        # a DIRECT ForeignKey to Organisation (`AssistantConversation`
+        # CASCADE, `AssistantAction` CASCADE - see irene/models.py's own
+        # docstring for why `AssistantAction` is its own small table
+        # rather than a reuse of `activity.ActivityEvent`).
+        # `AssistantMessage` is NOT listed here - like `security_baseline.
+        # BaselineAnswer`/`questionnaire.QuestionnaireImportQuestion`, it
+        # carries no direct FK to Organisation at all (only to
+        # `AssistantConversation`), so it cascades automatically when its
+        # parent conversation row is deleted below. Synthetic
+        # Ask-tab conversation/action data for the fixture organisation -
+        # DELETE, same bucket as every other tenant-owned model above.
+        "irene.AssistantConversation",
+        "irene.AssistantAction",
     }
 )
 
@@ -407,6 +448,40 @@ def reset_customer_zero_organisation(organisation, *, performed_by):
             organisation=organisation
         ).delete()[0]
         deleted_counts["ai_platform.AIInvocationRecord"] = AIInvocationRecord.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        # M010B: no ordering constraint with the SecurityTask deletes
+        # below - `pending_task` is SET_NULL, so whichever side deletes
+        # first, Django's own delete collector (not this module) handles
+        # nullifying/removing the FK correctly either way.
+        deleted_counts["foundations_journey.JourneyCheckpoint"] = (
+            JourneyCheckpoint.objects.filter(organisation=organisation).delete()[0]
+        )
+        # M010A: dependents (both of which also carry their own direct
+        # `organisation` FK - see the EXPECTED_DELETE_DIRECT_FK_MODELS
+        # comment above) deleted explicitly BEFORE their parent
+        # SecurityTask rows, so each gets its own accurate count here
+        # rather than being silently cascade-deleted (and therefore
+        # under-reported) the moment SecurityTask rows are removed below.
+        deleted_counts["security_tasks.SecurityTaskEvent"] = SecurityTaskEvent.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        deleted_counts["security_tasks.SecurityTaskDependency"] = (
+            SecurityTaskDependency.objects.filter(organisation=organisation).delete()[0]
+        )
+        deleted_counts["security_tasks.SecurityTask"] = SecurityTask.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        # M010C: `AssistantAction.conversation` is SET_NULL, so deletion
+        # order relative to `AssistantConversation` below does not matter
+        # (same "whichever side deletes first, Django's own delete
+        # collector handles it" reasoning as `JourneyCheckpoint.
+        # pending_task` above). `AssistantMessage` rows cascade
+        # automatically with their parent `AssistantConversation`.
+        deleted_counts["irene.AssistantAction"] = AssistantAction.objects.filter(
+            organisation=organisation
+        ).delete()[0]
+        deleted_counts["irene.AssistantConversation"] = AssistantConversation.objects.filter(
             organisation=organisation
         ).delete()[0]
 

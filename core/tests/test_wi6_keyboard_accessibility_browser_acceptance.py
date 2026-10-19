@@ -48,6 +48,18 @@ def _active_element_box_shadow(page):
     )
 
 
+def _dismiss_irene_modal_if_open(page):
+    """M010C: a brand-new login's first Home visit may auto-open IRENE's
+    modal, which correctly traps Tab/focus while open (by design). Every
+    keyboard-walk test below predates M010C and assumes Tab/focus moves
+    freely across the WHOLE page from the very first press - dismiss the
+    modal first so that pre-existing assumption is unaffected by this
+    later, unrelated addition."""
+    modal = page.locator("#irene-modal")
+    if modal.count() and modal.is_visible():
+        page.keyboard.press("Escape")
+
+
 @pytest.mark.django_db(transaction=True)
 def test_skip_link_is_revealed_by_tab_and_activation_lands_focus_in_main_content(live_server):
     user, organisation = _new_org_and_user("wi6_kbd_skip_link")
@@ -60,6 +72,7 @@ def test_skip_link_is_revealed_by_tab_and_activation_lands_focus_in_main_content
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             skip_link = page.locator(".skip-link")
             # Off-screen (left: -999px) until focused - not merely
@@ -173,6 +186,7 @@ def test_tab_order_reaches_every_new_interactive_element_and_logout(live_server)
             _login(page, live_server, user.username)
             page.goto(home_url)
             page.wait_for_load_state("networkidle")
+            _dismiss_irene_modal_if_open(page)
 
             stops = []
             for _ in range(60):

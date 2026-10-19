@@ -37,6 +37,59 @@ CUSTOMER_ZERO_RESET_ENABLED = DJANGO_ENV == "development" and optional_env(
     "INFOSECURS_ENABLE_CUSTOMER_ZERO_RESET", "false"
 ).lower() == "true"
 
+# M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md §8 / docs/
+# architecture/M010-ADVISER-TOOLS-AND-SKILLS.md §8 "Operational release
+# controls"): three independent feature flags, none DJANGO_ENV-gated
+# (unlike CUSTOMER_ZERO_RESET_ENABLED above, which is a dev-only tool -
+# these are ordinary product flags that may need to be on in any
+# environment, including production, for the deterministic parts).
+#
+# `IRENE_ENABLED` - the modal shell itself (Continue/Tasks/Activity tabs,
+# the conversation model, the deterministic Ask-tab fallback). Defaults
+# ON: this whole deterministic path makes zero AI-gateway calls and is
+# "releasable independently" per WO-M010-GUNNAR-ONE-PUSH.md §2 WP-C.
+IRENE_ENABLED = optional_env("IRENE_ENABLED", "true").lower() == "true"
+
+# `IRENE_TASK_TOOLS_ENABLED` - the constrained-write tools (propose_task/
+# confirm_task_creation). Defaults ON: both go through the exact same
+# canonical, already-tested `security_tasks.services.create_task` write
+# path a manual "New task" form submission uses, gated on explicit user
+# confirmation (irene.tools.confirm_task_creation) - there is no live AI
+# dependency in this flag at all.
+IRENE_TASK_TOOLS_ENABLED = optional_env("IRENE_TASK_TOOLS_ENABLED", "true").lower() == "true"
+
+# `IRENE_ADVISER_MODE_ENABLED` - the ONLY flag that gates a real call to
+# the AI gateway (ai_platform.gateway.LiteLLMGateway.ask_adviser). Defaults
+# OFF, and MUST stay off until "the numeric budgets and vendor security
+# assessment are approved" (WO-M010-GUNNAR-ONE-PUSH.md §2 WP-C, quoted
+# verbatim) - no such approval has been given to this campaign. See
+# docs/evidence/M010C-IRENE-WORKSPACE-TOOLS.md for the explicit disclosure
+# of every placeholder numeric value (irene.orchestration.
+# PER_USER_HOURLY_CALL_LIMIT/PER_ORG_DAILY_CALL_LIMIT,
+# ai_platform.adviser_contracts.MAX_*) this Implementer had to invent a
+# conservative, clearly-commented placeholder for, in the absence of any
+# approved value, and why each one requires separate approval before this
+# flag may ever be set to true outside a test.
+IRENE_ADVISER_MODE_ENABLED = optional_env("IRENE_ADVISER_MODE_ENABLED", "false").lower() == "true"
+
+# `IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED` (M010E PID §1/§3) - the
+# read-only Customer Assurance (M009) status tool/page
+# (irene.tools.get_customer_assurance_status, irene:assurance_status).
+# Defaults ON: like IRENE_TASK_TOOLS_ENABLED above, this has no live AI
+# dependency at all - it only re-reads `entitlements.capabilities.
+# has_capability`, `security_baseline.readiness.
+# evaluate_assurance_readiness` and the existing, unmodified
+# `QuestionnaireImport` model, all already independently tier/readiness-
+# gated on every call. A separate flag from IRENE_ENABLED/
+# IRENE_TASK_TOOLS_ENABLED per D11 ("Higher-tier capabilities are
+# feature-flagged, not improvised") - this is the one new higher-tier
+# (Monthly/PRO) surface this campaign adds, so it gets its own
+# independent rollback switch rather than riding on a Foundational-tier
+# flag's default.
+IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED = (
+    optional_env("IRENE_CUSTOMER_ASSURANCE_ADAPTER_ENABLED", "true").lower() == "true"
+)
+
 # ---------------------------------------------------------------------------
 # Core
 # ---------------------------------------------------------------------------
@@ -91,6 +144,20 @@ INSTALLED_APPS = [
     "identity",
     "policy",
     "questionnaire",
+    # M010A (docs/pids/M010A-TASK-SPINE.md): shared, tenant-isolated
+    # security task spine - SecurityTask/SecurityTaskDependency/
+    # SecurityTaskEvent plus the Tasks sidebar page.
+    "security_tasks",
+    # M010B (docs/pids/M010B-FOUNDATIONS-GUIDED-JOURNEY.md): the guided
+    # Foundations journey adapter - JourneyCheckpoint/
+    # UserJourneyPreference plus the guided question card/task-handoff/
+    # pause-resume views. A thin adapter over the existing, unmodified
+    # security_baseline contracts - never a second answer/question store.
+    "foundations_journey",
+    # M010C (docs/pids/M010C-IRENE-MODAL-SKILLS-TOOLS.md): IRENE's own
+    # conversation/action models, Product Knowledge Map registry, bounded
+    # tool registry and Git-reviewed skill filesystem.
+    "irene",
 ]
 
 MIDDLEWARE = [

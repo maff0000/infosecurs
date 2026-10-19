@@ -62,6 +62,17 @@ def test_real_browser_logout_destroys_access_and_back_button_does_not_reauthoris
             page.wait_for_load_state("networkidle")
             assert page.locator(".metric-card").count() == 2, "should be genuinely authenticated"
 
+            # M010C: a brand-new login's first Home visit may auto-open
+            # IRENE's modal overlay, which - correctly, by design -
+            # intercepts pointer events (including the header's own
+            # logout button) on the rest of the page while open. Dismiss
+            # it first so this pre-existing (predating M010C) logout/
+            # back-button check is unaffected by that later, unrelated
+            # addition.
+            irene_modal = page.locator("#irene-modal")
+            if irene_modal.count() and irene_modal.is_visible():
+                page.keyboard.press("Escape")
+
             # The real "Log out" form - scoped selector (not a bare
             # button[type=submit]), matching this codebase's own already-
             # documented lesson (core/tests/test_badge_narrow_viewport_
