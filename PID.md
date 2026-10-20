@@ -129,6 +129,18 @@ Core principles:
 - Immutable production artifact by exact Git SHA.
 - GitHub is project truth and engineering evidence spine.
 
+### 6.1 Deployment boundary (persistent runtime)
+
+**Architecture decision (Central Architecture, 2026-10-19, following `docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`):** the persistent INFOSECURS Beta must run immutable, exact-SHA application artifacts. It must never execute source code from a mutable development Git working tree.
+
+Development clones and worktrees are segregated from persistent deployment resources. Persistent runtime uses a proper WSGI/ASGI server without Django's development autoreloader.
+
+Database migrations are explicit, separately controlled release operations. They never execute implicitly during container startup.
+
+Database, evidence and questionnaire volume identities remain unchanged. Existing data is preserved. Any schema modification must be independently assessed for compatibility and recovery.
+
+This amends the `docs/delivery/M005-M006-HOST-RELOCATION-GATE.md` "Durable placement rule" (`PROJECT_ROOT = /srv/infosecurs`) to mean the deployment's build context only, never a shared, ongoing development working tree. Full rationale: `docs/architecture/DEPLOYMENT-BOUNDARY-PID-AMENDMENT.md`. Implementation authority: `docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md`, gated on its own Architect Acceptance, separate from this amendment's.
+
 ---
 
 ## 7. High-level module map
@@ -313,27 +325,42 @@ GitHub is authoritative for:
 
 Memory Fabric may orient GUNNAR but never overrides GitHub project truth.
 
-Normal change flow:
+**Mandatory delivery doctrine (reinforced 2026-10-19, following the deployment-boundary incident):**
 
 ```text
-authorised PID
+Architecture decision
     ↓
-GUNNAR
+PID / Amendment
     ↓
-/forge
+Git-tracked Work Order
     ↓
-PL + Engineer(s)
+Delivery Controller (GUNNAR)
     ↓
-PR / exact SHA
+Implementer (FORGE)
     ↓
-required GitHub checks
+Independent Audit
     ↓
-fresh Auditor
+PR
     ↓
-PRODUCT_GREEN
+Architect Acceptance
     ↓
-merge
+Merge
+    ↓
+Closure
 ```
+
+- The Architect owns architecture, PIDs, amendments, sequencing and acceptance.
+- GUNNAR owns bounded delivery execution.
+- FORGE implements only approved Work Orders.
+- Every Work Order identifies its parent PID, amendments, exact base SHA, scope, exclusions, tests and acceptance criteria.
+- Architectural ambiguity requires STOP and return to Architecture.
+- Corrections and follow-up implementation require the same governed process.
+- Git/GitHub is durable authority; chat is only the control surface.
+
+**NO PID → NO WORK ORDER.**
+**NO WORK ORDER → NO IMPLEMENTATION.**
+**NO INDEPENDENT AUDIT + ARCHITECT ACCEPTANCE → NO MERGE.**
+**NO GIT RECORD → NOT DURABLE PROJECT AUTHORITY.**
 
 ---
 
