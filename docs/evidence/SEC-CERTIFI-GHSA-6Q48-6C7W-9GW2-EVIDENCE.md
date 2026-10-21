@@ -53,3 +53,21 @@ Checked directly, read-only, no writes/restarts/exec-env-dumps: `docker exec inf
 **TLS-client exposure implication, stated at the level actually verified**: `certifi` supplies the root CA bundle `requests`/`urllib3` use for TLS certificate validation on every outbound HTTPS call this application makes (notably the LiteLLM gateway calls referenced in `docs/delivery/M005-M006-HOST-RELOCATION-GATE.md`). The advisory's exact vulnerability mechanism is identified only as `GHSA-6q48-6c7w-9gw2`, fixed in `2026.10.19` — no further characterisation of the specific defect was independently obtained beyond what `pip-audit`'s own advisory lookup reports, and no evidence of actual exploitation or compromise was sought or found. This is an exposure-presence finding, not a compromise finding.
 
 This exposure is **not remediated by this PR** — fixing it requires the persistent Beta's running image to actually change, which is explicitly out of scope here (no persistent Beta change authorised) and gated separately under the PID-DBR-001 deployment-boundary cutover process once that reaches its own authorised cutover.
+
+## 6. Pillow remediation (Central Architecture extension, 2026-10-21)
+
+The Work Order was amended (see the WO's own amendment note) to cover `pillow==12.3.0`'s 8 disclosed CVEs alongside `certifi`, since the WO's binding "all seven checks pass" acceptance criterion cannot be satisfied while `pillow` remains vulnerable.
+
+**Correction:** `pip-compile --generate-hashes --upgrade-package pillow` run against both `.in` files, same pinned-digest container. Diff: only `pillow` moved (`12.3.0` -> `13.0.0`, full hash set for every platform wheel) in both `requirements.txt` and `requirements-dev.txt` - confirmed via `git diff` grep for changed package prefixes: `pillow==` is the only one.
+
+**Vulnerability resolution:** `pip-audit -r requirements.txt` / `-r requirements-dev.txt`: **No known vulnerabilities found** (both files, both packages resolved).
+
+**ReportLab 5.0.1 / Pillow 13.0.0 compatibility - validated, not assumed:** installed versions confirmed inside the disposable stack (`import PIL; PIL.__version__` -> `13.0.0`; `import reportlab; reportlab.Version` -> `5.0.1`). The full `policy/tests/test_pdf_rendering.py` suite (10 tests - PDF page-count realism, page-count violation detection, call isolation, and all four `TestReviewWarningsNeverAppearInPdf` cases including hostile-script-shaped text) re-run directly: **10 passed**, no change in behaviour. No Pillow-13 backwards-incompatible-change impact found in this codebase's actual usage (ReportLab's own Pillow integration is internal/encapsulated; this codebase never imports `PIL` directly).
+
+**Full regression re-run** (same disposable stack, `pillowsecfix`, ports 19992/19993, Chromium reinstalled fresh): `ci/unit` **870 passed** (0 skipped - full compose stack including `clamav`, same explanation as Sec3 above); `ci/integration` **1292 passed, 7 skipped, 1 xfailed** - both exact matches to the known baseline, zero regression from the Pillow bump either.
+
+**Real hash-verified install, both packages together:** `pip install --require-hashes -r requirements-dev.txt` into a clean venv succeeded; installed versions confirmed `certifi==2026.10.19` and `pillow==13.0.0` together.
+
+`manage.py check`: no issues. `makemigrations --check --dry-run`: no changes detected. `gitleaks detect` (full worktree): no leaks found. Disposable stack fully torn down after use.
+
+**Net result:** both disclosed vulnerabilities (`certifi` GHSA-6q48-6c7w-9gw2, `pillow`'s 8 CVEs) are resolved in this PR. `security/dependencies` and `security/container` are expected to go GREEN against this exact head.
