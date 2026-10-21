@@ -34,3 +34,19 @@ openpyxl==3.1.5
 # part reaches openpyxl's parser (questionnaire/security_gate.py). PSF
 # licensed.
 defusedxml==0.7.1
+# WSGI application server for the persistent release deployment
+# (PID-DBR-001 / docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md
+# Sec1.5, C5 - "the minimum release-packaging change needed to add one
+# pinned, reproducible WSGI/ASGI server dependency - nothing else in the
+# dependency set"). gunicorn, not uvicorn: this codebase has no
+# config/asgi.py and no async/websocket view anywhere - config/wsgi.py is
+# the only application entrypoint module, so this is a purely synchronous
+# WSGI app and a WSGI-only server is sufficient; uvicorn exists to add
+# ASGI/async support this code does not use, so adding it too would be
+# an unauthorised extra dependency, not "the minimum" change. Invoked
+# only by docker-compose.release.yml's web.command and scripts/release.sh
+# - never by the normal dev stack (docker-compose.yml keeps
+# manage.py runserver, unchanged, out of scope) or by the Dockerfile's own
+# default CMD (also unchanged - see scripts/release.sh header comment for
+# why the release command lives in docker-compose.release.yml, not here).
+gunicorn==26.2.0

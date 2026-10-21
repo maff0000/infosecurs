@@ -77,10 +77,45 @@ services:
     image: ${RELEASE_IMAGE:?RELEASE_IMAGE must be set to the exact-SHA-tagged release image, e.g. infosecurs-release:<git-sha> - see the file header comment above}
     # Static assets must be collected deterministically on every container
     # start - never dependent on whatever staticfiles happen to already
-    # exist on the host (PID §G) - then migrate, then serve. No source bind
-    # anywhere in this file (see header comment): /app is entirely
-    # image-contained.
-    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    # exist on the host (PID §G). No source bind anywhere in this file (see
+    # header comment): /app is entirely image-contained.
+    #
+    # PID-DBR-001 Sec1.4/Sec1.5/Sec1.6 (WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md):
+    # the container's OWN command must never run `manage.py runserver` (no
+    # dev autoreloader in the persistent runtime - the exact mechanism that
+    # turned an unrelated filesystem change into a live behavioural change
+    # during the 2026-10-19 incident) and must never run `migrate` itself
+    # (migration becomes a distinct, deliberate, operator-controlled release
+    # step - see scripts/release.sh - never something that reruns on every
+    # container start/restart for any reason, including a crash loop).
+    # `collectstatic --noinput` stays here: it is deterministic and safe to
+    # run on every start (PID §G, unchanged from before this WO). `exec`
+    # replaces the shell with gunicorn as PID 1 so it receives SIGTERM
+    # directly from `docker compose stop`/a container swap, rather than an
+    # orphaned shell eating the signal and gunicorn only dying on SIGKILL
+    # after the grace period.
+    #
+    # Worker/thread sizing (sized for a small Beta/Customer-Zero-scale
+    # deployment, not for this shared host's own CPU count - see
+    # scripts/release.sh header comment for the same reasoning applied to
+    # its own smoke-check timeout): 2 sync-process workers x 4 threads each
+    # (`--worker-class gthread`) gives enough concurrency to serve a few
+    # simultaneous users and let one slow request (an AI-gateway call, a
+    # ClamAV scan, a large evidence/questionnaire upload) not block every
+    # other request, without the memory footprint of many separate worker
+    # processes this workload does not need. `--timeout 60` (gunicorn's
+    # default is 30s) gives headroom for the AI-gateway/ClamAV calls
+    # documented in docs/runbooks/BETA-OPERATIONS.md without masking a
+    # genuinely hung worker forever. Access/error logs go to stdout/stderr
+    # (`-`) so `docker compose logs web` keeps working exactly as documented
+    # in that runbook - no new log file/volume introduced.
+    command: >-
+      sh -c "python manage.py collectstatic --noinput &&
+      exec gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 2 --threads 4 --worker-class gthread
+      --timeout 60 --graceful-timeout 30
+      --access-logfile - --error-logfile -"
     env_file:
       - .env.release
     environment:
