@@ -324,6 +324,20 @@ header comments for the full detail). Neither script touches the real
 `infosecurs-relocation` stack by itself — see the WO's §3.5 cutover
 authorisation gate.
 
+**Rollback bootstrap limitation (WP-D rehearsal finding):**
+`scripts/rollback.sh` only rolls back to an image a prior
+`scripts/release.sh` run recorded. The real stack's own *first* cutover
+under this mechanism has no such prior record — `scripts/rollback.sh`
+will correctly refuse, and the recovery path for that one transition is
+manual (revert to the original `docker-compose.yml` and the original
+image tag). This must be a named, pre-checked step in the cutover plan
+itself, confirmed before cutover — not discovered after a failed smoke
+test. See `scripts/rollback.sh`'s own header comment and
+`docs/evidence/DBR-001-WP-D-DISPOSABLE-REHEARSAL.md` for the full finding.
+For every release *after* that first one, automatic container-only
+rollback works exactly as designed — directly exercised and proven in
+that same rehearsal.
+
 ### 1. Build the SHA-bound image
 
 From a **clean checkout** of the exact commit you intend to release (a dirty
