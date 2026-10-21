@@ -2,7 +2,7 @@
 
 **Amendment (2026-10-21, Central Architecture):** this WO's scope is explicitly extended to cover `pillow==12.3.0`'s 8 disclosed CVEs (CVE-2026-112895/112400/112397/112896/112897/112395/112404/112899), fixed in `13.0.0`, alongside the original `certifi` fix. Governing reason: the WO's own mandatory "all seven GitHub checks pass" acceptance criterion is binding and not waivable by a pre-existing-vulnerability disclosure alone — `security/dependencies` and `security/container` cannot go GREEN while `pillow==12.3.0` remains pinned, so remediating it is now in scope. This amendment is recorded here, in Git, before any `pillow` implementation work began.
 
-**Classification:** Isolated, expedited security-maintenance correction (now covering two packages: `certifi`, `pillow`). **Separate from PID-DBR-001** — does not touch deployment-boundary scope, does not alter Rogue's implementation authority.
+**Classification:** Isolated, expedited security-maintenance correction (now covering two packages: `certifi`, `pillow`). **Separate from PID-DBR-001** — does not touch deployment-boundary scope, does not alter PID-DBR-001's own implementation authority (GUNNAR, per the ownership correction in PR #119).
 
 **Governing authority:** INFOSECURS existing security architecture (`PID.md` — dependency pinning, `security/dependencies` CI gate) and the existing hash-locked build-reproducibility doctrine (`docs/delivery/BUILD-REPRODUCIBILITY.md`). Not a new feature or infrastructure campaign.
 
@@ -24,7 +24,7 @@ certifi 2026.7.22 GHSA-6q48-6c7w-9gw2 2026.10.19
 
 **In scope:** upgrade `certifi` to `2026.10.19` and `pillow` to `13.0.0` (both verified fixed versions), regenerate `requirements.txt` and `requirements-dev.txt` via the project's existing `pip-compile --generate-hashes` process, validate integrity/hashes, verify and minimise any unrelated resolver-driven changes, validate `pillow` 13's compatibility with `reportlab==5.0.1` (policy PDF generation — `policy/pdf.py`), run dependency audit + reproducible install/build tests + all applicable CI/security checks, independent audit of the final combined candidate, one bounded PR.
 
-**Explicit exclusions:** no other package upgrade beyond what the resolver requires as a direct consequence of the `certifi`/`pillow` bumps and explicitly justifies; no M010 deployment; no persistent Beta change of any kind; no credential rotation; no CI suppression or advisory ignore; no alteration of Rogue's PID-DBR-001 authority or scope.
+**Explicit exclusions:** no other package upgrade beyond what the resolver requires as a direct consequence of the `certifi`/`pillow` bumps and explicitly justifies; no M010 deployment; no persistent Beta change of any kind; no credential rotation; no CI suppression or advisory ignore; no alteration of PID-DBR-001's own authority or scope.
 
 ## Acceptance criteria
 
