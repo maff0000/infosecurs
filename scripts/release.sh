@@ -169,11 +169,17 @@ fi
 RELEASE_TOOLING_SHA="$GIT_SHA"
 
 # Ensure db/clamav are up (idempotent - a no-op if they already are). The
-# old `web` container, if any, is left running until step 4 - old code may
-# keep serving through steps 2-3 for this WO's own release (no migration
-# applied - WO Sec2's "write quiescence" criteria only require stopping
-# `web` first for a release containing a migration not yet demonstrated
-# expand-only; this script enforces that ordering in step 3, not here).
+# old `web` container, if any, is left running until step 4. For THIS WO's
+# own release, that is correct as-is: PLAN_EMPTY is always 1 here (WO's
+# own "migration default" - no new migration in this initial release), so
+# step 3 never applies anything and old code keeps serving unaffected.
+# NOT YET IMPLEMENTED: WO Sec2's "write quiescence" criteria require
+# stopping `web` BEFORE applying any migration that has not been
+# independently demonstrated expand-only. Step 3 below does not currently
+# do this - it only gates on RELEASE_APPLY_MIGRATIONS, not on stopping
+# `web` first. This is dead code for this WO's own release (PLAN_EMPTY is
+# always 1), but this script must not be reused unchanged for any release
+# that actually carries a migration until that gap is closed.
 step "Ensuring db/clamav are up under project '$PROJECT_NAME'"
 compose up -d db clamav
 
@@ -391,7 +397,7 @@ else
   cat > "$RELEASES_DIR/previous.json" <<EOF
 {
   "note": "no prior release recorded for this project - nothing to roll back to before this one",
-  "image": null
+  "image_tag": null
 }
 EOF
 fi
