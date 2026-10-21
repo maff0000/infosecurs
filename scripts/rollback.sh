@@ -30,6 +30,35 @@
 # generate or apply a reverse/undo migration - that remains the WO's
 # explicitly manual, case-by-case path.
 #
+# BOOTSTRAP CASE - NO AUTOMATIC ROLLBACK FOR THE VERY FIRST RELEASE EVER
+# RUN BY scripts/release.sh AGAINST A GIVEN PROJECT (WP-D rehearsal
+# finding, docs/evidence/DBR-001-WP-D-DISPOSABLE-REHEARSAL.md): this
+# script only knows how to roll back to an image recorded in a prior
+# scripts/release.sh-written previous.json. The real infosecurs-relocation
+# stack's own first cutover under this mechanism is exactly that
+# "first release" case - the currently-deployed legacy container was
+# never itself brought up via scripts/release.sh, so previous.json does
+# not exist yet and this script will refuse outright (correctly - see
+# below for why making it "succeed" here would be worse).
+#
+# Deliberately NOT fixed by seeding previous.json from whatever container
+# was running before that first swap: the legacy image predates gunicorn
+# being added to this codebase's dependencies (PID-DBR-001 WP-A/B/C) and
+# was built for docker-compose.yml's own command, not this file's
+# hardcoded `exec gunicorn ...` command, which Compose applies regardless
+# of which image RELEASE_IMAGE points at. Attempting that "rollback" would
+# start a container that crashes immediately (gunicorn not installed) -
+# a silent, worse failure than today's clear, immediate refusal.
+#
+# The safe recovery path for that one specific transition, if the
+# post-cutover smoke fails, is MANUAL: revert to the original
+# docker-compose.yml and the original image tag directly (both remain
+# present locally unless deliberately removed - do not prune the legacy
+# image until at least one subsequent release has succeeded under this
+# mechanism and a real previous.json exists). This must be a named,
+# pre-checked step in the actual cutover plan (WO Sec3.5), not discovered
+# mid-incident.
+#
 # Usage:
 #   scripts/rollback.sh PROJECT_NAME ENV_FILE
 #
