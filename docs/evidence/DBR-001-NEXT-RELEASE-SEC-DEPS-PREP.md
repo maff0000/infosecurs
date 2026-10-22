@@ -59,7 +59,15 @@ this PID to pull `docker-compose.cutover.yml` onto the original release
 base) rather than cherry-picking the full closure commit, which would have
 brought unrelated evidence docs onto this release-mechanism-only branch.
 
-**Final candidate SHA: `b39eee9244e56f17bc4aa32904dd1b8def6286ac`.**
+**Final candidate SHA: `b39eee9244e56f17bc4aa32904dd1b8def6286ac`.** This is
+the commit that was built, labelled, and migration-plan-checked in §4–5
+below — it is **not** the same as this branch's eventual HEAD once this
+document itself is committed one commit later (a self-referential docs
+commit cannot also be the thing it documents). Anyone re-deriving §3's
+file/commit counts must diff against `b39eee9`, not against the branch's
+own HEAD at read time — diffing against HEAD after this commit lands will
+correctly show one additional file (this document) and one additional
+commit, which is expected and not a discrepancy.
 
 ## 3. Scope proof — zero migrations, zero application code, no M010
 
@@ -137,18 +145,32 @@ deleted immediately after, confirmed removed.
   the real stack.
 - No credential read, print, or rotation beyond the read-only `.env` copy
   used transiently for the plan check (confirmed deleted).
-- No push of this branch to `origin` yet (pending, see open items below).
+- No credential or secret of any kind was committed, pushed, or left on
+  disk outside dell-debian at any point in this preparation.
 - `docs/evidence/DBR-001-BETA-DEVMODE-PLAINHTTP-FINDING.md` (the open
   dev-mode/plain-HTTP finding) was not touched, folded in, or corrected as
   part of this preparation, per Central Architecture's explicit
   instruction to keep it a distinct, separately-tracked item.
 
-## 7. Next steps (not yet executed)
+## 7. Independent audit and remaining steps
 
-1. Independent fresh audit of this candidate (re-derive, not trust, every
-   fact above directly from the repo/host).
-2. Push `wo/DBR-001-release-base-secdeps` to `origin` and open a PR for
-   this preparation (evidence + branch only, no live deploy in the PR).
-3. Return to Central Architecture for the separately-required live-release
+A fresh independent auditor, with no memory of this preparation,
+re-derived every claim in §1–6 directly from the repository and the live
+host — including independently re-running the §5 migration-plan check
+itself (not reading this document's transcript of it) and inspecting
+package versions installed inside the built image, not just its label.
+
+**Verdict: GREEN.** All seven claims independently confirmed. One
+documentation-precision nuance was surfaced and is addressed in §2 above
+(the candidate SHA `b39eee9` vs. this branch's later HEAD once this
+document is committed) — not a functional or security defect.
+
+Branch `wo/DBR-001-release-base-secdeps` has been pushed to `origin`.
+
+**Remaining steps (not yet executed):**
+
+1. Open a PR for this preparation (evidence + branch only, no live deploy
+   in the PR).
+2. Return to Central Architecture for the separately-required live-release
    authorisation before any `scripts/release.sh` execution against
    `/srv/infosecurs` / `infosecurs-relocation`.
