@@ -1,0 +1,139 @@
+# Cutover compose file for the REAL, PERSISTENT `infosecurs-relocation`
+# stack only (PID-DBR-001, WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md Sec3.5).
+#
+# This is NOT a reusable template like docker-compose.release.yml (which
+# deliberately uses its own fresh `infosecurs_release_*` volumes so a
+# disposable rehearsal never collides with anything). This file does the
+# opposite on purpose: it names, as `external: true`, the EXACT four
+# Docker volumes the real `infosecurs-relocation` project has used since
+# before this WO existed - verified directly against the running
+# containers (read-only `docker inspect`, no env/secret dump) on
+# 2026-10-22:
+#
+#   infosecurs-relocation_infosecurs_postgres_data
+#   infosecurs-relocation_infosecurs_evidence_data
+#   infosecurs-relocation_infosecurs_questionnaire_data
+#   infosecurs-relocation_infosecurs_clamav_data
+#
+# `external: true` + an explicit `name:` tells Compose to ATTACH to a
+# volume that already exists under that literal name rather than create
+# one scoped to whatever `-p` project this file is brought up under. This
+# is the entire mechanism that satisfies WO Sec3.5's "no new or
+# substituted customer-data volumes": the cutover release reuses the
+# running stack's actual PostgreSQL/evidence/questionnaire data in place,
+# the same way `scripts/release.sh`'s own container swap (step 4) already
+# does for `web` - only the container/image changes, never the data.
+#
+# Because these names are hard-coded to the one real stack this file
+# exists for, this file must NEVER be brought up under any other project
+# name, and never as part of a disposable rehearsal (doing so would
+# attach the real customer-data volumes - exactly what PID-DBR-001 Sec3.5
+# and every rehearsal to date have been deliberately designed to avoid).
+# A disposable mechanism rehearsal proves the same `external: true`
+# attachment behaviour using its own distinctly-named, throwaway volumes -
+# see docs/evidence/DBR-001-WP-F-CUTOVER-PRECONDITIONS.md - never this
+# file itself.
+#
+# Port/access-route preservation (WO Sec3.5's second precondition):
+# hard-coded, not defaulted via a `${VAR:-default}` guess, to the exact
+# values the real stack has used since before this WO (verified the same
+# way, same date):
+#
+#   web:    192.168.11.10:8884 -> 8000   (the Beta access route)
+#   db:     127.0.0.1:15432    -> 5432   (loopback-only, unchanged)
+#   clamav: no host port (internal-only, unchanged)
+#
+# `web`'s secret bind mount is carried over unchanged from the real
+# stack's docker-compose.override.yml (not reproduced by
+# docker-compose.release.yml, which has no secret dependency of its own):
+#
+#   /srv/secrets/infosecurs/litellm_gateway_key -> /run/secrets/litellm_gateway_key (ro)
+#
+# Everything else (image build-args-free `web.image`, gunicorn command,
+# collectstatic-on-every-start, no `.:/app` bind anywhere in this file,
+# healthchecks) is copied unchanged from docker-compose.release.yml - see
+# that file's own header comment for the reasoning, not repeated here.
+#
+# Invocation (§3.5 authorisation required FIRST - this file's existence
+# does not imply or grant that authorisation):
+#
+#   RELEASE_IMAGE=infosecurs-release:<exact-release-candidate-SHA> \
+#     COMPOSE_FILE=docker-compose.cutover.yml \
+#     scripts/release.sh infosecurs-relocation .env.cutover <exact-release-candidate-SHA>
+#
+# where `.env.cutover` is a throwaway env file carrying only the two
+# non-secret identifiers release.sh itself reads (WEB_HOST_PORT=8884) plus
+# whatever DJANGO_ENV=production/POSTGRES_* values the running `db`
+# already has (POSTGRES_PASSWORD must match the existing database's
+# actual password - this file does not and cannot change it).
+services:
+  db:
+    image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - infosecurs_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:15432:5432"
+
+  clamav:
+    image: clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+    volumes:
+      - infosecurs_clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  web:
+    image: ${RELEASE_IMAGE:?RELEASE_IMAGE must be set to the exact-SHA-tagged release image - see the file header comment above}
+    command: >-
+      sh -c "python manage.py collectstatic --noinput &&
+      exec gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 2 --threads 4 --worker-class gthread
+      --timeout 60 --graceful-timeout 30
+      --access-logfile - --error-logfile -"
+    env_file:
+      - .env.cutover
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      EVIDENCE_STORAGE_ROOT: /data/evidence
+      QUESTIONNAIRE_STORAGE_ROOT: /data/questionnaire
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    volumes:
+      - infosecurs_evidence_data:/data/evidence
+      - infosecurs_questionnaire_data:/data/questionnaire
+      - /srv/secrets/infosecurs/litellm_gateway_key:/run/secrets/litellm_gateway_key:ro
+    ports:
+      - "192.168.11.10:8884:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+
+volumes:
+  infosecurs_postgres_data:
+    external: true
+    name: infosecurs-relocation_infosecurs_postgres_data
+  infosecurs_evidence_data:
+    external: true
+    name: infosecurs-relocation_infosecurs_evidence_data
+  infosecurs_questionnaire_data:
+    external: true
+    name: infosecurs-relocation_infosecurs_questionnaire_data
+  infosecurs_clamav_data:
+    external: true
+    name: infosecurs-relocation_infosecurs_clamav_data
