@@ -301,6 +301,43 @@ identity, no-source-bind, DEBUG=False static-asset serving, fresh
 Customer-Zero reproducibility, browser smoke, security scan, secret-not-
 baked-in proof) from the M006 Round 6 dispatch.
 
+**PID-DBR-001 update (`docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md`
+§1.4-§1.6):** `web`'s own command in `docker-compose.release.yml` no longer
+runs `manage.py runserver` (no dev autoreloader in a persistent runtime) or
+`manage.py migrate` (migration is a distinct, operator-controlled release
+step now, never bundled into container startup) — it runs
+`collectstatic --noinput` then `exec`s **gunicorn**. Steps 1-2 below still
+describe the underlying mechanics correctly (build, then bring the stack
+up), but for anything beyond a from-scratch stack with no new migration,
+use `scripts/release.sh PROJECT_NAME ENV_FILE` instead of hand-sequencing
+`docker build`/`docker compose up -d` — it builds the image, runs
+`migrate --plan` against the live database before applying anything
+(refusing to proceed automatically on a non-empty plan), applies only when
+explicitly told to, performs the container swap, runs the health-endpoint
+smoke, and writes a durable per-release manifest to
+`releases/<PROJECT_NAME>/` (application/tooling source SHA, image digest,
+verified runtime command/mounts). `scripts/rollback.sh PROJECT_NAME
+ENV_FILE` undoes exactly one container-swap step back to the prior image
+(safe only for a release that did not apply a migration, or one an
+operator has independently judged expand-only — see both scripts' own
+header comments for the full detail). Neither script touches the real
+`infosecurs-relocation` stack by itself — see the WO's §3.5 cutover
+authorisation gate.
+
+**Rollback bootstrap limitation (WP-D rehearsal finding):**
+`scripts/rollback.sh` only rolls back to an image a prior
+`scripts/release.sh` run recorded. The real stack's own *first* cutover
+under this mechanism has no such prior record — `scripts/rollback.sh`
+will correctly refuse, and the recovery path for that one transition is
+manual (revert to the original `docker-compose.yml` and the original
+image tag). This must be a named, pre-checked step in the cutover plan
+itself, confirmed before cutover — not discovered after a failed smoke
+test. See `scripts/rollback.sh`'s own header comment and
+`docs/evidence/DBR-001-WP-D-DISPOSABLE-REHEARSAL.md` for the full finding.
+For every release *after* that first one, automatic container-only
+rollback works exactly as designed — directly exercised and proven in
+that same rehearsal.
+
 ### 1. Build the SHA-bound image
 
 From a **clean checkout** of the exact commit you intend to release (a dirty
@@ -347,8 +384,19 @@ RELEASE_IMAGE=infosecurs-release:$RELEASE_SHA \
 (`--env-file .env.release` matters for **both** Compose's own `${...}`
 interpolation in the YAML and as the default `env_file` source — not only
 `.env.release`'s explicit `env_file:` entry on `web`.) `web`'s command runs
-`collectstatic --noinput && migrate --noinput` before serving, against
-fresh named volumes (`infosecurs_release_postgres_data` /
+`collectstatic --noinput` then execs **gunicorn** - it does **not** run
+`migrate` itself (PID-DBR-001 §1.6 - see the note above). For a
+from-scratch stack with no existing data, run migrations explicitly once
+before/alongside bringing `web` up:
+
+```bash
+RELEASE_IMAGE=infosecurs-release:$RELEASE_SHA \
+  docker compose -p <project> --env-file .env.release \
+  -f docker-compose.release.yml run --rm --no-deps web \
+  python manage.py migrate --noinput
+```
+
+against fresh named volumes (`infosecurs_release_postgres_data` /
 `infosecurs_release_evidence_data` under your `-p` project) — this doubles
 as the PID §16 fresh Customer-Zero reproducibility proof:
 
