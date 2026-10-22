@@ -129,4 +129,5 @@ security-only certifi/Pillow dependency deployment onto this baseline,
 excluding M010 and any migration-graph change) is tracked as its own,
 separately-gated preparation, requiring its own independent audit and its
 own live-release authorisation before touching the persistent stack
-again — see `docs/evidence/DBR-001-NEXT-RELEASE-SEC-DEPS-PREP.md`.
+again. Its evidence record does not yet exist at the time of this
+closure and will cite this WO once written, rather than the reverse.

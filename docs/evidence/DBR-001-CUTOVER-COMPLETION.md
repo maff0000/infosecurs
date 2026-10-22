@@ -60,10 +60,11 @@ discipline, matching the exact JSON shape `scripts/release.sh` itself
 would have written.
 
 **Central Architecture has accepted this as a recorded operational
-exception, requiring correction before the next live release** — tracked
-as a defect to fix in `scripts/release.sh` (use the actual configured bind
-host, not a hard-coded loopback assumption) ahead of the next
-maintenance-priority release (certifi/Pillow security deployment).
+exception.** The fix (use the actual configured bind host, derived from
+the running container, instead of a hard-coded loopback assumption) is
+implemented directly in `scripts/release.sh` in this same closure change
+— not deferred — so the next maintenance-priority release (certifi/Pillow
+security deployment) inherits the corrected script.
 
 ## 4. Post-cutover facts (verified twice — directly, then independently re-audited)
 
@@ -107,8 +108,9 @@ verdict on 2026-10-22, and issued final closure instructions:
 
 1. Record this report in durable Git evidence (this document).
 2. Record the §3.1 smoke-check defect as an accepted operational
-   exception requiring correction before the next live release (tracked
-   above; the fix itself is prepared in `docs/evidence/DBR-001-NEXT-RELEASE-SEC-DEPS-PREP.md`).
+   exception requiring correction before the next live release — the fix
+   itself is implemented directly in `scripts/release.sh` in this same
+   closure change (§3.1 above), not deferred to a later document.
 3. Close PID-DBR-001 and the 2026-10-19 deployment-boundary incident
    (`docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`)
    as structurally remediated.
@@ -116,7 +118,8 @@ verdict on 2026-10-22, and issued final closure instructions:
 **No further PID-DBR-001 implementation cycle is authorised or needed.**
 The next bounded maintenance priority (security-only certifi/Pillow
 dependency deployment onto this baseline) is tracked as its own,
-separately-gated preparation — see
-`docs/evidence/DBR-001-NEXT-RELEASE-SEC-DEPS-PREP.md` — which requires its
-own independent audit and its own, separately required live-release
-authorisation before any further persistent-stack change.
+separately-gated preparation, which requires its own independent audit
+and its own, separately required live-release authorisation before any
+further persistent-stack change. Its evidence record is not yet written
+at the time of this document's own closure and will cite this report
+once it exists, rather than the reverse.
