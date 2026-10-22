@@ -338,6 +338,52 @@ For every release *after* that first one, automatic container-only
 rollback works exactly as designed — directly exercised and proven in
 that same rehearsal.
 
+**Cutover to the real persistent stack (WO §3.5 preconditions — WP-F):**
+A separate, standalone compose file, `docker-compose.cutover.yml`, exists
+specifically for the real `infosecurs-relocation` project. Unlike
+`docker-compose.release.yml` (which always starts from fresh,
+project-scoped volumes on purpose, so a disposable rehearsal never
+collides with anything), this file names the real stack's actual four
+Docker volumes as `external: true` and hard-codes its actual port
+mapping — the mechanism that lets a cutover release reuse existing
+customer data and the existing Beta access route in place, with no new
+or substituted volume and no route/port change. See
+`docs/evidence/DBR-001-WP-F-CUTOVER-PRECONDITIONS.md` for the full
+existing-volume/port verification, and
+`docs/evidence/DBR-001-WP-F-REHEARSAL-REPORT.md` for the disposable
+rehearsal that proved the underlying `external: true` attachment
+mechanism and a full manual-rollback round-trip, both using only
+fake-named throwaway resources — never this file itself, and never the
+real volumes.
+
+Invocation (§3.5 authorisation required first — this file's existence
+does not imply or grant that authorisation):
+
+```
+RELEASE_IMAGE=infosecurs-release:<exact-release-candidate-SHA> \
+  COMPOSE_FILE=docker-compose.cutover.yml \
+  scripts/release.sh infosecurs-relocation .env.cutover <exact-release-candidate-SHA>
+```
+
+Manual rollback for this one first cutover (the bootstrap limitation
+above, phrased for the real stack — documented, not yet executed):
+
+```
+docker compose -p infosecurs-relocation --env-file .env.cutover \
+  -f docker-compose.cutover.yml stop web
+docker compose -p infosecurs-relocation --env-file .env.cutover \
+  -f docker-compose.cutover.yml rm -f web
+docker compose -p infosecurs-relocation --env-file .env \
+  -f docker-compose.yml -f docker-compose.override.yml up -d web
+```
+
+`db`/`clamav` are untouched by any of the above (`web`-only stop/rm/up) —
+confirm they were never restarted, then smoke-test the restored `web`
+container. Do not prune the pre-existing legacy `infosecurs-relocation-web`
+image until at least one subsequent release has succeeded under the new
+mechanism and a real `previous.json` exists for `scripts/rollback.sh` to
+use automatically from then on.
+
 ### 1. Build the SHA-bound image
 
 From a **clean checkout** of the exact commit you intend to release (a dirty
