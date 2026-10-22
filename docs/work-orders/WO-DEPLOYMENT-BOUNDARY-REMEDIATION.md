@@ -1,6 +1,6 @@
 # WO — Deployment-Boundary Remediation (Persistent Beta Release Architecture)
 
-**Status: PROPOSED. Architect Acceptance required before any implementation. No structural change, persistent-stack conversion, migration, image replacement, or configuration change on the live `infosecurs-relocation` stack is authorised by this document or its acceptance.**
+**Status: CLOSED GREEN (2026-10-22). Architect-accepted; implemented via WP-A/B/C/D/E/F; cutover executed and independently verified. See `docs/evidence/DBR-001-CUTOVER-COMPLETION.md` for the full closure record, including the one accepted operational exception (a `scripts/release.sh` smoke-check defect, corrected in the same closure change) and the separately retained `docs/evidence/DBR-001-BETA-DEVMODE-PLAINHTTP-FINDING.md` security/readiness finding. No further implementation cycle under this WO is authorised or needed.**
 
 **Trigger:** `docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md` (PR #115, merged) — the full timeline, backup, and impact assessment live there, not here.
 
@@ -109,3 +109,24 @@ The same smoke-test shape already proven during the 2026-10-19 incident recovery
 ## 4. Deliverable shape (once accepted)
 
 No separate implementation PID (C4). Once this WO itself is independently audited and Architect-accepted, the release mechanism is built and reviewed the same way every M010 work package was: isolated worktree, independent review before merge of the rehearsal mechanism's own code, and the §3.4 independent audit of the rehearsal artifact before any cutover authorisation is even requested, all directly within §1–§2's own precise scope.
+
+## 5. Closure (2026-10-22)
+
+Cutover executed against the sole authorised release SHA
+`0bce2555e0a6b9eec4d6dc645ac606f8d7309285`, after §3.5's five hard
+preflight gates (P1–P5) all passed. The web-only swap left `db`/`clamav`
+untouched throughout; §3.6's post-cutover verification passed in full and
+was independently re-audited GREEN (10/10 checks) against the live host.
+No rollback was required. Full record, exact image/volume identities,
+backup reference, and the accepted smoke-check operational exception:
+`docs/evidence/DBR-001-CUTOVER-COMPLETION.md`.
+
+Central Architecture issued Final Architect Acceptance on 2026-10-22,
+closing this WO and the 2026-10-19 deployment-boundary incident
+(`docs/evidence/INCIDENT-2026-10-19-DEPLOYMENT-BOUNDARY-EXPOSURE.md`) as
+structurally remediated. The next bounded maintenance priority (a
+security-only certifi/Pillow dependency deployment onto this baseline,
+excluding M010 and any migration-graph change) is tracked as its own,
+separately-gated preparation, requiring its own independent audit and its
+own live-release authorisation before touching the persistent stack
+again — see `docs/evidence/DBR-001-NEXT-RELEASE-SEC-DEPS-PREP.md`.

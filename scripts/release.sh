@@ -275,8 +275,25 @@ fi
 
 # --- Smoke check (§3.6-shape, bounded to the health endpoint - the full
 #     manual smoke list is a human/audit step, not this script's job) ------
+# The health-check host/port are read from the NEW container's own
+# published port binding (docker inspect), never assumed. A compose file
+# that intentionally binds a specific host IP (e.g. docker-compose.cutover.yml,
+# which hard-codes the real persistent stack's access-route IP rather than
+# 127.0.0.1, to preserve that exact route) would otherwise make a
+# hard-coded "127.0.0.1" health check report a false HTTP 000 failure even
+# though the service is genuinely healthy - exactly what happened on the
+# first real cutover under this mechanism
+# (docs/evidence/DBR-001-CUTOVER-COMPLETION.md Sec3.1). Falls back to
+# 127.0.0.1/WEB_HOST_PORT only if the container reports no binding or an
+# all-interfaces bind (0.0.0.0/::), where loopback is always a valid probe.
 echo "Waiting for the health endpoint to respond..."
-HEALTH_URL="http://127.0.0.1:${WEB_HOST_PORT}${HEALTH_PATH}"
+HEALTH_HOST="$(docker inspect "$NEW_CONTAINER_ID" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostIp}}' 2>/dev/null || true)"
+if [ -z "$HEALTH_HOST" ] || [ "$HEALTH_HOST" = "0.0.0.0" ] || [ "$HEALTH_HOST" = "::" ]; then
+  HEALTH_HOST="127.0.0.1"
+fi
+HEALTH_PORT="$(docker inspect "$NEW_CONTAINER_ID" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}' 2>/dev/null || true)"
+HEALTH_PORT="${HEALTH_PORT:-$WEB_HOST_PORT}"
+HEALTH_URL="http://${HEALTH_HOST}:${HEALTH_PORT}${HEALTH_PATH}"
 HEALTH_STATUS=""
 HEALTH_BODY=""
 for _ in $(seq 1 45); do

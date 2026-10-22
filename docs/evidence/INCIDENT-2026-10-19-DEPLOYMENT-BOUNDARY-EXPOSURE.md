@@ -2,7 +2,7 @@
 
 **This is a standalone incident record. It is deliberately separate from `docs/evidence/M010-CLOSURE.md` — M010's implementation closure is not reopened or qualified by this document, and this incident is not folded into it.**
 
-**Classification:** HIGH — deployment-boundary failure with application/schema mismatch. **Status:** Contained, restored, independently reviewed. **Structural remediation:** proposed separately in `docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md` (PR #114), awaiting Architect Acceptance.
+**Classification:** HIGH — deployment-boundary failure with application/schema mismatch. **Status:** Contained, restored, independently reviewed, **structurally remediated (2026-10-22)**. **Structural remediation:** `docs/work-orders/WO-DEPLOYMENT-BOUNDARY-REMEDIATION.md` (PR #114) — Architect-accepted, implemented (WP-A–F), cutover executed and independently verified GREEN. Closed by Central Architecture's Final Architect Acceptance; full record in `docs/evidence/DBR-001-CUTOVER-COMPLETION.md`.
 
 ## 1. Root cause
 
