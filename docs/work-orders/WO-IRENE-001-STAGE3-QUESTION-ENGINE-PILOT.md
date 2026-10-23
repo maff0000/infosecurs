@@ -12,7 +12,14 @@ accepted in principle, document corrections required before Architect
 Acceptance. D1–D3 (PID Amendment) are now resolved, binding decisions,
 not open defaults — see §1a below and the targeted edits throughout this
 document. R1–R4 are the corresponding Work Order refinements, specified
-in §1a and woven into the relevant increment sections.
+in §1a and woven into the relevant increment sections. A second review at
+corrected head `72bd659e68b634f8982a28452f9880d4d9fbcd62` accepted D1–D3
+and R1–R4 as architectural decisions and required two further narrow text
+corrections — **C1** (Increment 1 introduces zero migrations, reconciling
+§2.4 with D2) and **C2** (the catalogue/interaction-contract versions
+validate definition compatibility only; real concurrency protection is a
+distinct, atomic, canonical-state stale-write check, not the same
+mechanism) — both incorporated below.
 
 **Environment:** disposable only, throughout every increment below. No
 part of this Work Order touches the persistent Beta stack
@@ -47,23 +54,56 @@ generic architecture. The model is never given write authority over
 canonical state and never invents an answer — it explains only from the
 server-supplied context, consistent with Architecture invariant 5.
 
-**R2 — Guarded canonical saves.** The new save path (§3.2) must provide,
-and Increment 2's tests must prove: exact canonical validation (the same
-field-level validation the existing `OrganisationProfileStage3Form`
-already enforces, not a looser IRENE-specific copy); field-scoped
-updates (`update_fields=[...]`, never a full-instance save); atomic
-grouped submissions (`transaction.atomic`, all-or-nothing for a
-multi-field submit); safe handling of an organisation's first-ever Stage
-3 submission (no profile row yet); stale-write detection (reject a
-submission made against an out-of-date version, per D2); idempotent
-receipts (a retried identical submission must not double-apply or error);
-and preservation of whatever audit/history behaviour the existing manual
-save path already produces. Both a same-field concurrent-edit scenario
-(two writers racing on the same Stage 3 field — the loser must be
-rejected via stale-write detection, not silently overwritten) and a
-different-field concurrent-edit scenario (one writer on a Stage 3 field,
-one on an unrelated field/stage on the same row — both must succeed,
-neither clobbers the other) must be proven as tests, not asserted.
+**R2 — Guarded canonical saves.** Per C2, the catalogue version and the
+interaction-contract version (D2) validate **definition compatibility
+only** — whether the question/section definition a submission was built
+against is still the one the server currently presents. Neither checks,
+nor substitutes for a check of, whether the underlying canonical database
+field has actually changed since the customer last viewed it — that is a
+distinct concern, addressed below.
+
+The new save path (§3.2) must provide, and Increment 2's tests must
+prove:
+- Exact canonical validation (the same field-level validation the
+  existing `OrganisationProfileStage3Form` already enforces, not a
+  looser IRENE-specific copy).
+- Field-scoped updates (`update_fields=[...]`, never a full-instance
+  save).
+- Atomic grouped submissions (`transaction.atomic`, all-or-nothing for a
+  multi-field submit).
+- Safe handling of an organisation's first-ever Stage 3 submission (no
+  profile row yet).
+- A **distinct, atomic, canonical-state stale-write check**, separate
+  from the definition-version checks above: at read/render time the
+  server issues an expected-state token (or an equivalent set of
+  validated expected field values) capturing the current value of the
+  specific fields being presented; at submit time, inside the same
+  `transaction.atomic` block as the write itself, the server re-reads
+  those exact fields from the database and compares them
+  transaction-safely against the expected state. A mismatch is rejected
+  as stale — never silently overwritten, never treated as resolved by a
+  matching definition version.
+- Idempotent receipts (a retried identical submission — same expected
+  state, same new values — must not double-apply or error).
+- Preservation of whatever audit/history behaviour the existing manual
+  save path already produces.
+
+Three scenarios must be proven as executed tests, not asserted: a
+**same-field conflict** (two writers race on the same Stage 3 field —
+the second writer's stale expected-state token is rejected); an
+**unrelated-field non-overwrite** (one writer on a Stage 3 field, one on
+a different field/stage on the same `OrganisationProfile` row — both
+succeed, neither clobbers the other's column); and a **safe idempotent
+retry** (the same submission resubmitted, e.g. after a dropped response,
+applies at most once and returns the same receipt).
+
+The existing manual Stage 3 page's own save path still performs a
+full-instance save and is not modified by this Work Order. This new
+IRENE-only adapter's stale-write check does **not** retroactively make
+the manual path's existing save behaviour concurrency-safe — the two
+paths are not symmetric, and no claim to the contrary is made or implied
+without its own proof. This asymmetry is recorded explicitly in the
+Increment 2 evidence doc (§3.10), not left implicit.
 
 **R3 — Progress integrity.** `organisations.guided_journey.current_guided_stage()`
 remains the one and only stage-completion resolver — the IRENE adapter
@@ -114,8 +154,12 @@ touching zero lines of Increment 1's core.
   generic interaction contract. Not a single shared version string.
   Server-issued versions are checked on every answer submission; stale/
   incompatible submissions fail safe (rejected, never silently merged).
-  No registry-metadata table in Increment 1; see R2 for the Increment 2
-  provenance-mechanism constraint.
+  Per C2, these versions validate **definition compatibility only** — not
+  whether the underlying database field changed since the customer
+  viewed it; see R2/§1's save-path discipline for the separate
+  canonical-state stale-write check that covers that. No registry-metadata
+  table in Increment 1 (zero migrations for that increment, per C1/§2.4);
+  see R2 for the Increment 2 provenance-mechanism constraint.
 - **Explain-this dispatch:** intent-code based only, via the existing
   `IntentCode` enum and `skill_router.select_skill()` — never free-text
   matching. Reuse or extend `EXPLAIN_CONTROL`, do not invent a parallel
@@ -134,11 +178,18 @@ touching zero lines of Increment 1's core.
 - **Save-path discipline:** any new write path onto `OrganisationProfile`
   must use field-scoped persistence (e.g. `update_fields=[...]`), never a
   full-instance `save()`, given the model has no optimistic-concurrency
-  version field. One saved field must never overwrite another stage's
-  already-loaded data on the same row — this must be demonstrated, not
-  assumed, in Increment 2's tests (two concurrent writers, one to a Stage
-  3 field, one to a different stage's field on the same `OrganisationProfile`
-  row).
+  version field. Per C2, real concurrency protection on this new path is
+  the distinct, atomic, canonical-state stale-write check specified in
+  R2 (server-issued expected-state token or equivalent validated expected
+  values, compared transaction-safely at write time) — the
+  catalogue/interaction-contract versions (D2) do not provide this by
+  themselves. One saved field must never overwrite another stage's
+  already-loaded data on the same row, and a stale same-field write must
+  be rejected, not silently applied — both demonstrated as executed
+  tests in Increment 2 (§3.7), never assumed. This new adapter's
+  guarantee is scoped to itself; it does not make the existing manual
+  Stage 3 page's full-instance save behaviour concurrency-safe, and no
+  such claim is made.
 
 ## 2. Increment 1 — Generic question engine, contract, and registry
 
@@ -179,12 +230,12 @@ capability code), `config/settings.py` `IRENE_*` flags — all consumed as
 they exist today, none modified in ways that change Stage 1/2/4+ behaviour.
 
 ### 2.4 New schema/migrations
-None required for this increment if version-stamping is deferred to
-Increment 2's adapter-specific write path. If Increment 1's contract
-needs its own lightweight registry-metadata table (e.g. to record which
-section/question versions exist), it must live in the `irene` app, not a
-new app, and must not touch `OrganisationProfile`/`KeyAsset` schema at
-all.
+**Zero.** Per C1/D2, Increment 1 introduces no database migrations at
+all. The section/question registry is a Python-reviewed, in-code
+allowlist (per §1's Registry pattern) — it has no backing table.
+Version-stamping of answers, and any Increment-2-only provenance
+mechanism permitted under D2/§3.4, are exclusively Increment 2 concerns
+and are not pulled forward into this increment.
 
 ### 2.5 Preconditions and dependency order
 None — this increment has no dependency on Stage 3 specifics and should
@@ -249,13 +300,17 @@ section/fixture registered without touching Increment 1's core.
   none exists today) mirroring `governance.services`'s pattern
   (tenant-membership-checked, `transaction.atomic`, domain error on
   violation), but writing with `update_fields` scoping per §1's save-path
-  discipline, and meeting R2 in full: exact canonical validation,
+  discipline, and meeting R2/C2 in full: exact canonical validation,
   field-scoped updates, atomic grouped submissions, safe first-submission
-  handling, stale-write detection against D2's server-issued versions,
-  idempotent receipts, and preserved audit behaviour. The existing
-  `organisation_stage3_technology_data` view's own direct-save path is
-  left untouched/unmodified — this new path is additive, used only by the
-  IRENE adapter.
+  handling, and a distinct canonical-state stale-write check via a
+  server-issued expected-state token (or equivalent validated expected
+  field values) compared transaction-safely at write time — not the
+  catalogue/interaction-contract version checks, which only confirm
+  definition compatibility — plus idempotent receipts and preserved audit
+  behaviour. The existing `organisation_stage3_technology_data` view's own
+  direct-save path is left untouched/unmodified — this new path is
+  additive, used only by the IRENE adapter, and its concurrency guarantee
+  does not extend to that existing path.
 - Section/question identifiers and a versioned question catalogue, plus
   the separately-versioned generic interaction contract from Increment 1
   (per D2) — not a single shared version string — stamped onto whichever
@@ -303,18 +358,22 @@ touch any Stage 1/2/4+ table.
 Increment 1 complete and independently audited GREEN first.
 
 ### 3.6 FORGE implementation instructions
-Dispatch as an isolated worktree. The Engineer must demonstrate the
-concurrent-write non-overwrite proof required by §1 explicitly as a test,
-not merely assert it.
+Dispatch as an isolated worktree. The Engineer must implement the
+distinct canonical-state stale-write check required by R2/C2 (not rely
+on the catalogue/interaction-contract versions for it) and demonstrate
+all three concurrency scenarios from §1/§3.7 explicitly as executed
+tests, not merely assert them.
 
 ### 3.7 Tests and evaluation fixtures
 - Unit/integration tests for the Stage 3 adapter against all 10 fields
   plus the Key Assets delegation (including the additional `security`
   entitlement check on that delegated path, per D1).
-- The concurrent-write proofs required by R2: a same-field race (second
-  writer's stale version is rejected, not overwritten) and a
-  different-field race (both writers succeed, neither clobbers the
-  other) — both as executed tests, not assertions.
+- The three scenarios required by R2/C2, each as an executed test, not
+  an assertion: a same-field conflict (second writer's expected-state
+  token is stale and is rejected, not overwritten); an unrelated-field
+  non-overwrite (both writers succeed, neither clobbers the other's
+  column); and a safe idempotent retry (a resubmission with the same
+  expected state and values applies at most once, same receipt).
 - A **disposable, explicitly-approved real-model test**: before this
   sub-item runs, obtain explicit model/vendor security and numerical
   cost/latency approval for a bounded number of real `ask_adviser()` calls
@@ -340,12 +399,14 @@ not merely assert it.
   deliberately made unreachable — per Architecture invariant 10, a
   customer must always be able to complete the section without AI
   availability.
-- **Guarded-save guarantees (R2)**: directly re-run or re-verify the
-  same-field and different-field concurrent-write proofs against the
-  actual implementation, not just read the test code; confirm a retried
-  identical submission is genuinely idempotent (no double-apply, no
-  error) and that a stale submission is genuinely rejected rather than
-  silently accepted.
+- **Guarded-save guarantees (R2/C2)**: directly re-run or re-verify all
+  three concurrency proofs (same-field conflict, unrelated-field
+  non-overwrite, idempotent retry) against the actual implementation, not
+  just read the test code; confirm the stale-write check genuinely
+  compares current database state via the expected-state token at write
+  time — not merely a catalogue/interaction-contract version match; and
+  confirm the evidence doc states plainly that the manual Stage 3 page's
+  existing full-row save is not made concurrency-safe by this adapter.
 - **Progress-integrity check (R3)**: confirm directly, by inspection of a
   profile with unanswered fields, that a default/unset value is never
   presented or recorded as an explicitly-reviewed answer absent a real
@@ -365,11 +426,16 @@ by the planned test volume.
 
 ### 3.10 Durable evidence
 `docs/evidence/IRENE-001-INCREMENT-2-STAGE3-PILOT.md`: adapter test
-results, concurrent-write proof, real-model test approval artifact and
-results (model/vendor names and non-secret config only — no prompts/
-responses containing anything resembling customer data, since only
-synthetic data is in scope), end-to-end browser demonstration record, and
-the independent audit's parity/isolation/failure-behaviour findings.
+results, the three concurrency proofs required by R2/C2 (same-field
+conflict, unrelated-field non-overwrite, idempotent retry), an explicit
+statement that the manual Stage 3 page's existing full-row save is not
+made concurrency-safe by this IRENE-only adapter (no claim to the
+contrary without its own separate proof), real-model test approval
+artifact and results (model/vendor names and non-secret config only — no
+prompts/responses containing anything resembling customer data, since
+only synthetic data is in scope), end-to-end browser demonstration
+record, and the independent audit's parity/isolation/failure-behaviour
+findings.
 
 `docs/guides/IRENE-SECTION-INTEGRATION-GUIDE.md`: the reusable formula
 itself, written against the real Increment 1 contract, with the second
