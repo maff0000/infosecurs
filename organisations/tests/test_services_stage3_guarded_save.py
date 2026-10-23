@@ -11,9 +11,12 @@ ACTUALLY EXECUTED test, never merely asserted.
 """
 from __future__ import annotations
 
-import pytest
+import threading
 
-from organisations.models import NO, UNKNOWN, YES, AuditEvent, OrganisationProfile
+import pytest
+from django.db import close_old_connections
+
+from organisations.models import NO, UNKNOWN, YES, AuditEvent, Organisation, OrganisationProfile
 from organisations.services import (
     CanonicalValidationError,
     StaleCanonicalStateError,
@@ -67,6 +70,87 @@ class TestFirstEverSubmission:
         # must be identical - deterministic, not randomised.
         token_again = compute_stage3_expected_state_token(org_a, ["productivity_platform"])
         assert token_before == token_again
+
+
+@pytest.mark.django_db(transaction=True)
+class TestFirstEverSubmissionConcurrency:
+    """Reproduces the race an independent audit found in the `is_new`
+    branch of `save_stage3_fields`: two GENUINELY concurrent first-ever
+    Stage 3 submissions for the SAME brand-new organisation. Both real
+    OS threads, each with its own DB connection, both compute the SAME
+    expected-state token (the model-default-derived token for "no row
+    yet" - no `select_for_update()` row exists for either of them to
+    lock), so both pass the stale-write check and both attempt
+    `OrganisationProfile(organisation=organisation); profile.save()`.
+    Before the fix, the loser's INSERT raised an unhandled
+    `django.db.utils.IntegrityError` (the `OneToOneField`'s own unique DB
+    constraint on `organisation`) instead of the module's existing,
+    documented, graceful `StaleCanonicalStateError`.
+
+    Uses `@pytest.mark.django_db(transaction=True)` - this codebase's own
+    existing precedent (see `security_tasks/tests/test_concurrency.py`)
+    for anything requiring real cross-thread commits, rather than a
+    single wrapped-and-rolled-back test transaction.
+    """
+
+    def test_two_concurrent_first_ever_submissions_do_not_crash_and_exactly_one_row_survives(self):
+        organisation = Organisation.objects.create(name="Concurrency First-Ever Submission Org")
+
+        # Both writers capture the SAME expected-state token for "no row
+        # yet" BEFORE either one writes - exactly as two customers who
+        # both loaded a brand-new organisation's Stage 3 page before
+        # either submitted would each hold the token the page handed
+        # them (same pattern as TestDistinctCanonicalStateStaleWriteCheck
+        # above, applied to the one case that check's own fixtures never
+        # exercise: no existing row at all).
+        token = compute_stage3_expected_state_token(organisation, ["productivity_platform"])
+        start_barrier = threading.Barrier(2)
+        outcomes = [None, None]
+
+        def _submit(index, value):
+            start_barrier.wait(timeout=10)
+            try:
+                receipt = _save(organisation, {"productivity_platform": value}, token)
+                outcomes[index] = ("ok", receipt)
+            except StaleCanonicalStateError as exc:
+                outcomes[index] = ("stale", exc)
+            except Exception as exc:  # noqa: BLE001
+                # Before the fix, this is where the raw IntegrityError
+                # landed - an unhandled crash, not a graceful rejection.
+                outcomes[index] = ("crash", exc)
+            finally:
+                close_old_connections()
+
+        threads = [
+            threading.Thread(target=_submit, args=(0, "microsoft_365")),
+            threading.Thread(target=_submit, args=(1, "google_workspace")),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        kinds = sorted(outcome[0] for outcome in outcomes)
+        assert kinds == ["ok", "stale"], (
+            f"Expected exactly one winner and one graceful StaleCanonicalStateError "
+            f"rejection (never an unhandled crash), got: {outcomes}"
+        )
+
+        # Exactly one OrganisationProfile row for this organisation - the
+        # unique constraint race never produced two.
+        assert OrganisationProfile.objects.filter(organisation=organisation).count() == 1
+        profile = OrganisationProfile.objects.get(organisation=organisation)
+
+        winner_index = 0 if outcomes[0][0] == "ok" else 1
+        winner_value = "microsoft_365" if winner_index == 0 else "google_workspace"
+        assert profile.productivity_platform == winner_value
+
+        # The loser's submission was never silently applied, and exactly
+        # one AuditEvent exists - the loser's rejected attempt created no
+        # second one.
+        assert AuditEvent.objects.filter(organisation=organisation).count() == 1
+        audit_event = AuditEvent.objects.get(organisation=organisation)
+        assert audit_event.action == AuditEvent.ACTION_PROFILE_CREATED
 
 
 class TestExactCanonicalValidationReuse:
