@@ -91,6 +91,7 @@ jobs:
           questionnaire/tests/test_m009a_clamav_image_pin.py
           questionnaire/tests/test_m009b_csv_import.py
           organisations/tests/test_m009a_reset_reconciliation.py
+          organisations/tests/test_services_stage3_guarded_save.py
           security_tasks/tests/test_models.py
           security_tasks/tests/test_services.py
           security_tasks/tests/test_dependencies.py
@@ -116,6 +117,7 @@ jobs:
           irene/tests/test_customer_assurance_tools.py
           irene/tests/test_question_engine_registry.py
           irene/tests/test_question_engine_presenter.py
+          irene/tests/test_question_engine_adapters_stage3.py
 
   integration:
     name: ci/integration
