@@ -185,6 +185,30 @@ PRODUCT_KNOWLEDGE_MAP: dict[str, ConceptEntry] = {
         availability_flag=True,
         version="1.0.0",
     ),
+    # WO-IRENE-001 Increment 2 (PID Amendment D3): the ONE new concept
+    # this package's Stage 3 adapter needs for question 3.7's
+    # delegated_workflow shape (irene.question_engine.adapters.
+    # stage3_technology_data.KEY_ASSETS_CONCEPT_ID) - a safe link to the
+    # EXISTING, real, unmodified key_assets list/create flow, same
+    # "existing, generic registry gains one more row" discipline as
+    # customer_assurance_upload directly above, never a new table/app.
+    # required_capability="security" is the EXACT existing code
+    # entitlements.capabilities.ROUTE_NAMESPACE_TO_CAPABILITY["key_assets"]
+    # already requires for this route - re-independently-enforced by
+    # that adapter's own check_stage3_access(..., delegated_key_assets=True)
+    # on top of (never instead of) the irene+foundations pair it already
+    # requires to reach Stage 3 through IRENE at all (Amendment D1).
+    "key_assets_manage": ConceptEntry(
+        concept_id="key_assets_manage",
+        label="Manage Key Assets",
+        service_reference="key_assets.views:key_asset_list",
+        route_name="key_assets:list",
+        relationship_type="workspace_page",
+        required_capability="security",
+        allowed_projection_fields=(),
+        availability_flag=True,
+        version="1.0.0",
+    ),
 }
 
 
