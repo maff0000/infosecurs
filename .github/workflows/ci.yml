@@ -114,6 +114,8 @@ jobs:
           irene/tests/test_zero_ai_calls.py
           irene/tests/test_capability_matrix.py
           irene/tests/test_customer_assurance_tools.py
+          irene/tests/test_question_engine_registry.py
+          irene/tests/test_question_engine_presenter.py
 
   integration:
     name: ci/integration
