@@ -34,6 +34,13 @@
         <button type="button" role="tab" data-irene-tab="tasks" aria-selected="false" tabindex="-1" aria-controls="irene-panel-tasks" id="irene-tab-tasks">Tasks</button>
         <button type="button" role="tab" data-irene-tab="ask" aria-selected="false" tabindex="-1" aria-controls="irene-panel-ask" id="irene-tab-ask">Ask</button>
         <button type="button" role="tab" data-irene-tab="activity" aria-selected="false" tabindex="-1" aria-controls="irene-panel-activity" id="irene-tab-activity">Activity</button>
+        {% if irene.stage3_tab %}
+        {# WO-IRENE-001 Increment 2 (browser-wiring) - additive 5th tab,
+           present only for a session that passes Stage 3's own composed
+           irene+foundations gate (irene.views.build_modal_context). The
+           four tab buttons above are untouched. #}
+        <button type="button" role="tab" data-irene-tab="stage3" aria-selected="false" tabindex="-1" aria-controls="irene-panel-stage3" id="irene-tab-stage3">Stage 3</button>
+        {% endif %}
     </div>
 
     <div id="irene-panel-continue" class="irene-panel" data-irene-panel="continue" role="tabpanel" aria-labelledby="irene-tab-continue">
@@ -109,6 +116,19 @@
             <p class="empty-state">No recent activity yet.</p>
         {% endif %}
     </div>
+
+    {% if irene.stage3_tab %}
+    {# WO-IRENE-001 Increment 2 (browser-wiring) - additive 5th panel,
+       the real registered Stage 3 section (irene.question_engine.
+       presenter.render_section), rendered/answered/explained entirely
+       inside this existing modal (Central Architecture requirement 1).
+       Shares its question markup with the standalone irene:stage3_panel
+       view via the same included fragment, never a second copy. None of
+       the four panels above are touched. #}
+    <div id="irene-panel-stage3" class="irene-panel" data-irene-panel="stage3" hidden role="tabpanel" aria-labelledby="irene-tab-stage3">
+        {% include "irene/_stage3_questions.html" with stage3=irene.stage3_tab %}
+    </div>
+    {% endif %}
 </div>
 
 <script src="{% static 'irene/js/modal.js' %}"></script>
