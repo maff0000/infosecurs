@@ -121,7 +121,7 @@ import hashlib
 import json
 from typing import Mapping, Optional, Sequence
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from organisations.models import AuditEvent, OrganisationProfile
 
@@ -395,7 +395,40 @@ def save_stage3_fields(
         profile = OrganisationProfile(organisation=organisation)
         for name in field_names:
             setattr(profile, name, form.cleaned_data[name])
-        profile.save()
+        try:
+            profile.save()
+        except IntegrityError as exc:
+            # Two genuinely concurrent first-ever submissions for the
+            # SAME organisation: both reached this branch because
+            # `select_for_update()` above found no row for either of
+            # them (neither can see the other's not-yet-committed
+            # INSERT), so both built a fresh, unsaved `OrganisationProfile`
+            # and are racing this very INSERT. Whichever commits first
+            # wins cleanly; the second's INSERT collides with the first's
+            # now-committed row via `OrganisationProfile.organisation`'s
+            # own unique DB constraint (`OneToOneField`), raising
+            # `IntegrityError` here instead of raising inside the
+            # `select_for_update()` lock-and-compare above (there was
+            # nothing yet to lock).
+            #
+            # This is, semantically, exactly a stale write - "the
+            # canonical state this submission was built against (no row
+            # yet) is no longer true; another writer got there first" -
+            # so it is translated into this module's own existing,
+            # documented, graceful outcome for precisely that condition,
+            # `StaleCanonicalStateError`, rather than letting the raw
+            # `IntegrityError` escape uncaught. Deliberately NOT a
+            # retry-and-merge: the loser's submission is simply rejected,
+            # exactly as the same-field-conflict scenario above already
+            # rejects a second writer whose token went stale against an
+            # EXISTING row - this is the identical outcome for the one
+            # case ("no row yet") that check could not otherwise reach.
+            raise StaleCanonicalStateError(
+                f"Stage 3 field(s) {field_names!r} could not be saved as this "
+                "organisation's first-ever Stage 3 submission; another "
+                "concurrent writer's own first-ever submission committed first "
+                "for the same organisation; refusing to overwrite."
+            ) from exc
     else:
         for name in field_names:
             setattr(profile, name, form.cleaned_data[name])
