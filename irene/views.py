@@ -24,7 +24,8 @@ import dataclasses
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseNotAllowed
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -35,12 +36,38 @@ from irene import tools as irene_tools
 from irene.exceptions import ActionProposalExpiredError
 from irene.forms import AskForm, ConfirmTaskForm
 from irene.models import ActionDecisionState, AssistantAction
+from irene.question_engine.adapters.stage3_technology_data import (
+    SECTION_CODE as STAGE3_SECTION_CODE,
+)
+from irene.question_engine.adapters.stage3_technology_data import (
+    Stage3AccessDenied,
+    answered_values_for_profile,
+    check_stage3_access,
+    resolve_stage3_explanation,
+)
+from irene.question_engine.contract import (
+    CAPABILITY_TYPE_DELEGATED_WORKFLOW,
+    CAPABILITY_TYPE_GROUPED_INDEPENDENT_ANSWER,
+    CAPABILITY_TYPE_SINGLE_CHOICE,
+)
+from irene.question_engine.presenter import render_section
+from irene.question_engine.registry import UnregisteredSectionError, get_section
+from irene.question_engine.stage3_orchestration import ask_irene_stage3_explain
 
 # M010C PID §2 ("Task List available without modal via sidebar") - bounded
 # fragment sizes, never the full paginated page a dedicated sidebar visit
 # would show.
 MODAL_TASK_LIST_SIZE = 5
 MODAL_ACTIVITY_LIST_SIZE = 8
+
+# WO-IRENE-001 Increment 2 (browser-wiring) - the session key a pending
+# "Explain this" result for one Stage 3 question is stashed under between
+# the explain POST's redirect and the next render of the Stage 3 tab/panel
+# (a plain post/redirect/get flash, same no-AJAX/no-SPA convention every
+# other IRENE modal action already uses - ADR-0001). Popped (read-once) by
+# `_build_stage3_tab_context` below, never left to linger across an
+# unrelated later page view.
+STAGE3_EXPLANATION_SESSION_KEY = "irene_stage3_pending_explanation"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,6 +78,13 @@ class ModalContext:
     tasks_tab: dict
     activity_tab: dict
     ask_tab: dict
+    # WO-IRENE-001 Increment 2 (browser-wiring) - additive, optional: a
+    # 5th tab, `None` whenever the requesting session fails Stage 3's own
+    # composed `irene`+`foundations` gate (Amendment D1) - the existing
+    # four tabs/fields above are untouched, both in shape and in every
+    # existing call site that already constructs a `ModalContext` without
+    # naming this field.
+    stage3_tab: "dict | None" = None
 
 
 def build_modal_context(request, organisation) -> "ModalContext | None":
@@ -136,6 +170,25 @@ def build_modal_context(request, organisation) -> "ModalContext | None":
     # on.
     auto_open = _resolve_auto_open(request, user)
 
+    # Stage 3 tab (WO-IRENE-001 Increment 2 browser-wiring, Central
+    # Architecture requirement 1: "presented and answered inside the
+    # existing IRENE modal") - additive 5th tab, `None` (tab omitted
+    # entirely, same convention `build_modal_context` itself already uses
+    # for the whole modal above) for any session that fails Stage 3's own
+    # composed `check_stage3_access` gate (Amendment D1) or when the
+    # section is not currently registered. Every one of the four tabs
+    # above is built identically regardless of this outcome.
+    stage3_tab = None
+    try:
+        stage3_organisation = check_stage3_access(request, organisation.id)
+    except (Stage3AccessDenied, Http404):
+        stage3_tab = None
+    else:
+        try:
+            stage3_tab = _build_stage3_tab_context(request, stage3_organisation)
+        except UnregisteredSectionError:
+            stage3_tab = None
+
     return ModalContext(
         irene_enabled=True,
         auto_open=auto_open,
@@ -143,6 +196,7 @@ def build_modal_context(request, organisation) -> "ModalContext | None":
         tasks_tab=tasks_tab,
         activity_tab=activity_tab,
         ask_tab=ask_tab,
+        stage3_tab=stage3_tab,
     )
 
 
@@ -159,6 +213,129 @@ def _resolve_auto_open(request, user) -> bool:
     if enabled:
         request.session[_SESSION_AUTO_OPENED_KEY] = True
     return enabled
+
+
+def _stage3_field_names_for_definition(question) -> tuple:
+    """The real `OrganisationProfile` field name(s) one registered Stage 3
+    question's own answer is stored under, for a RAW
+    `irene.question_engine.contract.QuestionDefinition` (as found in
+    `section.questions` - e.g. what `_stage3_question_by_code` returns) -
+    `(question.question_code,)` for `single_choice` (the Stage 3 adapter's
+    own documented convention: every single-choice `question_code` IS the
+    real field name) or every sub-field's own `field_code`, read off this
+    question's own `fields` tuple, for `grouped_independent_answer`. Empty
+    for `delegated_workflow` (3.7/Key Assets - nothing is saved here;
+    `irene.question_engine.adapters.stage3_technology_data.
+    KEY_ASSETS_QUESTION_CODE` only ever renders a link out).
+
+    Deliberately a SEPARATE function from
+    `_stage3_field_names_for_rendered` below: a raw `QuestionDefinition`'s
+    grouped sub-fields live under its own `.fields` attribute (`tuple[
+    GroupedAnswerField, ...]`), never the presenter's own, differently-
+    named `.grouped_fields` (`tuple[RenderedGroupedField, ...]`) a
+    `RenderedQuestion` carries - conflating the two raised a real
+    `AttributeError` here before this fix (caught by this package's own
+    `test_grouped_question_saves_every_sibling_field_together`)."""
+    if question.capability_type == CAPABILITY_TYPE_SINGLE_CHOICE:
+        return (question.question_code,)
+    if question.capability_type == CAPABILITY_TYPE_GROUPED_INDEPENDENT_ANSWER:
+        return tuple(field.field_code for field in question.fields)
+    return ()
+
+
+def _stage3_field_names_for_rendered(question) -> tuple:
+    """The same field-name resolution as
+    `_stage3_field_names_for_definition` above, but for a presenter-
+    produced `irene.question_engine.presenter.RenderedQuestion` (as found
+    in `rendered.questions` - what `_build_stage3_tab_context` iterates) -
+    reads `.grouped_fields` (`tuple[RenderedGroupedField, ...]`), never
+    the raw definition's own, differently-named `.fields`."""
+    if question.capability_type == CAPABILITY_TYPE_SINGLE_CHOICE:
+        return (question.question_code,)
+    if question.capability_type == CAPABILITY_TYPE_GROUPED_INDEPENDENT_ANSWER:
+        return tuple(field.field_code for field in question.grouped_fields)
+    return ()
+
+
+def _stage3_question_by_code(section, question_code):
+    for question in section.questions:
+        if question.question_code == question_code:
+            return question
+    return None
+
+
+def _build_stage3_tab_context(request, organisation) -> dict:
+    """Shared by `build_modal_context`'s additive Stage 3 tab AND the
+    standalone `stage3_panel` view below - ONE place calls
+    `irene.question_engine.presenter.render_section` for the real,
+    registered Stage 3 section and attaches the per-question extras
+    (the save-guard's own `expected_state_token`, the Key Assets
+    delegated-workflow link, and any just-posted "Explain this" result)
+    a template needs - never a second, divergent copy of this
+    assembly. Callers are responsible for having already proven access
+    via `check_stage3_access`/`_require_stage3_access` - this function
+    performs no authorisation check of its own."""
+    from django.urls import NoReverseMatch, reverse
+
+    from irene.product_knowledge import get_concept
+    from organisations.models import OrganisationProfile
+    from organisations.services import compute_stage3_expected_state_token
+
+    section = get_section(STAGE3_SECTION_CODE)
+    profile = OrganisationProfile.objects.filter(organisation=organisation).first()
+    rendered = render_section(section, answered_values_for_profile(profile))
+
+    # Read-once flash (see STAGE3_EXPLANATION_SESSION_KEY's own comment) -
+    # popped here so a later, unrelated render of this same tab never
+    # re-shows a stale explanation.
+    pending_explanation = request.session.pop(STAGE3_EXPLANATION_SESSION_KEY, None)
+
+    questions = []
+    for question in rendered.questions:
+        field_names = _stage3_field_names_for_rendered(question)
+        expected_state_token = (
+            compute_stage3_expected_state_token(organisation, field_names) if field_names else ""
+        )
+
+        key_assets_url = ""
+        if question.capability_type == CAPABILITY_TYPE_DELEGATED_WORKFLOW:
+            concept = get_concept(question.delegated_route_concept_id)
+            if concept is not None:
+                try:
+                    key_assets_url = reverse(concept.route_name, kwargs={"organisation_id": organisation.id})
+                except NoReverseMatch:
+                    key_assets_url = ""
+
+        explanation = None
+        if pending_explanation and pending_explanation.get("question_code") == question.question_code:
+            explanation = pending_explanation
+
+        questions.append(
+            {
+                "rendered": question,
+                "expected_state_token": expected_state_token,
+                "key_assets_url": key_assets_url,
+                "explanation": explanation,
+            }
+        )
+
+    return {"section": rendered, "questions": questions}
+
+
+def _require_stage3_access(request, organisation_id):
+    """Maps `Stage3AccessDenied` (a real member, missing capability) onto
+    the ordinary `django.core.exceptions.PermissionDenied` every other
+    insufficient-tier route in this codebase already raises (Django's own
+    branded 403) - `check_stage3_access` itself already raises a plain
+    `Http404` for a non-member via `get_member_organisation_or_404`, left
+    to propagate unchanged. One shared helper so all three new Stage 3
+    views below enforce the identical composed tenant+capability gate
+    (Central Architecture requirement 2) - never three independently
+    re-derived checks."""
+    try:
+        return check_stage3_access(request, organisation_id)
+    except Stage3AccessDenied as exc:
+        raise PermissionDenied(str(exc)) from exc
 
 
 @login_required
@@ -288,3 +465,165 @@ def set_auto_open_preference(request, organisation_id):
     )
     messages.success(request, "Your IRENE preference has been updated.")
     return redirect(reverse("organisations:detail", args=[organisation.id]))
+
+
+# ---------------------------------------------------------------------------
+# WO-IRENE-001 Increment 2 (browser-wiring) - Stage 3 question-engine
+# wiring. Three new, additive views; none of them touch `ask_irene`,
+# `_modal.html`/`modal.js`'s existing Ask-tab markup/behaviour, or
+# `organisations.views.organisation_stage3_technology_data`/its template
+# in any way (Central Architecture requirement 5). Each independently
+# calls `_require_stage3_access` (composed tenant+capability gate,
+# requirement 2) as its own first action - never
+# `@require_capability()`, which resolves a single capability from the
+# route's own namespace and cannot express Stage 3's composed
+# `irene`+`foundations` check (see `irene.question_engine.adapters.
+# stage3_technology_data.check_stage3_access`'s own docstring for why).
+# ---------------------------------------------------------------------------
+
+
+@login_required
+def stage3_panel(request, organisation_id):
+    """Standalone, independently-gated destination for the real,
+    registered Stage 3 section (Central Architecture requirement 1/2).
+    Shares its entire rendering assembly with `build_modal_context`'s own
+    additive Stage 3 tab via `_build_stage3_tab_context` - never a second,
+    divergent render path. A direct GET here is also what the IRENE
+    modal's new Stage 3 tab button itself needs no separate copy of: the
+    tab's own content is pre-rendered as part of Home (no AJAX, ADR-0001,
+    same as every other tab) by that same shared helper."""
+    organisation = _require_stage3_access(request, organisation_id)
+    stage3 = _build_stage3_tab_context(request, organisation)
+    return render(
+        request,
+        "irene/stage3_panel.html",
+        {"organisation": organisation, "stage3": stage3},
+    )
+
+
+def _stage3_redirect_to_modal(organisation_id):
+    return redirect(f"{reverse('organisations:detail', args=[organisation_id])}?irene=open&irene_tab=stage3")
+
+
+@login_required
+def stage3_save(request, organisation_id):
+    """Guarded Stage 3 answer save (Central Architecture requirement 3) -
+    enforces `_require_stage3_access` first, then calls ONLY
+    `organisations.services.save_stage3_fields` (the audited guarded
+    adapter) - never a direct `OrganisationProfile.save()`.
+    `StaleCanonicalStateError`/`CanonicalValidationError` are both real,
+    expected outcomes a genuine user submission can hit and are handled
+    here as ordinary, user-visible, non-crashing redirects with a flash
+    message - never an unhandled 500."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from organisations.services import (
+        CanonicalValidationError,
+        StaleCanonicalStateError,
+        UnknownStage3FieldError,
+        save_stage3_fields,
+    )
+
+    organisation = _require_stage3_access(request, organisation_id)
+
+    try:
+        section = get_section(STAGE3_SECTION_CODE)
+    except UnregisteredSectionError:
+        raise Http404("Stage 3 is not currently available.")
+
+    question_code = request.POST.get("question_code", "")
+    question = _stage3_question_by_code(section, question_code)
+    if question is None:
+        raise Http404("Unknown Stage 3 question.")
+
+    field_names = _stage3_field_names_for_definition(question)
+    if not field_names:
+        # delegated_workflow (3.7/Key Assets) - nothing is ever saved
+        # through this endpoint; Key Assets' own app owns that write path
+        # entirely (Amendment D3's "link out, come back", never a
+        # duplicate inline editor).
+        messages.error(request, "That item cannot be saved here.")
+        return _stage3_redirect_to_modal(organisation.id)
+
+    field_values = {name: request.POST.get(name, "") for name in field_names}
+    expected_state_token = request.POST.get("expected_state_token", "")
+
+    try:
+        save_stage3_fields(
+            organisation=organisation,
+            field_values=field_values,
+            expected_state_token=expected_state_token,
+            catalogue_version=section.catalogue_version,
+            interaction_contract_version=section.interaction_contract_version,
+            actor=request.user,
+        )
+    except StaleCanonicalStateError:
+        messages.error(
+            request,
+            "Someone else updated this answer while you were viewing it. Please review and save again.",
+        )
+    except CanonicalValidationError:
+        messages.error(request, "That answer could not be saved. Please check it and try again.")
+    except UnknownStage3FieldError:
+        raise Http404("Unknown Stage 3 field.")
+    else:
+        messages.success(request, "Saved.")
+
+    return _stage3_redirect_to_modal(organisation.id)
+
+
+@login_required
+def stage3_explain(request, organisation_id):
+    """"Explain this" for a Stage 3 question (Central Architecture
+    requirement 4) - enforces `_require_stage3_access` first, then
+    `resolve_stage3_explanation` (Increment 2 core's typed
+    context+skill-only dispatch - no gateway call inside that adapter
+    module), then THIS increment's new, additive
+    `irene.question_engine.stage3_orchestration.ask_irene_stage3_explain`
+    (the real `ask_adviser` call site, or the safe fallback when Adviser
+    Mode is off/unavailable/fails - requirement 6). The result is handed
+    back to the modal via a read-once session flash + redirect (the same
+    post/redirect/get, no-AJAX convention `ask`/`confirm_task` above
+    already use) - never a 500 for a question this feature cannot
+    explain (3.7/Key Assets)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    from organisations.models import OrganisationProfile
+
+    organisation = _require_stage3_access(request, organisation_id)
+
+    try:
+        section = get_section(STAGE3_SECTION_CODE)
+    except UnregisteredSectionError:
+        raise Http404("Stage 3 is not currently available.")
+
+    question_code = request.POST.get("question_code", "")
+    question = _stage3_question_by_code(section, question_code)
+    if question is None:
+        raise Http404("Unknown Stage 3 question.")
+
+    profile = OrganisationProfile.objects.filter(organisation=organisation).first()
+    answered_values = answered_values_for_profile(profile)
+
+    try:
+        dispatch = resolve_stage3_explanation(
+            organisation=organisation,
+            question=question,
+            answered_values=answered_values,
+            field_code=None,
+        )
+    except ValueError:
+        # delegated_workflow (3.7/Key Assets) has no typed explanation
+        # context at all (Stage3QuestionExplanationContext only covers
+        # 3.1-3.6) - nothing to explain, never a 500.
+        messages.error(request, "This item cannot be explained here.")
+        return _stage3_redirect_to_modal(organisation.id)
+
+    response = ask_irene_stage3_explain(organisation=organisation, user=request.user, dispatch=dispatch)
+    request.session[STAGE3_EXPLANATION_SESSION_KEY] = {
+        "question_code": question_code,
+        "message": response.message,
+    }
+    return _stage3_redirect_to_modal(organisation.id)

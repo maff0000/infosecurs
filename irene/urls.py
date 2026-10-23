@@ -17,4 +17,10 @@ urlpatterns = [
     # (see views.assurance_status's own docstring for the explicit
     # capability-gating reasoning).
     path("assurance/", views.assurance_status, name="assurance_status"),
+    # WO-IRENE-001 Increment 2 (browser-wiring) - Stage 3 question-engine
+    # wiring (see views.stage3_panel/stage3_save/stage3_explain's own
+    # docstrings). Additive only - nothing above this is touched.
+    path("stage3/", views.stage3_panel, name="stage3_panel"),
+    path("stage3/save/", views.stage3_save, name="stage3_save"),
+    path("stage3/explain/", views.stage3_explain, name="stage3_explain"),
 ]

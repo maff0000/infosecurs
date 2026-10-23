@@ -1,0 +1,76 @@
+{# WO-IRENE-001 Increment 2 (browser-wiring) - shared Stage 3
+   question-engine rendering fragment. Included both from irene/_modal.html's
+   additive "Stage 3" tab panel and from the standalone irene/stage3_panel.html
+   view - ONE place renders the real, registered Stage 3 section
+   (irene.question_engine.presenter.render_section output, plus the
+   per-question extras irene.views._build_stage3_tab_context attaches),
+   never two independently-maintained copies.
+
+   Expects `stage3` (a dict: {"section": RenderedSection, "questions": [
+   {"rendered": RenderedQuestion, "expected_state_token": str,
+   "key_assets_url": str, "explanation": dict|None}, ...]}) and
+   `organisation` in context. #}
+<div class="irene-stage3-questions">
+    <p class="irene-modal__disclaimer">
+        IRENE is an AI assistant, not a member of staff. "Explain this" never
+        changes your saved answer - it only offers a plain-language
+        explanation of the question itself.
+    </p>
+    {% for item in stage3.questions %}
+        {% with question=item.rendered %}
+        <div class="irene-stage3-question" id="irene-stage3-question-{{ question.question_code }}">
+            <h4>{{ question.title }}</h4>
+            {% if question.help_text %}<p class="field__help">{{ question.help_text }}</p>{% endif %}
+
+            {% if item.explanation %}
+                <div class="message irene-stage3-explanation" role="status">{{ item.explanation.message }}</div>
+            {% endif %}
+
+            {% if question.capability_type == "single_choice" %}
+                <form method="post" action="{% url 'irene:stage3_save' organisation.id %}" class="irene-stage3-save-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="question_code" value="{{ question.question_code }}">
+                    <input type="hidden" name="expected_state_token" value="{{ item.expected_state_token }}">
+                    {% for option in question.options %}
+                        <label class="irene-stage3-option">
+                            <input type="radio" name="{{ question.question_code }}" value="{{ option.code }}" {% if option.selected %}checked{% endif %}>
+                            {{ option.label }}
+                        </label>
+                    {% endfor %}
+                    <button type="submit" class="button button--primary">Save</button>
+                </form>
+            {% elif question.capability_type == "grouped_independent_answer" %}
+                <form method="post" action="{% url 'irene:stage3_save' organisation.id %}" class="irene-stage3-save-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="question_code" value="{{ question.question_code }}">
+                    <input type="hidden" name="expected_state_token" value="{{ item.expected_state_token }}">
+                    {% for field in question.grouped_fields %}
+                        <fieldset class="irene-stage3-group-field">
+                            <legend>{{ field.label }}</legend>
+                            {% for option in field.options %}
+                                <label class="irene-stage3-option">
+                                    <input type="radio" name="{{ field.field_code }}" value="{{ option.code }}" {% if option.selected %}checked{% endif %}>
+                                    {{ option.label }}
+                                </label>
+                            {% endfor %}
+                        </fieldset>
+                    {% endfor %}
+                    <button type="submit" class="button button--primary">Save</button>
+                </form>
+            {% elif question.capability_type == "delegated_workflow" %}
+                <p>
+                    <a class="button button--secondary" href="{{ item.key_assets_url }}">Open key assets</a>
+                </p>
+            {% endif %}
+
+            {% if question.capability_type != "delegated_workflow" %}
+                <form method="post" action="{% url 'irene:stage3_explain' organisation.id %}" class="irene-stage3-explain-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="question_code" value="{{ question.question_code }}">
+                    <button type="submit" class="button button--secondary">Explain this</button>
+                </form>
+            {% endif %}
+        </div>
+        {% endwith %}
+    {% endfor %}
+</div>

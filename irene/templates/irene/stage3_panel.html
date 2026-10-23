@@ -1,0 +1,29 @@
+{% extends "application_shell.html" %}
+{# WO-IRENE-001 Increment 2 (browser-wiring) - standalone, independently
+   -gated destination for the real, registered Stage 3 section
+   (irene.views.stage3_panel). Shares its question markup with the IRENE
+   modal's own additive "Stage 3" tab via the included
+   irene/_stage3_questions.html fragment - never a second, divergent
+   copy. Does NOT replace, modify, or link to
+   organisations/templates/organisations/stage3_technology_data.html -
+   that page and its own full-instance form save remain completely
+   untouched. #}
+
+{% block title %}IRENE — Your Technology & Data — {{ organisation.name }} — {{ product_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>IRENE — Your Technology &amp; Data</h1>
+        <p class="page-header__subtitle">{{ organisation.name }}</p>
+    </div>
+</div>
+
+<p>
+    <a class="button button--secondary" href="{% url 'organisations:detail' organisation.id %}?irene=open&irene_tab=stage3">
+        Open this inside the IRENE modal on Home
+    </a>
+</p>
+
+{% include "irene/_stage3_questions.html" with stage3=stage3 %}
+{% endblock %}
