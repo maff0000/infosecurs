@@ -9,6 +9,16 @@ keys of any kind).
 **Base SHA for this Amendment:** `4b241fd2357a628d6b84699c66071c2d79a46a33`
 (current exact `main`).
 
+**Amendment status:** Central Architecture reviewed this Amendment and its
+companion Work Order at reviewed head
+`8a5b5ecdb7a337d5c4a2fa0c94cddcd3c0db42fe` and returned a verdict of
+**architecture direction accepted in principle, targeted document
+corrections required**. The two-increment delivery strategy was not
+redesigned. The three items previously recorded below as "open decision
+points" have been resolved as binding architectural decisions (D1–D3);
+see the new section of that name, replacing the earlier defaults. The
+companion Work Order carries the corresponding refinements (R1–R4).
+
 **Governance chain for this pilot:** Architecture → this PID
 Amendment/Work Order → GUNNAR → FORGE → Independent Audit → PR → Architect
 Acceptance → Merge → Closure. No implementation begins until this
@@ -104,10 +114,10 @@ Beta stack.
   environment — only a disposable, separately-authorised real-model test
   is in scope, per its own numerical cost/latency/vendor-security approval
   gate (see Work Order §2, Increment 2).
-- Does not introduce a new entitlement/capability code unless Product
-  Authority explicitly decides Stage-3-via-IRENE should be gated
-  differently from manual Stage 3 or the IRENE shell itself — this
-  Amendment treats that as an open decision point, not an assumption.
+- Does not introduce a new entitlement/capability code. Per D1 below,
+  access through IRENE is gated by composing existing codes (`irene` +
+  the destination section's own code — `foundations` for Stage 3;
+  `security` for the delegated Key Assets workflow), never a new code.
 - Does not touch Stage 1, Stage 2, Stage 4+, or any app outside the exact
   files/modules named in the companion Work Order.
 - Does not become a platform-wide rewrite. The explicit purpose is to
@@ -145,34 +155,43 @@ Beta stack.
    the persistent Beta remains separately gated and is explicitly not
    authorised by this Amendment.
 
-## Open decision points for Architect Acceptance
+## Architectural decisions (D1–D3, resolved by Central Architecture on PR #128 review)
 
-These are flagged, not assumed, per the research underlying this
-Amendment:
+These were raised below as open decision points with defaults; Central
+Architecture has now decided them. They are binding on the companion Work
+Order, superseding the earlier "default position… confirm or override"
+framing.
 
-1. **Entitlement gating.** Does Stage-3-content-presented-through-IRENE
-   need its own capability code, or does it correctly inherit from
-   whichever shell presents it (`foundations` if reached via the existing
-   Stage 3 route, `irene` if reached via the IRENE modal)? Default
-   position: no new code, reuse the shell's existing gate — confirm or
-   override.
-2. **Versioning granularity.** Should question/section versioning follow
-   the single-`CATALOGUE_VERSION`-constant precedent, or the two-dimension
-   precedent already used by `security_baseline/structured_catalogue.py`
-   (content version vs. presentation/interaction-scheme version, recorded
-   independently)? Default position: single version string for this
-   pilot's bounded scope (10 fields, no interaction-scheme variants yet),
-   with the two-dimension pattern documented as the natural extension
-   point for a future section that needs it.
-3. **Linked/repeatable-record capability.** Question 3.7 (Key Assets)
-   is explicitly not a form field today — it is a link-out to a separate
-   CRUD app. Should the registered "linked/repeatable-record" adapter
-   capability model this as a true inline interaction, or as a declared
-   delegation to an existing non-IRENE route? Default position:
-   delegation for this pilot (lowest risk, no duplicate Key Assets UI),
-   with the capability type still declared generically enough that a
-   future section needing genuine inline repeatable records is not
-   blocked by this choice.
+**D1 — Entitlements.** No new entitlement/capability code. Access through
+IRENE to a destination section requires **both** the `irene` capability
+code and the destination section's own existing code — `foundations` for
+Stage 3. The delegated Key Assets workflow (question 3.7) must
+additionally enforce its own existing `security` entitlement — a third,
+independently-checked gate on top of the `irene`+`foundations` pair, not
+a substitute for either. Every read, explanation, save, and resume
+request must independently recheck authorisation and tenant membership —
+no caching an earlier check's result within the same session.
+
+**D2 — Versioning.** Two independently-versioned axes, not one: stable
+section/question identifiers plus a versioned question catalogue, and a
+*separately* versioned generic interaction contract. Server-issued
+versions must be checked when an answer submission is received;
+incompatible or stale submissions fail safe — rejected outright, never
+silently accepted or auto-merged. The canonical Stage 3 answer schema
+(`OrganisationProfile`) is **not** modified merely to store registry
+version information, and **no registry-metadata table is authorised for
+Increment 1**. Increment 2 *may* define one minimal, non-authoritative
+provenance mechanism, but only if the companion Work Order names its
+exact purpose, schema, and migration explicitly — and that mechanism must
+never hold an alternative answer value or determine security completion
+in its own right.
+
+**D3 — Key Assets.** A generic `delegated_workflow` capability type is
+approved for question 3.7. IRENE explains the question and directs the
+customer to the existing, already-authorised Key Assets workflow, then
+resumes appropriately on return. No duplicate asset editor. No claim of
+implementing generic inline repeatable-record CRUD — `delegated_workflow`
+is a declared delegation shape, not a stand-in for one.
 
 ## What happens if a defect is found during the pilot
 

@@ -5,6 +5,15 @@ itself amending `docs/pids/M010-IRENE-MASTER-PID.md`.
 
 **Base SHA:** `4b241fd2357a628d6b84699c66071c2d79a46a33` (current exact `main`).
 
+**Status:** Central Architecture reviewed this Work Order and its
+companion PID Amendment at reviewed head
+`8a5b5ecdb7a337d5c4a2fa0c94cddcd3c0db42fe` — architecture direction
+accepted in principle, document corrections required before Architect
+Acceptance. D1–D3 (PID Amendment) are now resolved, binding decisions,
+not open defaults — see §1a below and the targeted edits throughout this
+document. R1–R4 are the corresponding Work Order refinements, specified
+in §1a and woven into the relevant increment sections.
+
 **Environment:** disposable only, throughout every increment below. No
 part of this Work Order touches the persistent Beta stack
 (`/srv/infosecurs` / `infosecurs-relocation`). M010 itself (and therefore
@@ -21,6 +30,63 @@ remains sole owner of canonical data, validation, entitlements, and
 consequences. Reference section: Stage 3 "Your Technology & Data,"
 questions 3.1–3.7 (10 `OrganisationProfile` fields + a Key Assets
 link-out).
+
+## 1a. Binding refinements from Central Architecture's PR #128 review (R1–R4)
+
+These supersede this Work Order's earlier "default position" wording
+wherever referenced below, and apply across both increments.
+
+**R1 — Generic AI explanation.** The typed question context passed into
+the existing AI gateway must contain: the approved question wording, the
+permitted answer labels, stable section/question identifiers, the
+catalogue version, and a minimised, authorised business context — never
+the raw `OrganisationProfile` row or any field beyond what the question
+being explained needs. Any AI request/prompt change this requires is
+itself versioned, without altering `ai_platform.gateway.LiteLLMGateway`'s
+generic architecture. The model is never given write authority over
+canonical state and never invents an answer — it explains only from the
+server-supplied context, consistent with Architecture invariant 5.
+
+**R2 — Guarded canonical saves.** The new save path (§3.2) must provide,
+and Increment 2's tests must prove: exact canonical validation (the same
+field-level validation the existing `OrganisationProfileStage3Form`
+already enforces, not a looser IRENE-specific copy); field-scoped
+updates (`update_fields=[...]`, never a full-instance save); atomic
+grouped submissions (`transaction.atomic`, all-or-nothing for a
+multi-field submit); safe handling of an organisation's first-ever Stage
+3 submission (no profile row yet); stale-write detection (reject a
+submission made against an out-of-date version, per D2); idempotent
+receipts (a retried identical submission must not double-apply or error);
+and preservation of whatever audit/history behaviour the existing manual
+save path already produces. Both a same-field concurrent-edit scenario
+(two writers racing on the same Stage 3 field — the loser must be
+rejected via stale-write detection, not silently overwritten) and a
+different-field concurrent-edit scenario (one writer on a Stage 3 field,
+one on an unrelated field/stage on the same row — both must succeed,
+neither clobbers the other) must be proven as tests, not asserted.
+
+**R3 — Progress integrity.** `organisations.guided_journey.current_guided_stage()`
+remains the one and only stage-completion resolver — the IRENE adapter
+calls it, never re-derives or shadows it. Question-level state shown
+inside IRENE is read from the existing authoritative `OrganisationProfile`
+field data only. A field's default/unset value (e.g. a "Not confirmed"
+default) must never be presented or recorded as an explicitly-reviewed
+answer without positive evidence that the customer actually reviewed and
+submitted it through either save path — no inferring confirmation from
+the mere presence of a default.
+
+**R4 — Product experience.** The customer must be able to answer and save
+the actual Stage 3 questions from inside the real IRENE interface, not a
+read-only preview that hands off elsewhere to save. Increment 2's
+end-to-end demonstration (§3.11) must prove, in a real browser: genuine
+in-IRENE answer/save; on-demand AI explanation — genuine, not
+mocked/stubbed — but only once the separate operating approval for the
+disposable real-model test (§3.7) has been obtained, never before; a
+page refresh that preserves authenticated state and saved answers; a
+pause-then-resume of the journey (leave mid-section, return later, resume
+at the correct question/state); parity with the existing manual Stage 3
+page per §3.8's parity gate; and the second-section integration proof
+touching zero lines of Increment 1's core.
 
 ## 1. Shared conventions, binding across both increments below
 
@@ -40,11 +106,16 @@ link-out).
   path-traversal-rejected references). The new section/question registry
   must be a Python-reviewed allowlist, never database-configurable or
   model-name-driven at runtime.
-- **Versioning:** follow the `CATALOGUE_VERSION`-constant-stamped-onto-the-
-  answer-row convention already used by `security_baseline/catalogue.py`,
-  `questionnaire/catalogue.py`, and `risk_register/methodology.py`. One
-  version string for this pilot's scope, per Amendment §"Open decision
-  points" item 2, unless Architect Acceptance overrides this.
+- **Versioning:** per Amendment D2, two independently-versioned axes —
+  stable section/question identifiers plus a versioned question
+  catalogue (following the `CATALOGUE_VERSION`-constant convention
+  already used by `security_baseline/catalogue.py`, `questionnaire/catalogue.py`,
+  and `risk_register/methodology.py`), and a *separately* versioned
+  generic interaction contract. Not a single shared version string.
+  Server-issued versions are checked on every answer submission; stale/
+  incompatible submissions fail safe (rejected, never silently merged).
+  No registry-metadata table in Increment 1; see R2 for the Increment 2
+  provenance-mechanism constraint.
 - **Explain-this dispatch:** intent-code based only, via the existing
   `IntentCode` enum and `skill_router.select_skill()` — never free-text
   matching. Reuse or extend `EXPLAIN_CONTROL`, do not invent a parallel
@@ -84,8 +155,8 @@ name.
   Protocols for a `SectionDefinition`, `QuestionDefinition`, and the four
   declared adapter capability types named in the Architecture decision
   (single-choice, grouped-independent-answer, linked-repeatable-record,
-  and the "delegate to an existing non-IRENE route" shape identified for
-  Key Assets — see Amendment decision point 3).
+  and the `delegated_workflow` shape approved for Key Assets under
+  Amendment D3).
 - New module, e.g. `irene/question_engine/registry.py`: the
   allowlist-registration mechanism (mirroring `source_registry.py`'s
   plain-dict-plus-resolver shape and `skill_loader.py`'s manifest-validation
@@ -169,21 +240,33 @@ section/fixture registered without touching Increment 1's core.
 - New Stage 3 adapter module (e.g. `irene/question_engine/adapters/stage3_technology_data.py`)
   implementing Increment 1's contract against the existing 10
   `STAGE3_TECHNOLOGY_DATA_FIELDS` and declaring Key Assets (3.7) as the
-  "delegate to an existing route" capability (per Amendment decision point
-  3's default position), not a duplicated inline Key Assets UI.
+  `delegated_workflow` capability approved under Amendment D3, not a
+  duplicated inline Key Assets UI. The adapter's authorisation check for
+  this delegated path must additionally enforce the existing `security`
+  entitlement, on top of the `irene`+`foundations` pair already required
+  to reach IRENE/Stage 3 at all (D1).
 - New guarded save path (e.g. `organisations/services.py`, net new file —
   none exists today) mirroring `governance.services`'s pattern
   (tenant-membership-checked, `transaction.atomic`, domain error on
   violation), but writing with `update_fields` scoping per §1's save-path
-  discipline. The existing `organisation_stage3_technology_data` view's
-  own direct-save path is left untouched/unmodified — this new path is
-  additive, used only by the IRENE adapter.
-- `CATALOGUE_VERSION`-style constant for this section (per §1 versioning
-  convention), stamped onto whichever record the guarded save path writes.
+  discipline, and meeting R2 in full: exact canonical validation,
+  field-scoped updates, atomic grouped submissions, safe first-submission
+  handling, stale-write detection against D2's server-issued versions,
+  idempotent receipts, and preserved audit behaviour. The existing
+  `organisation_stage3_technology_data` view's own direct-save path is
+  left untouched/unmodified — this new path is additive, used only by the
+  IRENE adapter.
+- Section/question identifiers and a versioned question catalogue, plus
+  the separately-versioned generic interaction contract from Increment 1
+  (per D2) — not a single shared version string — stamped onto whichever
+  record the guarded save path writes.
 - Explain-this wiring for questions 3.1–3.6 via the existing
-  `EXPLAIN_CONTROL` intent (or a declared sibling), content sourced from
-  server-side canonical definitions only — no model-generated option
-  text anywhere, per Architecture invariant 5.
+  `EXPLAIN_CONTROL` intent (or a declared sibling), dispatched with the
+  typed question context specified in R1 (approved wording, permitted
+  answer labels, stable identifiers, catalogue version, minimised
+  authorised business context) — content sourced from server-side
+  canonical definitions only, no model-generated option text anywhere,
+  per Architecture invariant 5.
 - A second, deliberately small section/fixture (e.g. a 2-3 field synthetic
   section, or a genuinely small real section if one is identified as
   low-risk) registered purely through Increment 1's documented contract,
@@ -191,8 +274,12 @@ section/fixture registered without touching Increment 1's core.
   "second section without touching IRENE core" proof.
 
 ### 3.3 Existing services reused, unmodified
-`OrganisationProfile`, `KeyAsset`, `organisations.guided_journey.current_guided_stage()`,
-`entitlements.capabilities`/`decorators.require_capability`,
+`OrganisationProfile`, `KeyAsset`, `organisations.guided_journey.current_guided_stage()`
+(per R3, the sole stage-completion resolver — never re-derived),
+`entitlements.capabilities`/`decorators.require_capability` (per D1,
+composed as `irene`+`foundations` for the Stage 3 adapter and
+additionally `security` for the delegated Key Assets path — independently
+rechecked on every read/explain/save/resume, not cached),
 `ai_platform.gateway.LiteLLMGateway.ask_adviser`. The existing
 `organisation_stage3_technology_data` view, `OrganisationProfileStage3Form`,
 and `stage3_technology_data.html` template remain in place, untouched —
@@ -200,12 +287,17 @@ this pilot adds a second, IRENE-presented path to the same data, it does
 not replace the first.
 
 ### 3.4 New schema/migrations
-A version-stamp field (or equivalent record) for Stage 3 answers made
-through the IRENE path, scoped as narrowly as possible — e.g. a small new
-model/table in the `irene` app recording `{organisation, section_code,
-question_code, catalogue_version, answered_via}` rather than adding
-columns to `OrganisationProfile` itself, unless Architect Acceptance
-prefers the latter. Migration must not touch any Stage 1/2/4+ table.
+Per D2, the canonical `OrganisationProfile` schema is not modified to
+store registry version information, and no registry-metadata table was
+authorised for Increment 1. If Increment 2 requires a minimal,
+non-authoritative provenance mechanism (e.g. a small new model/table in
+the `irene` app recording `{organisation, section_code, question_code,
+catalogue_version, answered_via}`), it is permitted only if this exact
+purpose, schema, and migration are what gets implemented — no broader
+table, no field holding an alternative answer value, and it must never
+determine security completion on its own (that remains
+`current_guided_stage()`'s exclusive role per R3). Migration must not
+touch any Stage 1/2/4+ table.
 
 ### 3.5 Preconditions and dependency order
 Increment 1 complete and independently audited GREEN first.
@@ -217,8 +309,12 @@ not merely assert it.
 
 ### 3.7 Tests and evaluation fixtures
 - Unit/integration tests for the Stage 3 adapter against all 10 fields
-  plus the Key Assets delegation.
-- The concurrent-write proof from §1.
+  plus the Key Assets delegation (including the additional `security`
+  entitlement check on that delegated path, per D1).
+- The concurrent-write proofs required by R2: a same-field race (second
+  writer's stale version is rejected, not overwritten) and a
+  different-field race (both writers succeed, neither clobbers the
+  other) — both as executed tests, not assertions.
 - A **disposable, explicitly-approved real-model test**: before this
   sub-item runs, obtain explicit model/vendor security and numerical
   cost/latency approval for a bounded number of real `ask_adviser()` calls
@@ -244,6 +340,16 @@ not merely assert it.
   deliberately made unreachable — per Architecture invariant 10, a
   customer must always be able to complete the section without AI
   availability.
+- **Guarded-save guarantees (R2)**: directly re-run or re-verify the
+  same-field and different-field concurrent-write proofs against the
+  actual implementation, not just read the test code; confirm a retried
+  identical submission is genuinely idempotent (no double-apply, no
+  error) and that a stale submission is genuinely rejected rather than
+  silently accepted.
+- **Progress-integrity check (R3)**: confirm directly, by inspection of a
+  profile with unanswered fields, that a default/unset value is never
+  presented or recorded as an explicitly-reviewed answer absent a real
+  submission through one of the two save paths.
 - **Both mandatory acceptance conditions** (Amendment "Closure condition"
   item 3) independently re-verified: a real browser session completing
   the full Stage 3 journey through actual IRENE with genuinely useful
@@ -270,27 +376,34 @@ itself, written against the real Increment 1 contract, with the second
 section's registration as its own tested, cited example.
 
 ### 3.11 Customer Zero / browser verification
-Mandatory, real browser, disposable environment: full Stage 3 journey
-through actual IRENE (login → dashboard → Infosecurs Limited → Stage 3 via
-IRENE → at least one on-demand explanation → save → confirm persisted via
-direct DB check → refresh → confirm state survives). This is the pilot's
-primary acceptance evidence — a 200 status code alone is never sufficient,
-matching the standing discipline already applied to the Customer Zero
-login acceptance gate on this delivery line.
+Mandatory, real browser, disposable environment, proving R4 in full:
+full Stage 3 journey through actual IRENE (login → dashboard →
+Infosecurs Limited → Stage 3 via IRENE → genuine in-IRENE answer/save →
+confirm persisted via direct DB check → refresh, confirm authenticated
+state and saved answers survive → pause the journey and resume it later,
+confirm it resumes at the correct question/state → at least one on-demand
+AI explanation, obtained only after the separate real-model test's
+operating approval in §3.7 has been granted, never before → manual-page
+parity per §3.8 → the second-section integration proof touching zero
+lines of Increment 1's core). This is the pilot's primary acceptance
+evidence — a 200 status code alone is never sufficient, matching the
+standing discipline already applied to the Customer Zero login
+acceptance gate on this delivery line.
 
 ### 3.12 CI/security/regression requirements
 Full existing `ci/unit` + `ci/integration` suite green. No regression to
 the existing manual Stage 3 page, Stage 1/2/4+, or any other IRENE
 skill/tool already delivered under M010A–F.
 
-## Outstanding Product Authority / Architect decisions
+## Product Authority / Architect decisions — resolved
 
-The three open decision points named in the companion PID Amendment
+The three decision points previously named in the companion PID Amendment
 (entitlement gating, versioning granularity, linked-repeatable-record
-capability modelling) must be resolved — explicitly, by Architect
-Acceptance of this Work Order or a stated override — before Increment 2
-begins; Increment 1 can proceed without them since it is Stage-3-agnostic
-by construction.
+capability modelling) have been resolved by Central Architecture as D1–D3
+(see Amendment and §1a above), with R1–R4 as this Work Order's
+corresponding refinements. Both increments may proceed under these
+resolved decisions once this corrected package itself receives Architect
+Acceptance; no further decision is outstanding before Increment 2 begins.
 
 ## Delivery sequence
 
