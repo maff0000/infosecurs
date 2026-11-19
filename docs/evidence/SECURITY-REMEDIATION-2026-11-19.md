@@ -103,8 +103,12 @@ reason above. The local run described here replaces it.
 
 `docs/delivery/GITHUB-EVIDENCE-CONTRACT.md` records that `main-governance`
 (id `23843330`) has no bypass. That remains true. The exception was a
-temporary edit of the ruleset itself, made with repository administration
-rights, approved by Matt.
+temporary edit of the ruleset itself. Hermes made the edit, using repository
+administration rights under the shared `maff0000` login. Matt approved it
+in conversation with Hermes on 2026-11-19; that approval is not on GitHub,
+and this record is Hermes' attestation of it. (This paragraph was corrected
+after Rogue pointed out, on Issue #131, that the first version named
+neither the actor nor where the approval was given.)
 
 - **Change:** `security/dependencies` and `security/container` were removed
   from the required status checks. Nothing else in the ruleset changed.
