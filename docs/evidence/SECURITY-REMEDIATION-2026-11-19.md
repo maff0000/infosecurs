@@ -35,6 +35,12 @@ files and no dependency:
 | `security/container` | `pypdf 6.19.0` (test-only) | ten denial-of-service advisories | `6.21.4` |
 | `security/container` | `apt 3.0.3` | CVE-2026-109518 | `3.0.4` |
 | `security/container` | `zlib1g 1:1.3.dfsg+really1.3.1-1+b1` | CVE-2026-85091 | `1:1.3.dfsg+really1.3.1-1+deb13u1` |
+| `security/container` | pinned ClamAV image `1.4.6@sha256:b5b910ce…` | one CRITICAL (`brotli-libs` CVE-2026-111497) and three HIGH (among them `libcurl` CVE-2026-92392, `musl` CVE-2026-107891) | upstream's republished `1.4.6` image |
+
+The ClamAV row was not visible on #129: that job stops at its first failing
+scan, so the ClamAV scan was skipped. It surfaced on this change's own first
+run (run `44507428187`, head `de38119c13c8a1fdb1d9c776f36c0031f972d5c8`),
+once the application image passed.
 
 Whether Infosecurs' own use of `oauthlib` (federated sign-in through
 `django-allauth`) is exploitable through CVE-2026-49272 was not assessed.
@@ -46,8 +52,14 @@ The package was updated on the advisory alone.
 - `requirements-dev.in`, `requirements-dev.txt`: `pypdf 6.19.0` to `6.21.4`.
 - `Dockerfile`: the existing exact-version security overlay gains `apt`,
   `libapt-pkg7.0` and `zlib1g`. The base-image digest is unchanged.
-- `docs/delivery/BUILD-REPRODUCIBILITY.md`: both changes recorded, with the
-  method and the re-pin check.
+- `docker-compose.yml`, `docker-compose.release.yml`,
+  `docker-compose.cutover.yml`: the ClamAV image is re-pinned from
+  `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`
+  to `sha256:4cc4350d3fded380caf1799e76c0d1c93f3fa40af99c0cb2862ec0c9b117718a`.
+  Same tag, same ClamAV version (1.4.6); upstream republished it on
+  2026-11-16.
+- `docs/delivery/BUILD-REPRODUCIBILITY.md`: all three changes recorded, with
+  the method and the re-pin checks.
 
 No application code changed.
 
@@ -64,12 +76,15 @@ Run on `dell-debian` on 2026-11-19, on an image built from this change:
 - `pip-audit 2.10.1` on `requirements.txt` and on `requirements-dev.txt`:
   no known vulnerabilities.
 - Lock diff: only the `oauthlib` and `pypdf` entries and their hashes moved.
+- The re-pinned ClamAV image: `clamd --version` reports 1.4.6; Alpine
+  3.24.4; `brotli-libs 1.2.1-r0`, `libcurl 8.23.0-r0`, `musl 1.2.6-r3`,
+  `pcre2 10.49-r0`; Trivy `v0.70.0` with the workflow's flags exits 0.
 
 Not run locally: the test suites. `ci/unit` and `ci/integration` on the
 pull request are the evidence that `pypdf 6.21.4` and `oauthlib 4.0.1` do
-not break the tests. The ClamAV image scan is a later step of the same
-`security/container` job, which stopped at the first failure on #129, so
-its current result is only known from this pull request's own run.
+not break the tests. The re-pinned ClamAV image was scanned and inspected
+but not exercised: no file was scanned through it locally. `ci/integration`
+is the only functional evidence for it.
 
 ## 5. Ruleset exception for pull request #129
 

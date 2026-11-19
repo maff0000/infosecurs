@@ -254,7 +254,7 @@ these entries and their hashes: `oauthlib` in `requirements.txt`, and
 
 | Component | Explicit version | Immutable digest | Used in |
 |---|---|---|---|
-| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469` | `docker-compose.yml`, `docker-compose.release.yml` |
+| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:4cc4350d3fded380caf1799e76c0d1c93f3fa40af99c0cb2862ec0c9b117718a` | `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.cutover.yml` |
 
 The final accepted image was re-resolved from the official upstream
 `1.4.6` tag during the PR #102 security-correction cycle and pinned by
@@ -267,6 +267,20 @@ application image, using the same governed CRITICAL/HIGH,
 (FreshClam-managed, its own named volume) is operational/cache data, not
 a pinned build input and not part of either Docker Compose stack's
 backup set — see `docs/runbooks/BACKUP-RESTORE.md`.
+
+### ClamAV digest re-pin (2026-11-19 recovery)
+
+The digest accepted at M009A (`sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`,
+Alpine 3.24.2) had since acquired one CRITICAL and three HIGH fixable
+findings, among them `brotli-libs` CVE-2026-111497, `libcurl`
+CVE-2026-92392 and `musl` CVE-2026-107891. Upstream republished the same
+`1.4.6` tag on 2026-11-16. That image (the digest in the table above) is
+still ClamAV 1.4.6, on Alpine 3.24.4 with `brotli-libs 1.2.1-r0`,
+`libcurl 8.23.0-r0`, `musl 1.2.6-r3` and `pcre2 10.49-r0`. Trivy `v0.70.0`
+with the governed flags reports **0 CRITICAL / 0 HIGH** for it. All three
+Compose files were re-pinned to it together; the ClamAV version did not
+change. The paragraph above describes the M009A acceptance and is kept as
+written. Evidence: `docs/evidence/SECURITY-REMEDIATION-2026-11-19.md`.
 
 ### M009A scanner-image hardening history
 
