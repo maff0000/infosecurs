@@ -10,8 +10,9 @@ Governed by:
 
 > **PROJECT TRUTH == GITHUB**
 
-GUNNAR is the Engineering Delivery Manager.  
-GUNNAR invokes FORGE for bounded delivery.
+Hermes is the Project Architect.  
+Rogue is the Delivery Controller and hands bounded Work Orders to ForgeV2.  
+See `docs/delivery/DELIVERY-OWNERSHIP-2026-11-19-ROGUE-FORGEV2.md`.
 
 First authorised implementation PID:
 
