@@ -36,7 +36,7 @@ deliverable again, then finish the work that was cut off.
 | Repository | `maff0000/infosecurs`, private |
 | Default branch | `main` |
 | Baseline when the pickup began | `638eff4b66c12919212dad666031e43be4a6e2a2` (pull request #128, 2026-10-23) |
-| Baseline for this mandate | `6b4cb6ca5d580ef3d0a36567da47e63c93a776de` (pull request #132) |
+| Baseline for this mandate | `153b2d7bb4fd5ead7fdd778a1d47c977ca656a6a` (pull request #133) |
 | Merge rules | Ruleset `main-governance`: six required checks (`ci/unit`, `ci/integration`, `security/sast`, `security/secrets`, `security/dependencies`, `security/container`), no bypass |
 | Unmerged work | `wo/IRENE-001-pilot` at `f3be6305e129e43f93dcd1b4f0d8bbcf41e09101`; see `docs/delivery/WO-IRENE-001-DISPOSITION-2026-11-19.md` |
 
@@ -68,9 +68,14 @@ FND-047.
   `dell-debian`, with root's existing Claude login. A root Project Lead is
   started with `FORGE_ALLOW_ROOT=1` (ForgeV2 FV2-D024). There is no
   `forgev2-pl` account on this host.
-- GitHub access is root's existing `maff0000` credential. It is broader
-  than this repository; Matt accepted that. A dry-run push from `ROOT`
-  succeeded (Issue #131). A real push has not been tested.
+- GitHub access is root's existing `maff0000` credential: a classic token
+  whose scopes include `repo`, `workflow`, `admin:org`, `admin:enterprise`,
+  `admin:repo_hook` and `delete:packages` (read by Rogue with
+  `gh auth status`, Issue #131). It is far broader than this repository.
+  Matt accepted a credential broader than the repository; the Architect
+  has since told him the exact scopes. Rogue pushed a test branch from
+  `ROOT` and deleted it (Issue #131). No write to any other repository was
+  attempted, so nothing shows what the credential cannot do.
 - Every agent, including the Architect, writes to GitHub as `maff0000`.
   Authorship on GitHub therefore proves nothing about who wrote a comment.
 - No secret, token or key is recorded in this repository.
@@ -123,7 +128,7 @@ Beta is authorised by this mandate. Third-party software:
 | Unknown | Blocks |
 | --- | --- |
 | A ForgeV2 Project Lead has never run as root on this host | Everything; WO-INFOSECURS-001 is the test |
-| A real branch push from `ROOT` | Delivery of any Work Order |
+| That ForgeV2 confines pushes to `forge/<WO>` on this repository, as its documents say | Reliance on the engine, not the credential, to limit what a Project Lead can push |
 | Whether specialists can run this project's tests inside the ForgeV2 sandbox (expected not: no PostgreSQL or project dependencies on the host, no network in the sandbox) | Any Work Order that changes code |
 | Which AI gateway the product should use here, and whether it reaches a model | The IRENE real-model evaluation |
 | ForgeV2's own host boundary test (`tests/host/sandbox-boundary.sh`) has not been run here; it is broken at this version (ForgeV2 issue #5) | Confidence in the sandbox boundary on this host |
