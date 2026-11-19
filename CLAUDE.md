@@ -17,7 +17,7 @@ Hard constraints:
 - No secrets in source/Git.
 - No hard-coded environment endpoints, credentials or vendor model names.
 - Preserve tenant isolation.
-- Use FORGE role boundaries when delivery is invoked through FORGE.
+- Use ForgeV2 role boundaries when delivery is invoked through ForgeV2.
 
 This file is orientation only. It does not supersede authoritative PIDs,
 ADRs or GitHub state.

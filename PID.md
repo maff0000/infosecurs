@@ -3,9 +3,10 @@
 **Product:** Infosecurs  
 **Delivery target:** Beta 0.1 / Customer Zero  
 **Owner / Product Authority:** Matt  
-**Central Product / Architecture Authority:** Matt + Central ChatGPT Product/Architecture  
-**Engineering Delivery Manager:** GUNNAR  
-**Delivery framework:** FORGE  
+**Product / Architecture Authority:** Matt + Project Architect (Hermes)  
+**Delivery Controller:** Rogue (FOUNDRY Orchestrator)  
+**Delivery framework:** ForgeV2, governed by FOUNDRY (`maff0000/foundry`)  
+**Delivery ownership changed 2026-11-19:** see `docs/delivery/DELIVERY-OWNERSHIP-2026-11-19-ROGUE-FORGEV2.md`. Where this PID names GUNNAR read Rogue, where it names FORGE read ForgeV2, and where it names Central Architecture read the Project Architect.  
 **Canonical local root:** `/srv/infosecurs`  
 **Canonical GitHub repository:** `maff0000/infosecurs`  
 **Project truth:** GitHub  
