@@ -15,18 +15,28 @@ FROM python:3.12.14-slim-trixie@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83d
 # `python:3.12.14-slim-trixie` tag fresh on 2026-09-30/10-01: it still ships
 # the unpatched versions below), so no new digest exists to re-pin to. This
 # is NOT `apt-get upgrade` (floating, non-deterministic, deliberately
-# removed 2026-09-22) - it names exactly four packages and exactly one
+# removed 2026-09-22) - it names exactly seven packages and exactly one
 # target version each; if any exact version is ever unavailable, `apt-get
 # install pkg=version` fails the build closed rather than silently
 # installing something else. Remove this entire RUN step (reverting to the
 # single FROM line above) the next time this Dockerfile's base-image digest
 # is deliberately re-pinned to one that already carries these fixes.
+#
+# Extended 2026-11-19 (Project Architect, under Matt's recovery
+# authorisation - see docs/evidence/SECURITY-REMEDIATION-2026-11-19.md):
+# apt and libapt-pkg7.0 (CVE-2026-109518) and zlib1g (CVE-2026-85091).
+# Re-checked the same day: the current `python:3.12.14-slim-trixie` digest
+# (sha256:f77ac9e4...) still ships all seven packages unpatched, so there
+# is still no digest to re-pin to.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
         openssl=3.5.7-1~deb13u3 \
         libssl3t64=3.5.7-1~deb13u3 \
         openssl-provider-legacy=3.5.7-1~deb13u3 \
         libpcre2-8-0=10.46-1~deb13u3 \
+        apt=3.0.4 \
+        libapt-pkg7.0=3.0.4 \
+        zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Container/source identity (M006 Round 6, PID §15/§K). Standard OCI labels,

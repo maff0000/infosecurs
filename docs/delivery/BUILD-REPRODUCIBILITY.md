@@ -106,6 +106,33 @@ before keeping it. See `docs/evidence/SECURITY-REMEDIATION-2026-10-01.md`
 for the full dispatch evidence (build log, package-version proof, CVE
 detail).
 
+### Overlay extension: `apt` / `zlib1g` (2026-11-19 recovery)
+
+Advisories published after 23 October put two more Debian packages in the
+pinned base image over the Trivy `CRITICAL,HIGH` gate: `apt` (with
+`libapt-pkg7.0`, CVE-2026-109518) and `zlib1g` (CVE-2026-85091).
+
+A re-pin was checked first and is still not possible. On 2026-11-19 the tag
+`python:3.12.14-slim-trixie` resolved to
+`sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f`,
+and that image still ships `apt 3.0.3`, `zlib1g 1:1.3.dfsg+really1.3.1-1+b1`,
+`openssl 3.5.7-1~deb13u2` and `libpcre2-8-0 10.46-1~deb13u2`. The accepted
+digest in the table above is therefore unchanged. Tags `3.12.15-slim-trixie`
+and `3.12.16-slim-trixie` exist; moving the interpreter was out of scope for
+a security recovery and was not assessed.
+
+The overlay now names seven packages, each at one exact version:
+
+- `openssl`, `libssl3t64`, `openssl-provider-legacy` = `3.5.7-1~deb13u3` (unchanged)
+- `libpcre2-8-0` = `10.46-1~deb13u3` (unchanged)
+- `apt`, `libapt-pkg7.0` = `3.0.4` (new)
+- `zlib1g` = `1:1.3.dfsg+really1.3.1-1+deb13u1` (new)
+
+Trivy `v0.70.0`, `--severity CRITICAL,HIGH --ignore-unfixed`, on an image
+built from this `Dockerfile` on 2026-11-19: **0 CRITICAL/HIGH.** The
+obligation above now covers all seven packages. Authority and evidence:
+`docs/evidence/SECURITY-REMEDIATION-2026-11-19.md`.
+
 ## Python dependency lock
 
 Mechanism: `pip-tools` (`pip-compile`, `--generate-hashes`), run inside a
@@ -205,11 +232,29 @@ this repository's `security/dependencies` CI job already uses) found zero
 known vulnerabilities for `openpyxl==3.1.5`, `defusedxml==0.7.1`, or
 `et-xmlfile==2.0.0` at the time of this change.
 
+### Dependency security bump: `oauthlib` / `pypdf` (2026-11-19 recovery)
+
+`pip-audit` reported CVE-2026-49272 against `oauthlib 4.0.0` (fixed in
+`4.0.1`), and Trivy reported ten advisories against `pypdf 6.19.0` (all
+fixed by `6.21.4`).
+
+- `oauthlib` is transitive, through `django-allauth[socialaccount]`. No `.in`
+  file changed: `pip-compile --generate-hashes --upgrade-package
+  oauthlib==4.0.1` was run for both lock files.
+- `pypdf` is a direct, test-only dependency. Its pin in `requirements-dev.in`
+  moved from `6.19.0` to `6.21.4`, staying on the 6.x line.
+
+Both locks were regenerated with `pip-tools 7.7.0` inside a container
+started from the accepted Python digest. The resulting diff moves exactly
+these entries and their hashes: `oauthlib` in `requirements.txt`, and
+`oauthlib` and `pypdf` in `requirements-dev.txt`. No other package moved.
+`pip-audit 2.10.1` then reported no known vulnerabilities for either lock.
+
 ### ClamAV container image (M009A)
 
 | Component | Explicit version | Immutable digest | Used in |
 |---|---|---|---|
-| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469` | `docker-compose.yml`, `docker-compose.release.yml` |
+| ClamAV/clamd | `clamav/clamav:1.4.6` | `sha256:4cc4350d3fded380caf1799e76c0d1c93f3fa40af99c0cb2862ec0c9b117718a` | `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.cutover.yml` |
 
 The final accepted image was re-resolved from the official upstream
 `1.4.6` tag during the PR #102 security-correction cycle and pinned by
@@ -222,6 +267,20 @@ application image, using the same governed CRITICAL/HIGH,
 (FreshClam-managed, its own named volume) is operational/cache data, not
 a pinned build input and not part of either Docker Compose stack's
 backup set — see `docs/runbooks/BACKUP-RESTORE.md`.
+
+### ClamAV digest re-pin (2026-11-19 recovery)
+
+The digest accepted at M009A (`sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469`,
+Alpine 3.24.2) had since acquired one CRITICAL and three HIGH fixable
+findings, among them `brotli-libs` CVE-2026-111497, `libcurl`
+CVE-2026-92392 and `musl` CVE-2026-107891. Upstream republished the same
+`1.4.6` tag on 2026-11-16. That image (the digest in the table above) is
+still ClamAV 1.4.6, on Alpine 3.24.4 with `brotli-libs 1.2.1-r0`,
+`libcurl 8.23.0-r0`, `musl 1.2.6-r3` and `pcre2 10.49-r0`. Trivy `v0.70.0`
+with the governed flags reports **0 CRITICAL / 0 HIGH** for it. All three
+Compose files were re-pinned to it together; the ClamAV version did not
+change. The paragraph above describes the M009A acceptance and is kept as
+written. Evidence: `docs/evidence/SECURITY-REMEDIATION-2026-11-19.md`.
 
 ### M009A scanner-image hardening history
 

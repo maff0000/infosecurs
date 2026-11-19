@@ -9,7 +9,7 @@ pytest-django==4.14.0
 # text and inspecting the raw stream bytes), so a raw pdf_bytes substring
 # check is not reliable for asserting rendered text content - pypdf's
 # `extract_text()` correctly reconstructs the full run.
-pypdf==6.19.0
+pypdf==6.21.4
 # Test-only: real-browser (Chromium) acceptance testing (PID §16/§19/§28 -
 # real-browser drawer/keyboard/XSS-execution proof, WI6 browser acceptance).
 # Python package only - the Chromium browser binary itself is deliberately

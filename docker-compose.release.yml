@@ -63,7 +63,7 @@ services:
   # - a release artifact in which Customer Assurance upload always fails
   # because no scanner exists is not M009A GREEN.
   clamav:
-    image: clamav/clamav:1.4.6@sha256:b5b910ce43d595bf8a2fe401e34db56434602b2c755b7c2b07f00c917d04d469
+    image: clamav/clamav:1.4.6@sha256:4cc4350d3fded380caf1799e76c0d1c93f3fa40af99c0cb2862ec0c9b117718a
     volumes:
       - infosecurs_release_clamav_data:/var/lib/clamav
     healthcheck:
