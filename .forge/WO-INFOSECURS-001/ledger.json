@@ -1,0 +1,165 @@
+{
+  "base": "main",
+  "base_sha": "3946d7c918697b29ab61af68a3798cf37e76687c",
+  "branch": "forge/WO-INFOSECURS-001",
+  "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+  "common_dir": "/srv/infosecurs-dev/main/.git",
+  "counts": {
+    "auditor": 1,
+    "devsecops": 1,
+    "engineer": 1,
+    "tester": 1
+  },
+  "created": "2026-11-19T16:01:15Z",
+  "events": [
+    {
+      "t": "2026-11-19T16:01:15Z",
+      "type": "root_override",
+      "uid": 0
+    },
+    {
+      "candidate": null,
+      "id": 1,
+      "n": 1,
+      "role": "engineer",
+      "round": 1,
+      "t": "2026-11-19T16:01:30Z",
+      "type": "spawn",
+      "via": "forge-dispatch"
+    },
+    {
+      "exit": 0,
+      "output": "dispatch/1-engineer.json",
+      "reported": "completed",
+      "role": "engineer",
+      "spawn": 1,
+      "t": "2026-11-19T16:02:15Z",
+      "type": "dispatched"
+    },
+    {
+      "candidate": null,
+      "findings": [],
+      "note": "Added docs/history/GUNNAR-START.md, deleted two root files; self-checks C1-C4 pass",
+      "outcome": "completed",
+      "role": "engineer",
+      "round": 1,
+      "spawn": 1,
+      "t": "2026-11-19T16:02:18Z",
+      "type": "result"
+    },
+    {
+      "round": 1,
+      "sha": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "t": "2026-11-19T16:02:21Z",
+      "type": "candidate"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "id": 5,
+      "n": 1,
+      "role": "auditor",
+      "round": 1,
+      "t": "2026-11-19T16:02:37Z",
+      "type": "spawn",
+      "via": "forge-dispatch"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "id": 6,
+      "n": 1,
+      "role": "tester",
+      "round": 1,
+      "t": "2026-11-19T16:02:37Z",
+      "type": "spawn",
+      "via": "forge-dispatch"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "id": 7,
+      "n": 1,
+      "role": "devsecops",
+      "round": 1,
+      "t": "2026-11-19T16:02:37Z",
+      "type": "spawn",
+      "via": "forge-dispatch"
+    },
+    {
+      "exit": 0,
+      "output": "dispatch/5-auditor.json",
+      "reported": "pass",
+      "role": "auditor",
+      "spawn": 5,
+      "t": "2026-11-19T16:03:35Z",
+      "type": "dispatched"
+    },
+    {
+      "exit": 0,
+      "output": "dispatch/6-tester.json",
+      "reported": "pass",
+      "role": "tester",
+      "spawn": 6,
+      "t": "2026-11-19T16:03:35Z",
+      "type": "dispatched"
+    },
+    {
+      "exit": 0,
+      "output": "dispatch/7-devsecops.json",
+      "reported": "pass",
+      "role": "devsecops",
+      "spawn": 7,
+      "t": "2026-11-19T16:03:35Z",
+      "type": "dispatched"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "findings": [],
+      "note": "pass",
+      "outcome": "pass",
+      "role": "auditor",
+      "round": 1,
+      "spawn": 5,
+      "t": "2026-11-19T16:03:38Z",
+      "type": "result"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "findings": [],
+      "note": "pass",
+      "outcome": "pass",
+      "role": "tester",
+      "round": 1,
+      "spawn": 6,
+      "t": "2026-11-19T16:03:38Z",
+      "type": "result"
+    },
+    {
+      "candidate": "4335f41a7d4ccf1fc5fbb0090e13631d0cb0d058",
+      "findings": [],
+      "note": "pass; gitleaks clean",
+      "outcome": "pass",
+      "role": "devsecops",
+      "round": 1,
+      "spawn": 7,
+      "t": "2026-11-19T16:03:38Z",
+      "type": "result"
+    },
+    {
+      "note": "All three reviewers passed candidate 4335f41 in round 1",
+      "outcome": "DELIVERED",
+      "t": "2026-11-19T16:03:40Z",
+      "type": "close"
+    }
+  ],
+  "git_dir": "/srv/infosecurs-dev/main/.git/worktrees/WO-INFOSECURS-001",
+  "host": "dell-debian",
+  "known_commit": "3946d7c918697b29ab61af68a3798cf37e76687c",
+  "limit": 4,
+  "outcome": "DELIVERED",
+  "records": "/root/.local/state/forgev2/records/a5afb9a91ee5e47b/WO-INFOSECURS-001",
+  "repo": "maff0000/infosecurs",
+  "root": "/srv/infosecurs-dev/main",
+  "round": 1,
+  "scratch": "/srv/infosecurs-dev/worktrees/.forge-scratch/WO-INFOSECURS-001",
+  "wo": "WO-INFOSECURS-001",
+  "worktree": "/srv/infosecurs-dev/worktrees/WO-INFOSECURS-001"
+}
