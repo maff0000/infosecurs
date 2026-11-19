@@ -106,6 +106,33 @@ before keeping it. See `docs/evidence/SECURITY-REMEDIATION-2026-10-01.md`
 for the full dispatch evidence (build log, package-version proof, CVE
 detail).
 
+### Overlay extension: `apt` / `zlib1g` (2026-11-19 recovery)
+
+Advisories published after 23 October put two more Debian packages in the
+pinned base image over the Trivy `CRITICAL,HIGH` gate: `apt` (with
+`libapt-pkg7.0`, CVE-2026-109518) and `zlib1g` (CVE-2026-85091).
+
+A re-pin was checked first and is still not possible. On 2026-11-19 the tag
+`python:3.12.14-slim-trixie` resolved to
+`sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f`,
+and that image still ships `apt 3.0.3`, `zlib1g 1:1.3.dfsg+really1.3.1-1+b1`,
+`openssl 3.5.7-1~deb13u2` and `libpcre2-8-0 10.46-1~deb13u2`. The accepted
+digest in the table above is therefore unchanged. Tags `3.12.15-slim-trixie`
+and `3.12.16-slim-trixie` exist; moving the interpreter was out of scope for
+a security recovery and was not assessed.
+
+The overlay now names seven packages, each at one exact version:
+
+- `openssl`, `libssl3t64`, `openssl-provider-legacy` = `3.5.7-1~deb13u3` (unchanged)
+- `libpcre2-8-0` = `10.46-1~deb13u3` (unchanged)
+- `apt`, `libapt-pkg7.0` = `3.0.4` (new)
+- `zlib1g` = `1:1.3.dfsg+really1.3.1-1+deb13u1` (new)
+
+Trivy `v0.70.0`, `--severity CRITICAL,HIGH --ignore-unfixed`, on an image
+built from this `Dockerfile` on 2026-11-19: **0 CRITICAL/HIGH.** The
+obligation above now covers all seven packages. Authority and evidence:
+`docs/evidence/SECURITY-REMEDIATION-2026-11-19.md`.
+
 ## Python dependency lock
 
 Mechanism: `pip-tools` (`pip-compile`, `--generate-hashes`), run inside a
@@ -204,6 +231,24 @@ dependency" reasoning, explicitly permitted either way by WO-M009A).
 this repository's `security/dependencies` CI job already uses) found zero
 known vulnerabilities for `openpyxl==3.1.5`, `defusedxml==0.7.1`, or
 `et-xmlfile==2.0.0` at the time of this change.
+
+### Dependency security bump: `oauthlib` / `pypdf` (2026-11-19 recovery)
+
+`pip-audit` reported CVE-2026-49272 against `oauthlib 4.0.0` (fixed in
+`4.0.1`), and Trivy reported ten advisories against `pypdf 6.19.0` (all
+fixed by `6.21.4`).
+
+- `oauthlib` is transitive, through `django-allauth[socialaccount]`. No `.in`
+  file changed: `pip-compile --generate-hashes --upgrade-package
+  oauthlib==4.0.1` was run for both lock files.
+- `pypdf` is a direct, test-only dependency. Its pin in `requirements-dev.in`
+  moved from `6.19.0` to `6.21.4`, staying on the 6.x line.
+
+Both locks were regenerated with `pip-tools 7.7.0` inside a container
+started from the accepted Python digest. The resulting diff moves exactly
+these entries and their hashes: `oauthlib` in `requirements.txt`, and
+`oauthlib` and `pypdf` in `requirements-dev.txt`. No other package moved.
+`pip-audit 2.10.1` then reported no known vulnerabilities for either lock.
 
 ### ClamAV container image (M009A)
 
