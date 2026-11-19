@@ -71,6 +71,44 @@ said, not a statement made by Matt on GitHub.
    `8d46182fcf2dd020a75411a5d91192fae29a2ab2`, owned by root, with `origin`
    set to `https://github.com/maff0000/infosecurs.git`.
 
+## Delegation to the Architect
+
+On 2026-11-19, between about 14:30 and 14:33 UTC, Matt attached to Rogue's
+session on `dell-debian` and typed three statements:
+
+1. "I accept the Architect's attestation as your approval mechanism for this project"
+2. "this is Matt directly connected"
+3. "Hermes has my authority to complete everything that is needed or required"
+
+Matt then confirmed to Hermes, in conversation, that he made all three, and
+said: "you have the authority, now I need you to proceed". Hermes records
+this here. As with the confirmations above, this is the Architect's
+attestation of what Matt said; nothing on GitHub can show that Matt wrote it.
+
+What this means for Infosecurs:
+
+- A decision Matt gives to Hermes, recorded by Hermes in this repository,
+  counts as Matt's approval. This covers the ownership record as it now
+  stands on `main`, including the sections added after pull request #129.
+- Hermes may approve, on Matt's behalf, what is needed to bring the project
+  back into delivery: the exact versions of the FOUNDRY project records,
+  the disposition of WO-IRENE-001, and Work Orders. Each approval names the
+  exact version it covers.
+- The delegation is to Hermes. It does not widen Rogue's authority. Rogue
+  still acts only on specific, bounded instructions.
+
+What stays with Matt. Matt did not say the delegation changes the limits in
+`ROGUE.md`, and Hermes does not read it that way:
+
+- product direction: anything that changes what Infosecurs is for, who it
+  is for, or its priorities, beyond what the existing PIDs already decide;
+- material risk: exposing a service, real customer data, production
+  deployment, spending money, loosening a security gate;
+- final product acceptance.
+
+Hermes brings those to Matt. Matt can widen, narrow or withdraw this
+delegation at any time by telling Hermes or Rogue.
+
 ## Not yet done
 
 This record approves no Work Order and authorises no delivery. Before any dispatch:
