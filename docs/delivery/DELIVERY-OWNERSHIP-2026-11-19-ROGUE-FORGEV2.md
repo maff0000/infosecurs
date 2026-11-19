@@ -113,8 +113,10 @@ delegation at any time by telling Hermes or Rogue.
 
 This record approves no Work Order and authorises no delivery. Before any dispatch:
 
-- The FOUNDRY project records do not exist yet: `PRODUCT-VISION.md`, `PRODUCT-BACKLOG.md`, `PROJECT-INITIATION-MANDATE.md` and `security/EXTERNAL_CODE_REGISTER.yaml`. They will be written from the existing PIDs and evidence, for Matt's approval.
-- The ForgeV2 workspace exists (see above), but no Project Lead has verified it or pushed from it.
+- The FOUNDRY project records now exist at the repository root and in `security/`: `PRODUCT-VISION.md`, `PRODUCT-BACKLOG.md`, `PROJECT-INITIATION-MANDATE.md` and `security/EXTERNAL_CODE_REGISTER.yaml`. Each is approved only by a comment on Issue #131 naming its exact commit.
+- The first Work Order is `work-orders/WO-INFOSECURS-001.md`. It is approved only by a comment on Issue #134 naming its exact commit.
+- The unmerged IRENE Stage 3 work is dispositioned in `WO-IRENE-001-DISPOSITION-2026-11-19.md`.
+- The ForgeV2 workspace exists (see above). Rogue pushed and deleted a test branch from it on 2026-11-19 (Issue #131). No Project Lead has used it.
 - Rogue's commissioning is recorded in Issue #131. The project is ONBOARDING, not delivery-ready.
 - The Architect and Rogue communicate in a direct session on `dell-debian` and through GitHub Issues. Infosecurs is not registered with any Architect Gateway. A manual exchange was verified on Issue #131; automatic pickup was not tested.
 - A ForgeV2 Project Lead has not yet been run as root on `dell-debian`.

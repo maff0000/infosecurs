@@ -1,0 +1,307 @@
+# Infosecurs — external software register
+# Author: Hermes (Project Architect). Date: 2026-11-19.
+# Built from the repository at main 6b4cb6ca5d580ef3d0a36567da47e63c93a776de.
+# Being listed here is not approval to use a component.
+project: infosecurs
+register_version: 1
+inventory_status: incomplete_first_pass_on_an_existing_product
+coverage:
+  inspected:
+    - "requirements.in, requirements-dev.in and both hash-pinned lock files (every pinned package is listed below)"
+    - "Dockerfile and the three docker-compose files (base and service images)"
+    - ".github/workflows/ci.yml and security.yml (pinned Actions and tools)"
+    - "static/ and templates (searched for vendored scripts, fonts and CDN links; none found: four first-party static files)"
+    - "source tree searched for 'copied from', 'vendored', 'adapted from', SPDX and copyright markers; no copied third-party code found"
+  not_inspected:
+    - "Debian packages inside the Python base image, other than the seven the Dockerfile pins"
+    - "Contents of the ClamAV and PostgreSQL images, beyond the Trivy scan run in CI"
+    - "Chromium and its system libraries installed on the CI runner by 'playwright install --with-deps chromium'"
+    - "The AI gateway (LiteLLM) and the models behind it: reached over the network, not incorporated, configured outside this repository"
+    - "Whether any first-party file was copied from an unmarked external source"
+  known_gaps:
+    - "No software bill of materials is generated."
+    - "pip-audit runs on requirements.txt only. The dev-only packages are checked only by the Trivy scan of the built image."
+    - "No LICENSE or NOTICE file exists in the repository."
+    - "Licences below are what each package declares on PyPI for the exact version, fetched 2026-11-19. Nobody has reviewed them for compatibility with how Infosecurs will be distributed."
+    - "psycopg and psycopg-binary declare LGPL-3.0-only. Not assessed."
+    - "The Dockerfile installs requirements-dev.txt, so the test-only packages are present in the built image. Whether that is intended is unknown (PRODUCT-BACKLOG.md, PBI-005)."
+approval:
+  status: not_individually_approved_under_FOUNDRY
+  note: >-
+    These components were incorporated under the previous delivery chain
+    (docs/adr/ADR-0001-APPLICATION-STACK.md, docs/delivery/BUILD-REPRODUCIBILITY.md)
+    before the project came under FOUNDRY. The Architect has not re-approved
+    them one by one. Three were changed on 2026-11-19 with evidence in
+    docs/evidence/SECURITY-REMEDIATION-2026-11-19.md: oauthlib, pypdf and the
+    ClamAV image digest.
+security_evidence:
+  - "security/dependencies (pip-audit 2.10.1 on requirements.txt), required check, green on the baseline commit"
+  - "security/container (Trivy, CRITICAL and HIGH, on the built image and the ClamAV image), required check, green on the baseline commit"
+  - "security/secrets (gitleaks) and security/sast, required checks; CodeQL also runs"
+  - "All Python packages are installed with --require-hashes."
+rule_for_changes: >-
+  Adding, removing or changing the version of anything below needs Architect
+  approval in the Work Order and an update to this register in the same
+  change. Follow docs/delivery/BUILD-REPRODUCIBILITY.md.
+
+container_images:
+  - name: "python"
+    version: "3.12.14-slim-trixie"
+    digest: "sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9"
+    source: "Docker Hub"
+    location: "Dockerfile"
+    purpose: "application base image"
+    licence: "not recorded"
+    note: "Seven Debian packages are upgraded to exact patched versions by the Dockerfile; see BUILD-REPRODUCIBILITY.md"
+  - name: "postgres"
+    version: "16.6-alpine"
+    digest: "sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef"
+    source: "Docker Hub"
+    location: "docker-compose.yml, docker-compose.release.yml, docker-compose.cutover.yml, .github/workflows/ci.yml"
+    purpose: "application database"
+    licence: "not recorded"
+    note: "Not scanned by the security workflow as far as inspected"
+  - name: "clamav/clamav"
+    version: "1.4.6"
+    digest: "sha256:4cc4350d3fded380caf1799e76c0d1c93f3fa40af99c0cb2862ec0c9b117718a"
+    source: "Docker Hub"
+    location: "docker-compose.yml, docker-compose.release.yml, docker-compose.cutover.yml"
+    purpose: "malware scanning of uploaded questionnaires"
+    licence: "not recorded"
+    note: "Digest re-pinned 2026-11-19; scanned by Trivy in CI"
+python_packages:
+  # scope runtime = in requirements.txt; scope dev = only in requirements-dev.txt.
+  # direct = named in a requirements*.in file; otherwise transitive.
+  - name: "asgiref"
+    version: "3.12.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "BSD License"
+  - name: "certifi"
+    version: "2026.10.19"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "Mozilla Public License 2.0 (MPL 2.0)"
+  - name: "cffi"
+    version: "2.1.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT-0"
+  - name: "charset-normalizer"
+    version: "3.5.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT"
+  - name: "cryptography"
+    version: "50.0.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "Apache-2.0 OR BSD-3-Clause"
+  - name: "defusedxml"
+    version: "0.7.1"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "Python Software Foundation License"
+    purpose: "safe XML parsing"
+  - name: "django-allauth"
+    version: "65.19.6"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "MIT License"
+    purpose: "authentication, including Google and Microsoft sign-in"
+  - name: "django"
+    version: "6.1.1"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "BSD-3-Clause"
+    purpose: "web framework"
+  - name: "et-xmlfile"
+    version: "2.0.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT License"
+  - name: "greenlet"
+    version: "3.5.6"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "MIT AND PSF-2.0"
+  - name: "gunicorn"
+    version: "26.2.0"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "MIT"
+    purpose: "WSGI server for the persistent runtime"
+  - name: "idna"
+    version: "3.20"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "BSD-3-Clause"
+  - name: "iniconfig"
+    version: "2.3.0"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "MIT"
+  - name: "oauthlib"
+    version: "4.0.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "BSD-3-Clause"
+  - name: "openpyxl"
+    version: "3.1.5"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "MIT License"
+    purpose: "reading XLSX questionnaires"
+  - name: "packaging"
+    version: "26.3"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "Apache-2.0 OR BSD-2-Clause"
+  - name: "pillow"
+    version: "13.0.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT-CMU"
+  - name: "playwright"
+    version: "1.63.0"
+    source: "PyPI"
+    scope: dev
+    direct: true
+    licence_declared: "Apache-2.0"
+    purpose: "real-browser acceptance tests"
+  - name: "pluggy"
+    version: "1.6.0"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "MIT License"
+  - name: "psycopg-binary"
+    version: "3.3.6"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "LGPL-3.0-only"
+  - name: "psycopg"
+    version: "3.3.6"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "LGPL-3.0-only"
+    purpose: "PostgreSQL driver"
+  - name: "pycparser"
+    version: "3.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "BSD-3-Clause"
+  - name: "pyee"
+    version: "13.0.1"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "MIT License"
+  - name: "pygments"
+    version: "2.21.0"
+    source: "PyPI"
+    scope: dev
+    direct: false
+    licence_declared: "BSD-2-Clause"
+  - name: "pyjwt"
+    version: "2.15.1"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT"
+  - name: "pypdf"
+    version: "6.21.4"
+    source: "PyPI"
+    scope: dev
+    direct: true
+    licence_declared: "BSD-3-Clause"
+    purpose: "reading generated PDFs in tests"
+  - name: "pytest-django"
+    version: "4.14.0"
+    source: "PyPI"
+    scope: dev
+    direct: true
+    licence_declared: "BSD License"
+    purpose: "Django test integration"
+  - name: "pytest"
+    version: "9.1.1"
+    source: "PyPI"
+    scope: dev
+    direct: true
+    licence_declared: "MIT"
+    purpose: "test runner"
+  - name: "reportlab"
+    version: "5.0.1"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "BSD License"
+    purpose: "PDF generation"
+  - name: "requests"
+    version: "2.34.2"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "Apache Software License"
+  - name: "sqlparse"
+    version: "0.6.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "BSD License"
+  - name: "typing-extensions"
+    version: "4.16.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "PSF-2.0"
+  - name: "urllib3"
+    version: "2.8.0"
+    source: "PyPI"
+    scope: runtime
+    direct: false
+    licence_declared: "MIT"
+  - name: "whitenoise"
+    version: "6.11.0"
+    source: "PyPI"
+    scope: runtime
+    direct: true
+    licence_declared: "MIT"
+    purpose: "static file serving"
+ci_tooling:
+  # Runs in GitHub Actions only. Not part of the application or its image.
+  - {name: "actions/checkout", version: "v4.4.0", pin: "11d5960a326750d5838078e36cf38b85af677262"}
+  - {name: "actions/setup-python", version: "v5.6.0", pin: "a26af69be951a213d495a4c3e4e4022e16d87065"}
+  - {name: "aquasecurity/trivy-action", version: "v0.36.0", pin: "ed142fd0673e97e23eac54620cfb913e5ce36c25"}
+  - {name: "github/codeql-action", version: "v3.38.1", pin: "3ea06614dafe36dec890db3446326e0d40ce53d4"}
+  - {name: "gitleaks/gitleaks-action", version: "v2.3.9", pin: "ff98106e4c7b2bc287b24eaf42907196329070c7"}
+  - {name: "pip-audit", version: "2.10.1", pin: "version only, installed with pip in the workflow"}
+vendored_or_copied_code: []
+vendored_or_copied_code_basis: >-
+  None found by the searches listed under coverage.inspected. This is a
+  search result, not proof of absence.
+external_services_not_incorporated:
+  - name: "AI gateway (LiteLLM aliases)"
+    note: "Reached over the network through ai_platform/gateway.py. Endpoint, credential and model aliases are configured outside the repository. Which gateway is in use on dell-debian is unknown as of this register."
+  - name: "Google and Microsoft sign-in"
+    note: "Optional OAuth providers through django-allauth; client identifiers and secrets come from the environment."

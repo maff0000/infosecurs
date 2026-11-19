@@ -2,6 +2,7 @@
 
 Read in this order before acting:
 
+0. `README.md` and `PROJECT-INITIATION-MANDATE.md`
 1. `PID.md`
 2. `docs/architecture/ARCHITECTURE.md`
 3. the specifically authorised module PID
