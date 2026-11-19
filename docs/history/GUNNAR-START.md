@@ -1,3 +1,12 @@
+> **Superseded on 2026-11-19. Do not follow these instructions.**
+> This was the startup directive for GUNNAR, the previous delivery
+> controller. Delivery now belongs to Rogue and ForgeV2; see
+> `docs/delivery/DELIVERY-OWNERSHIP-2026-11-19-ROGUE-FORGEV2.md` and
+> `PROJECT-INITIATION-MANDATE.md`. `/srv/infosecurs` is the persistent
+> Beta's build context and is not a development working tree.
+> Kept for history only. It was stored at the repository root as two
+> identical files, `GUNNAR-START.md` and `INFOSECURS-GUNNAR-START.md`.
+
 # GUNNAR — Infosecurs Startup Directive
 
 ## Authority
