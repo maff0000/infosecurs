@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-19
 **Prepared by:** Hermes, Project Architect.
-**Status:** takes effect when Matt merges this document. The merge is Matt's approval of this exact version.
+**Status:** approved by Matt on 2026-11-19. Matt reviewed this record as pull request #129 and instructed Hermes to merge it on his authority. It takes effect on merge.
 **Base:** `main` at `638eff4b66c12919212dad666031e43be4a6e2a2`.
 
 This is a new Product Owner decision. It does not dispute `CORRECTION-ROGUE-HANDOVER-RESCINDED.md`, which was correct when it was written.
