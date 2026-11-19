@@ -82,9 +82,22 @@ Run on `dell-debian` on 2026-11-19, on an image built from this change:
 
 Not run locally: the test suites. `ci/unit` and `ci/integration` on the
 pull request are the evidence that `pypdf 6.21.4` and `oauthlib 4.0.1` do
-not break the tests. The re-pinned ClamAV image was scanned and inspected
-but not exercised: no file was scanned through it locally. `ci/integration`
-is the only functional evidence for it.
+not break the tests.
+
+**The re-pinned ClamAV image was exercised locally.** CI has no live ClamAV
+service: `TestRealClamdBackend` in `questionnaire/tests/test_m009a_scanner.py`
+is skipped there because `CLAMAV_HOST` is unset. So CI is not functional
+evidence for a ClamAV image change. On `dell-debian` a container was started
+from the new digest on a private Docker network, and that test file was run
+against it from the application image built for this change: 7 passed,
+0 skipped, including `test_ping`, `test_legitimate_xlsx_is_clean` and
+`test_eicar_test_file_is_detected`. The container and network were removed
+afterwards.
+
+**Correction.** Commit `3834d72b0306e4f8463898687d903dea6c90a3a0` on this
+branch, and the version of this record in it, said that `ci/integration`
+was the functional evidence for the ClamAV image. That was wrong, for the
+reason above. The local run described here replaces it.
 
 ## 5. Ruleset exception for pull request #129
 
