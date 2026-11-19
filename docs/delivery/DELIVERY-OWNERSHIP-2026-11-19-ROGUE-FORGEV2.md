@@ -48,12 +48,35 @@ Verified read-only on 2026-11-19.
 - The persistent Beta containers are stopped. Restarting them is a release operation under `PID.md` section 6.1 and is not part of this handover.
 - On `dell-debian`, the ForgeV2 engine is installed read-only at `/srv/forgev2` (commit `63b6b8ab6c6d3c12d1ef3f0aeabe2ca22fbefb82`, plugin 0.3.0) and Rogue's home is `/srv/rogue`.
 
+## Confirmations by Matt
+
+Rogue's commissioning (Issue #131) asked for five things only Matt can
+settle. Matt gave them to Hermes in conversation on 2026-11-19, in the words
+"all confirmed and authorised". Hermes records them here. Every agent writes
+to GitHub under Matt's login, so nothing on GitHub can show that Matt wrote
+something himself; this section is the Architect's attestation of what Matt
+said, not a statement made by Matt on GitHub.
+
+1. Matt approves this ownership record as merged in pull request #129.
+2. Rogue keeps using the existing `maff0000` GitHub credential on
+   `dell-debian`. Matt accepts that it is broader than the repository-scoped
+   credential FOUNDRY prefers.
+3. GUNNAR and FORGE have stopped work on Infosecurs.
+4. The development-host arrangement (FOUNDRY FND-047) applies to this
+   project. Identity separation is deferred until a production host is
+   considered.
+5. The ForgeV2 workspace on `dell-debian` is `/srv/infosecurs-dev/main`
+   (canonical checkout) and `/srv/infosecurs-dev/worktrees`. Hermes created
+   it on 2026-11-19 as a clone of `main` at
+   `8d46182fcf2dd020a75411a5d91192fae29a2ab2`, owned by root, with `origin`
+   set to `https://github.com/maff0000/infosecurs.git`.
+
 ## Not yet done
 
 This record approves no Work Order and authorises no delivery. Before any dispatch:
 
 - The FOUNDRY project records do not exist yet: `PRODUCT-VISION.md`, `PRODUCT-BACKLOG.md`, `PROJECT-INITIATION-MANDATE.md` and `security/EXTERNAL_CODE_REGISTER.yaml`. They will be written from the existing PIDs and evidence, for Matt's approval.
-- The ForgeV2 checkout and worktree locations for this project are not chosen.
-- Rogue has not run its project commissioning.
-- The Architect and Rogue communicate in a direct session on `dell-debian` and through GitHub Issues. Infosecurs is not registered with any Architect Gateway.
+- The ForgeV2 workspace exists (see above), but no Project Lead has verified it or pushed from it.
+- Rogue's commissioning is recorded in Issue #131. The project is ONBOARDING, not delivery-ready.
+- The Architect and Rogue communicate in a direct session on `dell-debian` and through GitHub Issues. Infosecurs is not registered with any Architect Gateway. A manual exchange was verified on Issue #131; automatic pickup was not tested.
 - A ForgeV2 Project Lead has not yet been run as root on `dell-debian`.
